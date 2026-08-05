@@ -2019,7 +2019,7 @@ function renderQuickGrid() {
 /* Abre link externo dentro da intranet usando o modal de iframe */
 
 function openIAGWA(){
-  abrirLinkIframe('IA GWA', 'http://192.168.0.15:8081/agente/');
+  abrirLinkIframe('IA GWA', 'https://gwa-chat.pages.dev/gwa-painel');
 }
 
 function openDashboardGWA(){
@@ -5703,9 +5703,9 @@ function acadRenderQList(){
           <option value="true" ${q.correta===true?'selected':''}>Verdadeiro</option>
           <option value="false" ${q.correta===false?'selected':''}>Falso</option>
         </select></div>`:
-      q.opcoes.map((op,j)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <input type="radio" name="correta_${q.id}" value="${j}" ${q.correta===j?'checked':''} onchange="_acadQs[${i}].correta=${j}" title="Marcar como correta"/>
-        <input placeholder="Opção ${j+1}" value="${acadEscape(op)}" oninput="_acadQs[${i}].opcoes[${j}]=this.value" style="flex:1;padding:7px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;color:#111827;background:#fff"/>
+      q.opcoes.map((op,j)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;width:100%">
+        <input type="radio" name="correta_${q.id}" value="${j}" ${q.correta===j?'checked':''} onchange="_acadQs[${i}].correta=${j}" title="Marcar como correta" style="flex:0 0 auto;width:18px;height:18px;margin:0"/>
+        <input placeholder="Opção ${j+1}" value="${acadEscape(op)}" oninput="_acadQs[${i}].opcoes[${j}]=this.value" style="flex:1 1 auto;min-width:0;width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;color:#111827;background:#fff"/>
       </div>`).join('')}
     </div>`).join('');
 }
@@ -6570,6 +6570,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   // OUTRAS máquinas/navegadores).
   function gwaCentralAppendConfirmBox(data){
     var col = gwaCentralCollectionOf(data); if(!col) return;
+    if(col !== 'avisos') return; // confirmacao apenas em Avisos Importantes; RH docs usam gwaSignRhDoc
     var id = gwaCentralItemId(data);
     var root = document.getElementById('mContent');
     if(!root || root.querySelector('#gwaCentralConfirmBox')) return;
