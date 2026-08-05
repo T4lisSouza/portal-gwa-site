@@ -5692,7 +5692,7 @@ function acadRenderQList(){
         <strong>Questão ${i+1}</strong>
         <button class="acad-btn danger" onclick="acadRemoveQ('${q.id}')">✕</button>
       </div>
-      <input placeholder="Pergunta" value="${acadEscape(q.pergunta)}" oninput="_acadQs[${i}].pergunta=this.value" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:8px;font-size:13px"/>
+      <input placeholder="Pergunta" value="${acadEscape(q.pergunta)}" oninput="_acadQs[${i}].pergunta=this.value" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:8px;font-size:13px;color:#111827;background:#fff"/>
       <select onchange="_acadQs[${i}].tipo=this.value;acadRenderQList()" style="padding:6px 10px;border-radius:8px;margin-bottom:8px;border:1px solid #d1d5db">
         <option value="mc" ${q.tipo==='mc'?'selected':''}>Múltipla Escolha</option>
         <option value="vf" ${q.tipo==='vf'?'selected':''}>Verdadeiro/Falso</option>
@@ -5705,7 +5705,7 @@ function acadRenderQList(){
         </select></div>`:
       q.opcoes.map((op,j)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
         <input type="radio" name="correta_${q.id}" value="${j}" ${q.correta===j?'checked':''} onchange="_acadQs[${i}].correta=${j}" title="Marcar como correta"/>
-        <input placeholder="Opção ${j+1}" value="${acadEscape(op)}" oninput="_acadQs[${i}].opcoes[${j}]=this.value" style="flex:1;padding:7px;border:1px solid #d1d5db;border-radius:8px;font-size:13px"/>
+        <input placeholder="Opção ${j+1}" value="${acadEscape(op)}" oninput="_acadQs[${i}].opcoes[${j}]=this.value" style="flex:1;padding:7px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;color:#111827;background:#fff"/>
       </div>`).join('')}
     </div>`).join('');
 }
@@ -6434,7 +6434,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   if(originalOpenM){
     openM = function(type, data){
       var ret = originalOpenM.apply(this, arguments);
-      if(type === 'viewContent'){ recordAvisoView(data); appendConfirmButton(data); }
+      if(type === 'viewContent'){ recordAvisoView(data); /* botao antigo removido: confirmacao unica via API central */ }
       return ret;
     };
   }
