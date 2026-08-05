@@ -8603,7 +8603,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   async function rhPushAll(){ try{ var d=db(); var arr=(d&&Array.isArray(d.rhDocuments))?d.rhDocuments:[]; for(var i=0;i<arr.length;i++) await rhPushDoc(arr[i]); }catch(e){} }
   async function rhMigrateLocal(){ try{ var c=JSON.parse(localStorage.getItem('gwa_db_cache')||'null'); var arr=(c&&Array.isArray(c.rhDocuments))?c.rhDocuments:[]; for(var i=0;i<arr.length;i++) await rhPushDoc(arr[i]); }catch(e){} }
   window.gwaRhPushAll=rhPushAll;
-  ['gwaOpenRhDocPublish','gwaSignRhDoc'].forEach(function(fn){ var old=window[fn]; if(typeof old==='function'){ window[fn]=function(){ var r=old.apply(this,arguments); setTimeout(rhPushAll,700); return r; }; } });
+  ['gwaSaveRhDoc','gwaSignRhDoc'].forEach(function(fn){ var old=window[fn]; if(typeof old==='function'){ window[fn]=async function(){ var r; try{ r=await old.apply(this,arguments); }catch(e){ try{ r=old.apply(this,arguments); }catch(e2){} } try{ await rhPushAll(); }catch(e){} return r; }; } });
 
   /* --- Notificacao pendente: espelha confirmacoes da API central no audit local --- */
   function loadA(){ try{ return JSON.parse(localStorage.getItem('gwa_audit_local_v1')||'null')||{logs:[],reads:{},notices:{}}; }catch(e){ return {logs:[],reads:{},notices:{}}; } }
