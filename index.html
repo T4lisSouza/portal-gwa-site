@@ -1358,7 +1358,7 @@ let pollTimer = null;
 function defaultDB() {
   return {
     avisos:[], campanhas:[], aniversariantes:[], treinamentos:[],
-    rh:[], comercial:[], negociacao:[], ti:[],
+    rh:[], comercial:[], negociacao:[], ti:[], rhDocuments:[],
     campos:[
       {id:'1',label:'Benefícios',icon:'fas fa-gift',color:'mc-qbtn--green',tab:'rh'},
       {id:'2',label:'Documentos',icon:'fas fa-file-alt',color:'mc-qbtn--blue',tab:'rh'},
@@ -8587,6 +8587,39 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     }catch(e){rhSyncBusy=false;}
   },RH_SYNC_INTERVAL);
   addShell(); syncDestaquesFromLocal();
+})();
+
+/* ===== GWA FIX 2026-08-05: Documentos RH online + notificacao pendente via API central ===== */
+(function(){
+  if(window.__gwaFix20260805) return; window.__gwaFix20260805=true;
+  function base(){ return (typeof API_URL!=='undefined')?API_URL:''; }
+  function hdr(){ return {'Content-Type':'application/json','X-MC-Token':(typeof API_TOKEN!=='undefined'?API_TOKEN:'')}; }
+  function cur(){ try{ return window.currentUser || (typeof getSession==='function'?getSession():null) || null; }catch(e){ return null; } }
+  function loginU(u){ return String((u&&(u.login||u.user||u.email||u.nome))||'').toUpperCase(); }
+  function db(){ return (typeof DB!=='undefined'&&DB)?DB:null; }
+
+  /* --- Documentos RH: salvar/carregar pela API online (nao mais so local) --- */
+  async function rhPushDoc(doc){ if(!doc||!doc.id) return; try{ var r=await fetch(base()+'/api/rhDocuments/'+encodeURIComponent(doc.id),{method:'PUT',headers:hdr(),body:JSON.stringify(doc)}); if(!r.ok) throw 0; }catch(e){ try{ await fetch(base()+'/api/rhDocuments',{method:'POST',headers:hdr(),body:JSON.stringify(doc)}); }catch(e2){} } }
+  async function rhPushAll(){ try{ var d=db(); var arr=(d&&Array.isArray(d.rhDocuments))?d.rhDocuments:[]; for(var i=0;i<arr.length;i++) await rhPushDoc(arr[i]); }catch(e){} }
+  async function rhMigrateLocal(){ try{ var c=JSON.parse(localStorage.getItem('gwa_db_cache')||'null'); var arr=(c&&Array.isArray(c.rhDocuments))?c.rhDocuments:[]; for(var i=0;i<arr.length;i++) await rhPushDoc(arr[i]); }catch(e){} }
+  window.gwaRhPushAll=rhPushAll;
+  ['gwaOpenRhDocPublish','gwaSignRhDoc'].forEach(function(fn){ var old=window[fn]; if(typeof old==='function'){ window[fn]=function(){ var r=old.apply(this,arguments); setTimeout(rhPushAll,700); return r; }; } });
+
+  /* --- Notificacao pendente: espelha confirmacoes da API central no audit local --- */
+  function loadA(){ try{ return JSON.parse(localStorage.getItem('gwa_audit_local_v1')||'null')||{logs:[],reads:{},notices:{}}; }catch(e){ return {logs:[],reads:{},notices:{}}; } }
+  function saveA(st){ try{ localStorage.setItem('gwa_audit_local_v1',JSON.stringify(st)); }catch(e){} try{ if(window.gwaLocalApiSave) window.gwaLocalApiSave({audit:st},'central-mirror'); }catch(e){} }
+  async function syncConfirms(){ var u=cur(); if(!u) return; var L=loginU(u); if(!L) return;
+    try{ var r=await fetch(base()+'/api/signatures?collection=avisos',{headers:hdr()}); if(!r.ok) return; var j=await r.json(); var st=loadA(); st.reads=st.reads||{}; var ch=false;
+      (j.data||[]).forEach(function(sg){ if(String(sg.login).toUpperCase()===L && sg.confirmed){ var id=sg.item_id; st.reads[id]=st.reads[id]||{}; var c0=st.reads[id][L]||{}; if(!c0.confirmed){ st.reads[id][L]=Object.assign({login:L,nome:(u.nome||u.name||L)},c0,{confirmed:true,confirmedAt:sg.confirmed_at||Date.now()}); ch=true; } } });
+      if(ch){ saveA(st); var b=document.getElementById('gwaPendingAvisoBanner'); if(b) b.remove(); }
+    }catch(e){}
+  }
+  window.gwaSyncCentralConfirms=syncConfirms;
+  var _c=window.gwaCentralConfirm;
+  if(typeof _c==='function'){ window.gwaCentralConfirm=function(col,id,title,silent){ var p=_c.apply(this,arguments); try{ if(p&&p.then) p.then(function(res){ if(res&&res.ok){ var u=cur(),L=loginU(u); if(L){ var st=loadA(); st.reads=st.reads||{}; st.reads[id]=st.reads[id]||{}; st.reads[id][L]=Object.assign({login:L,nome:(u&&(u.nome||u.name))||L},st.reads[id][L]||{},{confirmed:true,confirmedAt:Date.now()}); saveA(st); var b=document.getElementById('gwaPendingAvisoBanner'); if(b) b.remove(); } } }); }catch(e){} return p; }; }
+
+  var _ep=window.enterPortal; if(typeof _ep==='function'){ window.enterPortal=function(){ var r=_ep.apply(this,arguments); setTimeout(function(){ syncConfirms(); rhMigrateLocal(); },1500); return r; }; }
+  document.addEventListener('DOMContentLoaded',function(){ setTimeout(function(){ syncConfirms(); rhMigrateLocal(); },3500); setInterval(syncConfirms,60000); });
 })();
 
 </script>
