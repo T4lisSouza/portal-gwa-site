@@ -5453,7 +5453,7 @@ function acadRenderDesempenho(st){
     <h3><i class="fas fa-users" style="color:#FF8000"></i> Desempenho Geral por Consultor</h3>
     <div style="overflow-x:auto">
     <table class="acad-table"><thead><tr><th>Consultor</th><th>Concluídos</th><th>Provas</th><th>Treinamentos</th><th>Média</th></tr></thead>
-    <tbody>${sorted.map(u=>`<tr>
+    <tbody>${sorted.map(u=>`<tr style="cursor:pointer" onclick="acadVerConsultor(&#39;${u.login}&#39;)" title="Ver perfil e provas do consultor">
       <td style="font-weight:600">${acadEscape(u.nome)}<br><span style="font-size:11px;color:#6b7280">${u.login}</span></td>
       <td style="text-align:center"><span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:9999px;font-size:12px;font-weight:700">${u.total}</span></td>
       <td style="text-align:center">${u.provas}</td>
@@ -5524,7 +5524,7 @@ function acadRenderDesempenho(st){
       ${resp.length ? `
       <div style="margin-top:16px;overflow-x:auto">
         <table class="acad-table"><thead><tr><th>Consultor</th><th>Nota</th><th>Status</th><th>Data</th></tr></thead>
-        <tbody>${resp.sort((a,b)=>(b.nota||0)-(a.nota||0)).map(r=>`<tr>
+        <tbody>${resp.sort((a,b)=>(b.nota||0)-(a.nota||0)).map(r=>`<tr style="cursor:pointer" onclick="acadVerRespostaProva(&#39;${r.id}&#39;)" title="Ver questoes: acertos, erros, resposta marcada x correta">
           <td>${acadEscape(r.nome||r.user)}</td>
           <td style="text-align:center;font-weight:700;color:${(r.nota||0)>=(p.notaMinima||70)?'#10b981':'#ef4444'}">${r.nota!=null?r.nota+'%':'—'}</td>
           <td style="text-align:center"><span style="padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:700;background:${r.status==='aprovado'?'#dcfce7':'#fee2e2'};color:${r.status==='aprovado'?'#15803d':'#dc2626'}">${r.status==='aprovado'?'Aprovado':'Reprovado'}</span></td>
@@ -5818,7 +5818,7 @@ async function acadSubmitProva(ev, id){
     const st = window._acadCurrentSt || await acadFetchState();
     const p = (st.provas||[]).find(x=>x.id===id);
     if(!p) return toast('Prova não encontrada','error');
-    let total=0, got=0;
+    let total=0, got=0; const detalhe=[];
     p.questoes.forEach((q,i)=>{
       const v=ev.target.querySelector('[name=q'+i+']:checked')?.value;
       const pts=q.pontos||Math.round(100/p.questoes.length);
@@ -5826,11 +5826,15 @@ async function acadSubmitProva(ev, id){
       if(q.tipo==='vf') ok=(String(q.correta)===v);
       else ok=(Number(v)===Number(q.correta));
       if(ok) got+=pts;
+      let marcadaTexto, corretaTexto;
+      if(q.tipo==='vf'){ marcadaTexto=(v==null?'(em branco)':(v==='true'?'Verdadeiro':'Falso')); corretaTexto=((q.correta===true||String(q.correta)==='true')?'Verdadeiro':'Falso'); }
+      else { marcadaTexto=(v==null?'(em branco)':((q.opcoes&&q.opcoes[Number(v)])||('Opcao '+(Number(v)+1)))); corretaTexto=((q.opcoes&&q.opcoes[Number(q.correta)])||('Opcao '+(Number(q.correta)+1))); }
+      detalhe.push({i:i,pergunta:q.pergunta||('Questao '+(i+1)),tipo:q.tipo||'mc',marcada:(v==null?null:v),marcadaTexto:marcadaTexto,correta:q.correta,corretaTexto:corretaTexto,acertou:ok,pontos:pts});
     });
     const nota = Math.round((got/total)*100);
     const status = nota>=(p.notaMinima||70)?'aprovado':'reprovado';
     const u = acadCurrentUser();
-    const resposta = {id:acadId(),user:u.login,nome:u.nome||u.name||u.login,itemId:id,tipo:'prova',titulo:p.titulo,nota,status,ts:acadNow()};
+    const resposta = {id:acadId(),user:u.login,nome:u.nome||u.name||u.login,itemId:id,tipo:'prova',titulo:p.titulo,nota,status,ts:acadNow(),respostasQuestoes:detalhe};
     /* Pontos e certificado */
     const pontos = 100 + ((nota>=90)?50:0);
     st.gamificacao = st.gamificacao||[];
@@ -8620,6 +8624,66 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   var _ep=window.enterPortal; if(typeof _ep==='function'){ window.enterPortal=function(){ var r=_ep.apply(this,arguments); setTimeout(function(){ syncConfirms(); rhMigrateLocal(); },1500); return r; }; }
   document.addEventListener('DOMContentLoaded',function(){ setTimeout(function(){ syncConfirms(); rhMigrateLocal(); },3500); setInterval(syncConfirms,60000); });
+})();
+
+/* ===== ACADEMIA GWA :: Analise de desempenho por consultor (2026-08-05) ===== */
+(function(){
+  if(window.__gwaAcadDesempenho20260805) return; window.__gwaAcadDesempenho20260805=true;
+  function esc(v){ try{ return (typeof acadEscape==='function')?acadEscape(v):String(v==null?'':v); }catch(e){ return String(v==null?'':v); } }
+  function modal(html){ var m=document.getElementById('mContent'); if(!m){ try{toast('Nao foi possivel abrir.','error');}catch(e){} return; } m.innerHTML=html; var ov=document.getElementById('overlay'); if(ov) ov.classList.add('open'); }
+  async function state(){ if(typeof acadFetchState==='function') return await acadFetchState(); return (window._acadCurrentSt||{provas:[],respostas:[]}); }
+
+  window.acadVerConsultor=async function(login){
+    try{
+      if(typeof acadIsAdmin==='function' && !acadIsAdmin()) return;
+      var st=await state(); var provas=st.provas||[];
+      var resp=(st.respostas||[]).filter(function(r){return r.user===login && r.tipo==='prova';});
+      var nome=(resp[0]&&resp[0].nome)||login;
+      var notas=resp.filter(function(r){return r.nota!=null;}).map(function(r){return r.nota;});
+      var media=notas.length?Math.round(notas.reduce(function(s,n){return s+n;},0)/notas.length):0;
+      var rows=resp.sort(function(a,b){return (b.ts||0)-(a.ts||0);}).map(function(r){
+        var min=((provas.find(function(p){return p.id===r.itemId;})||{}).notaMinima)||70;
+        var cor=(r.nota||0)>=min?'#10b981':'#ef4444';
+        var tem=Array.isArray(r.respostasQuestoes)&&r.respostasQuestoes.length;
+        return '<tr style="cursor:pointer" onclick="acadVerRespostaProva(&#39;'+r.id+'&#39;)" title="Ver questao a questao">'+
+          '<td style="font-weight:600">'+esc(r.titulo||'')+'</td>'+
+          '<td style="text-align:center;font-weight:800;color:'+cor+'">'+(r.nota!=null?r.nota+'%':'&mdash;')+'</td>'+
+          '<td style="text-align:center"><span style="padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:700;background:'+(r.status==='aprovado'?'#dcfce7':'#fee2e2')+';color:'+(r.status==='aprovado'?'#15803d':'#dc2626')+'">'+esc(r.status||'-')+'</span></td>'+
+          '<td style="text-align:center;font-size:12px;color:#6b7280">'+new Date(r.ts||Date.now()).toLocaleString('pt-BR')+'</td>'+
+          '<td style="text-align:center">'+(tem?'<i class="fas fa-search" style="color:#2563eb"></i>':'<span style="font-size:11px;color:#9ca3af">sem detalhe</span>')+'</td></tr>';
+      }).join('')||'<tr><td colspan="5" style="text-align:center;color:#6b7280;padding:16px">Nenhuma prova realizada.</td></tr>';
+      modal('<h3><i class="fas fa-user-graduate" style="color:#FF8000"></i> Perfil do consultor &mdash; '+esc(nome)+'</h3>'+
+        '<p style="font-size:12.5px;color:#6b7280;margin:4px 0 12px">Login: '+esc(login)+' &middot; Provas realizadas: '+resp.length+' &middot; Media geral: <b style="color:'+(media>=70?'#10b981':'#ef4444')+'">'+(media?media+'%':'&mdash;')+'</b></p>'+
+        '<div style="overflow-x:auto"><table class="acad-table"><thead><tr><th>Prova</th><th>Nota</th><th>Status</th><th>Data/Hora</th><th>Detalhe</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+        '<p style="font-size:11.5px;color:#9ca3af;margin-top:10px">Clique numa prova para ver questao a questao: o que o consultor marcou, a resposta correta, acertos e erros.</p>');
+    }catch(e){ try{toast('Erro: '+(e&&e.message||e),'error');}catch(_){} }
+  };
+
+  window.acadVerRespostaProva=async function(respId){
+    try{
+      var st=await state();
+      var r=(st.respostas||[]).find(function(x){return x.id===respId;});
+      if(!r) return;
+      var det=Array.isArray(r.respostasQuestoes)?r.respostasQuestoes:[];
+      var head='<button class="acad-btn outline" style="min-width:unset;padding:6px 12px;margin-bottom:10px" onclick="acadVerConsultor(&#39;'+r.user+'&#39;)"><i class="fas fa-arrow-left"></i> Voltar ao perfil</button>'+
+        '<h3><i class="fas fa-clipboard-check" style="color:#FF8000"></i> '+esc(r.titulo||'Prova')+' &mdash; '+esc(r.nome||r.user)+'</h3>';
+      if(!det.length){ modal(head+'<div style="background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12;border-radius:10px;padding:12px;margin-top:8px;font-size:13px">Nota final: <b>'+(r.nota!=null?r.nota+'%':'&mdash;')+'</b> ('+esc(r.status||'')+'). O detalhamento por questao (marcada x correta) fica disponivel apenas para provas realizadas apos esta atualizacao.</div>'); return; }
+      var acertos=det.filter(function(d){return d.acertou;}).length;
+      var resumo='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:10px 0 16px">'+
+        '<div style="background:#f0fdf4;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#10b981">'+acertos+'</div><div style="font-size:11px;color:#6b7280">Acertos</div></div>'+
+        '<div style="background:#fef2f2;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#ef4444">'+(det.length-acertos)+'</div><div style="font-size:11px;color:#6b7280">Erros</div></div>'+
+        '<div style="background:#eff6ff;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#3b82f6">'+(r.nota!=null?r.nota+'%':'&mdash;')+'</div><div style="font-size:11px;color:#6b7280">Nota</div></div>'+
+        '<div style="background:#f5f3ff;border-radius:10px;padding:12px;text-align:center"><div style="font-size:15px;font-weight:800;color:'+(r.status==='aprovado'?'#10b981':'#ef4444')+'">'+esc(r.status||'-')+'</div><div style="font-size:11px;color:#6b7280">Resultado</div></div></div>';
+      var qs=det.map(function(d,idx){
+        var ok=d.acertou; var border=ok?'#10b981':'#ef4444';
+        var badge=ok?'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:700">Acertou</span>':'<span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:700">Errou</span>';
+        var marc='<div style="font-size:12.5px;margin-top:6px"><b>Marcou:</b> <span style="color:'+(ok?'#15803d':'#dc2626')+'">'+esc(d.marcadaTexto||'(em branco)')+'</span></div>';
+        var cor=ok?'':'<div style="font-size:12.5px;margin-top:2px"><b>Resposta correta:</b> <span style="color:#15803d">'+esc(d.corretaTexto||'')+'</span></div>';
+        return '<div style="border:1px solid #e5e7eb;border-left:4px solid '+border+';border-radius:10px;padding:12px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="font-weight:700;color:#111827;font-size:13.5px">'+(idx+1)+'. '+esc(d.pergunta||'')+'</div>'+badge+'</div>'+marc+cor+'</div>';
+      }).join('');
+      modal(head+resumo+qs);
+    }catch(e){ try{toast('Erro: '+(e&&e.message||e),'error');}catch(_){} }
+  };
 })();
 
 </script>
