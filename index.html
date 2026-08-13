@@ -1279,7 +1279,7 @@ a{text-decoration:none;color:inherit}button{cursor:pointer;border:none;backgroun
 <!-- ACADEMIA GWA -->
 <section class="mc-tab" id="tab-academia">
   <div class="mc-page-header">
-    <h2><i class="fas fa-university"></i> Academia GWA</h2>
+    <h2 id="acadHeroTitle"><i class="fas fa-university"></i> Academia GWA</h2>
     <p>Provas, treinamentos, atividades, certificados e ranking — módulo independente com API exclusiva.</p>
   </div>
   <div class="acad-tabs" id="acadTabs"></div>
@@ -9153,6 +9153,122 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         if(_acadView==='certificados'){ var c3=document.getElementById('acadContent'); if(c3) c3.innerHTML=certConsultorHTML(st); } }
     };
   }
+})();
+
+/* ===== ACADEMIA GWA :: Pontos unificados + Ranking + Graficos Desempenho + Logo oficial (2026-08-05f) ===== */
+(function(){
+  if(window.__gwaAcadModF) return; window.__gwaAcadModF=true;
+  function esc(v){ try{ return (typeof acadEscape==='function')?acadEscape(v):String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }catch(e){ return String(v==null?'':v); } }
+  async function state(){ if(typeof acadFetchState==='function'){ try{ return await acadFetchState(); }catch(e){} } return (window._acadCurrentSt||{}); }
+  function mediaAprov(st){ return (st&&st.config&&Number(st.config.mediaAprovacao))||70; }
+  function fmtData(ts){ try{ return new Date(ts||Date.now()).toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'}); }catch(e){ return ''; } }
+  function fmtDT(ts){ try{ return new Date(ts||Date.now()).toLocaleString('pt-BR'); }catch(e){ return '-'; } }
+  function officialLogo(){ try{ if(typeof LOGO_DEFAULT!=='undefined'&&LOGO_DEFAULT) return LOGO_DEFAULT; }catch(e){} try{ return localStorage.getItem('gwa_logo_url')||''; }catch(e){ return ''; } }
+  function curUser(){ try{ return acadCurrentUser(); }catch(e){ return (window.currentUser||{}); } }
+
+  // FONTE UNICA DE PONTOS: soma das notas de provas APROVADAS (nota >= media). Reprovado = 0.
+  function pontosGanhos(st, login){ var min=mediaAprov(st); login=String(login||'').toUpperCase();
+    return (st.respostas||[]).filter(function(r){return r.tipo==='prova'&&String(r.user||'').toUpperCase()===login&&r.nota!=null&&r.nota>=min;}).reduce(function(s,r){return s+(Number(r.nota)||0);},0); }
+  function pontosGastos(st, login){ login=String(login||'').toUpperCase(); var L=st.loja||{}; return ((L.trocas)||[]).filter(function(t){return String(t.user||'').toUpperCase()===login&&t.status!=='cancelado';}).reduce(function(s,t){return s+(Number(t.pontos)||0);},0); }
+  function saldo(st, login){ return pontosGanhos(st,login)-pontosGastos(st,login); }
+  window.acadPontosGanhos=pontosGanhos; window.acadSaldoPontos=saldo;
+
+  /* ---------- LOGO OFICIAL no cabecalho da Academia ---------- */
+  function injectLogo(){ try{ var h=document.getElementById('acadHeroTitle'); var lg=officialLogo(); if(h && lg && h.getAttribute('data-logo')!=='1'){ h.innerHTML='<img src="'+lg+'" alt="GWA" style="height:36px;vertical-align:middle;margin-right:10px;filter:none"> Academia GWA'; h.setAttribute('data-logo','1'); } }catch(e){} }
+
+  /* ---------- CERTIFICADO com logo oficial ---------- */
+  function certAprovado(st,c){ return c && c.nota!=null && c.nota>=mediaAprov(st); }
+  function certHTML(c){
+    var lg=officialLogo();
+    var logoBlock = lg ? '<img src="'+lg+'" style="max-height:78px;max-width:260px;object-fit:contain">' : '<div style="font-family:Arial;font-weight:900;font-size:42px;color:#111">GWA <span style="color:#C0491F">CONSULTORIA</span></div>';
+    var nome=esc(c.nome||c.user||''); var titulo=esc(c.titulo||'Prova'); var nota=(c.nota!=null?c.nota+'%':''); var data=fmtData(c.ts); var codigo=esc(c.codigo||'');
+    var frase='Parabéns pela sua conquista! Seu comprometimento, dedicação e evolução são parte do caminho para resultados extraordinários. Continue trilhando com excelência a jornada de crescimento dentro da GWA Consultoria — cada etapa concluída reforça o profissional de alto desempenho que você está se tornando.';
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Certificado - '+nome+'</title><style>'+
+      '@page{size:A4 landscape;margin:0}*{box-sizing:border-box}body{margin:0;font-family:Georgia,serif;background:#222}'+
+      '.wrap{width:1123px;height:794px;margin:0 auto;background:#fff;position:relative;padding:36px;color:#111}'+
+      '.frame{position:absolute;inset:16px;border:4px solid #111;border-radius:4px}.frame:after{content:"";position:absolute;inset:9px;border:2px solid #C0491F;border-radius:3px}'+
+      '.bandtop{position:absolute;left:16px;right:16px;top:16px;height:10px;background:linear-gradient(90deg,#F5A623,#C0491F)}'+
+      '.inner{position:relative;height:100%;display:flex;flex-direction:column;align-items:center;text-align:center;padding:46px 60px}'+
+      '.seal{position:absolute;top:46px;right:74px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle at 50% 38%,#F5A623,#C0491F);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Arial;font-weight:800;font-size:11px;box-shadow:0 3px 10px rgba(0,0,0,.25);border:3px solid #fff;outline:2px solid #111}.seal b{font-size:22px;line-height:1}'+
+      '.kicker{margin-top:8px;letter-spacing:6px;color:#111;font-family:Arial;font-size:13px;font-weight:700}'+
+      '.title{font-size:46px;color:#111;margin:8px 0 2px}.title span{color:#C0491F}.sub{font-family:Arial;color:#6b7280;font-size:14px;margin-bottom:20px}'+
+      '.lead{font-size:16px;color:#333;margin:8px 0 2px}.name{font-size:42px;color:#111;font-weight:700;margin:6px 0;border-bottom:3px solid #C0491F;padding:0 30px 8px}'+
+      '.prova{font-size:20px;color:#111;margin:16px 0 4px;font-weight:700}.meta{font-family:Arial;font-size:14px;color:#333;margin-top:6px}'+
+      '.badge{display:inline-block;margin:16px 0 8px;background:#111;color:#F5A623;font-family:Arial;font-weight:800;letter-spacing:2px;padding:9px 24px;border-radius:9999px;font-size:14px;border:1px solid #C0491F}'+
+      '.frase{font-size:14px;color:#444;max-width:780px;margin:8px auto 0;line-height:1.6;font-style:italic}'+
+      '.foot{position:absolute;bottom:54px;left:0;right:0;display:flex;justify-content:space-around;font-family:Arial}.sig{width:290px;border-top:1.5px solid #111;padding-top:6px;font-size:13px;color:#333}'+
+      '.topbar{position:fixed;top:0;left:0;right:0;background:#111;color:#fff;padding:10px;text-align:center;font-family:Arial;z-index:9}.topbar button{background:#C0491F;color:#fff;border:none;padding:9px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px}'+
+      '@media print{.topbar{display:none}body{background:#fff}}</style></head><body>'+
+      '<div class="topbar">Certificado GWA &nbsp;<button onclick="window.print()">⬇ Baixar certificado em PDF</button></div>'+
+      '<div class="wrap"><div class="frame"></div><div class="bandtop"></div><div class="seal"><b>GWA</b><span>APROVADO</span></div><div class="inner">'+logoBlock+
+      '<div class="kicker">ACADEMIA GWA</div><div class="title">CERTIFICADO<span> DE CONCLUSÃO</span></div><div class="sub">Documento de reconhecimento profissional</div>'+
+      '<div class="lead">Certificamos que</div><div class="name">'+nome+'</div><div class="lead">concluiu com aproveitamento e foi APROVADO(A) na avaliação</div>'+
+      '<div class="prova">'+titulo+'</div><div class="meta">Nota obtida: <b style="color:#C0491F">'+nota+'</b> &nbsp;·&nbsp; Data: <b>'+data+'</b></div>'+
+      '<div class="badge">✓ APROVADO</div><div class="frase">"'+frase+'"</div>'+
+      '<div class="foot"><div class="sig">Academia GWA Consultoria</div><div class="sig">Coordenação de Treinamento &amp; Desenvolvimento</div></div>'+
+      '<div style="position:absolute;bottom:26px;right:42px;font-size:11px;color:#9ca3af;font-family:Arial">Código de validação: '+codigo+'</div></div></div></body></html>';
+  }
+  window.acadBaixarCertificado=async function(certId){ try{ var st=await state(); var c=(st.certificados||[]).find(function(x){return x.id===certId;}); if(!c){toast('Certificado nao encontrado.','error');return;} if(!certAprovado(st,c)){toast('Indisponivel: consultor nao aprovado.','error');return;} var w=window.open('','_blank'); if(!w){toast('Libere pop-ups.','error');return;} w.document.open(); w.document.write(certHTML(c)); w.document.close(); }catch(e){ try{toast('Erro: '+(e&&e.message||e),'error');}catch(_){} } };
+
+  /* ---------- RANKING (pontos = notas de provas aprovadas) ---------- */
+  window.acadRenderRankingNovo=function(st){
+    var logins={}; (st.respostas||[]).forEach(function(r){ if(r.tipo==='prova'){ var k=String(r.user||'').toUpperCase(); if(!logins[k])logins[k]={login:r.user,nome:r.nome||r.user}; } });
+    var arr=Object.keys(logins).map(function(k){ var u=logins[k]; return {login:u.login,nome:u.nome,pts:pontosGanhos(st,u.login)}; }).filter(function(x){return x.pts>0;}).sort(function(a,b){return b.pts-a.pts;});
+    var medals=['🥇','🥈','🥉'];
+    return '<div class="acad-card"><h3><i class="fas fa-trophy" style="color:#C0491F"></i> Ranking — Gamificacao Academia</h3><p class="acad-muted" style="margin:0 0 8px">Pontos = soma das notas das provas em que o consultor foi aprovado.</p><table class="acad-table"><thead><tr><th>#</th><th>Consultor</th><th>Pontos</th></tr></thead><tbody>'+(arr.map(function(u,i){return '<tr><td>'+(medals[i]||(i+1))+'</td><td>'+esc(u.nome||u.login)+'</td><td style="font-weight:800;color:#C0491F">'+u.pts+' pts</td></tr>';}).join('')||'<tr><td colspan="3" style="text-align:center;color:#6b7280;padding:16px">Nenhum ponto ainda.</td></tr>')+'</tbody></table></div>';
+  };
+
+  /* ---------- LOJA (saldo pela fonte unica) ---------- */
+  function loja(st){ st.loja=st.loja||{produtos:[],trocas:[]}; if(!Array.isArray(st.loja.produtos))st.loja.produtos=[]; if(!Array.isArray(st.loja.trocas))st.loja.trocas=[]; return st.loja; }
+  window.acadRenderLojaConsultor=function(st){
+    var L=loja(st); var u=curUser(); var sld=saldo(st,(u&&u.login)||'');
+    var cards=L.produtos.map(function(p){ var indisp=(Number(p.estoque)||0)<=0; var semSaldo=sld<(Number(p.preco)||0);
+      return '<div style="border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;background:#fff">'+(p.imagem?'<img src="'+esc(p.imagem)+'" style="width:100%;height:130px;object-fit:cover">':'<div style="height:130px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:34px"><i class="fas fa-gift"></i></div>')+'<div style="padding:12px"><div style="font-weight:700;color:#111">'+esc(p.nome)+'</div><div style="font-size:12px;color:#6b7280;min-height:32px">'+esc(p.descricao||'')+'</div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><div><b style="color:#C0491F">'+(Number(p.preco)||0)+' pts</b><div style="font-size:11px;color:#6b7280">Estoque: '+(Number(p.estoque)||0)+'</div></div><button class="acad-btn" style="min-width:unset;padding:7px 14px;background:'+((indisp||semSaldo)?'#9ca3af':'#C0491F')+';border-color:'+((indisp||semSaldo)?'#9ca3af':'#C0491F')+'" '+((indisp||semSaldo)?'disabled':'')+' onclick="acadLojaResgatar(&#39;'+esc(p.id)+'&#39;)"><i class="fas fa-shopping-cart"></i> '+(indisp?'Esgotado':(semSaldo?'Pontos insuf.':'Resgatar'))+'</button></div></div></div>'; }).join('')||'<p class="acad-muted" style="text-align:center;padding:16px;grid-column:1/-1">Nenhum produto disponivel.</p>';
+    return '<div class="acad-card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><div><h3 style="margin:0"><i class="fas fa-store" style="color:#C0491F"></i> Loja de recompensas</h3><p class="acad-muted" style="margin:4px 0 0">Troque seus pontos por produtos.</p></div><div style="background:#111;color:#F5A623;border-radius:12px;padding:12px 18px;text-align:center"><div style="font-size:24px;font-weight:800">'+sld+'</div><div style="font-size:11px;letter-spacing:1px">MEUS PONTOS</div></div></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px">'+cards+'</div>';
+  };
+  window.acadLojaResgatar=async function(prodId){ try{ var st=await state(); var L=loja(st); var p=L.produtos.find(function(x){return x.id===prodId;}); if(!p){toast('Produto nao encontrado.','error');return;} var u=curUser(); var login=(u&&u.login)||''; var sld=saldo(st,login); if((Number(p.estoque)||0)<=0){toast('Produto esgotado.','error');return;} if(sld<(Number(p.preco)||0)){toast('Pontos insuficientes. Saldo: '+sld+' pts.','error');return;} if(!confirm('Resgatar "'+p.nome+'" por '+p.preco+' pontos?'))return; p.estoque=(Number(p.estoque)||0)-1; L.trocas.push({id:'troca_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),user:login,nome:(u&&(u.nome||u.name))||login,produtoId:p.id,produtoNome:p.nome,pontos:(Number(p.preco)||0),ts:Date.now(),status:'ok'}); await acadWriteAPI(st); try{toast('Resgate realizado! Pontos descontados e estoque atualizado.','success');}catch(e){} if(typeof renderAcademia==='function') renderAcademia(); }catch(e){ try{toast('Erro: '+(e&&e.message||e),'error');}catch(_){} } };
+
+  /* ---------- DESEMPENHO com GRAFICOS ---------- */
+  function desempData(st){
+    var min=mediaAprov(st); var provas=st.provas||[]; var resp=(st.respostas||[]).filter(function(r){return r.tipo==='prova'&&r.nota!=null;});
+    var aprov=resp.filter(function(r){return r.nota>=min;}).length; var reprov=resp.length-aprov;
+    var byUser={}; resp.forEach(function(r){ var k=String(r.user||'').toUpperCase(); if(!byUser[k])byUser[k]={nome:r.nome||r.user,notas:[],tq:0,ta:0,provas:0}; byUser[k].notas.push(r.nota); byUser[k].provas++; if(Array.isArray(r.respostasQuestoes)){ byUser[k].tq+=r.respostasQuestoes.length; byUser[k].ta+=r.respostasQuestoes.filter(function(d){return d.acertou;}).length; } });
+    var us=Object.keys(byUser).map(function(k){var u=byUser[k];return {nome:u.nome,media:Math.round(u.notas.reduce(function(s,n){return s+n;},0)/u.notas.length),taxa:u.tq?Math.round(u.ta/u.tq*100):0,provas:u.provas,login:k};});
+    var ordTs=resp.slice().sort(function(a,b){return (a.ts||0)-(b.ts||0);});
+    var evolNotas={labels:ordTs.map(function(r){return fmtDataShort(r.ts);}),data:ordTs.map(function(r){return r.nota;})};
+    var acc=0; var evolPts={labels:[],data:[]}; ordTs.forEach(function(r){ if(r.nota>=min){ acc+=r.nota; } evolPts.labels.push(fmtDataShort(r.ts)); evolPts.data.push(acc); });
+    return {min:min,aprov:aprov,reprov:reprov,us:us,evolNotas:evolNotas,evolPts:evolPts};
+  }
+  function fmtDataShort(ts){ try{ return new Date(ts||Date.now()).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); }catch(e){ return ''; } }
+  window._acadDesempInit=function(st){
+    try{ if(!window.Chart) return; var d=desempData(st); var C=window.Chart;
+      function mk(id,cfg){ var el=document.getElementById(id); if(el) try{ new C(el,cfg); }catch(e){} }
+      mk('gchAprov',{type:'doughnut',data:{labels:['Aprovados','Reprovados'],datasets:[{data:[d.aprov,d.reprov],backgroundColor:['#10b981','#ef4444']}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+      mk('gchMedia',{type:'bar',data:{labels:d.us.map(function(u){return u.nome;}),datasets:[{label:'Media %',data:d.us.map(function(u){return u.media;}),backgroundColor:'#C0491F'}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{min:0,max:100}},plugins:{legend:{display:false}}}});
+      mk('gchTaxa',{type:'bar',data:{labels:d.us.map(function(u){return u.nome;}),datasets:[{label:'Acertos %',data:d.us.map(function(u){return u.taxa;}),backgroundColor:'#7c3aed'}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{min:0,max:100}},plugins:{legend:{display:false}}}});
+      mk('gchProvas',{type:'bar',data:{labels:d.us.map(function(u){return u.nome;}),datasets:[{label:'Provas',data:d.us.map(function(u){return u.provas;}),backgroundColor:'#0891b2'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+      mk('gchEvol',{type:'line',data:{labels:d.evolNotas.labels,datasets:[{label:'Nota %',data:d.evolNotas.data,borderColor:'#F5A623',backgroundColor:'rgba(245,166,35,.15)',fill:true,tension:.3}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{min:0,max:100}},plugins:{legend:{display:false}}}});
+      mk('gchPts',{type:'line',data:{labels:d.evolPts.labels,datasets:[{label:'Pontos acumulados',data:d.evolPts.data,borderColor:'#111',backgroundColor:'rgba(0,0,0,.08)',fill:true,tension:.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+    }catch(e){}
+  };
+  function desempChartsHTML(){
+    function card(t,id){ return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px"><b style="font-size:12.5px;color:#111827">'+t+'</b><div style="position:relative;height:200px;margin-top:6px"><canvas id="'+id+'"></canvas></div></div>'; }
+    return '<div class="acad-card" style="margin-bottom:16px"><h3 style="margin:0 0 10px"><i class="fas fa-chart-bar" style="color:#C0491F"></i> Graficos de desempenho</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">'+card('Aprovacoes x Reprovacoes','gchAprov')+card('Media por consultor','gchMedia')+card('Taxa de acertos por consultor','gchTaxa')+card('Provas realizadas','gchProvas')+card('Evolucao das notas','gchEvol')+card('Evolucao dos pontos','gchPts')+'</div></div>';
+  }
+
+  /* ---------- WRAPPER F ---------- */
+  var _prev=window._acadRenderWithState;
+  if(typeof _prev==='function'){
+    function adminBar(active){ var defs=[['admin','fas fa-cog','Gerenciar'],['desempenho','fas fa-chart-pie','Desempenho'],['consultores','fas fa-users','Consultores'],['bibadmin','fas fa-book','Biblioteca'],['certadmin','fas fa-certificate','Certificados'],['lojaadmin','fas fa-store','Loja']]; var t=document.getElementById('acadTabs'); if(t) t.innerHTML=defs.map(function(d){return '<button class="acad-tab-btn '+(active===d[0]?'active':'')+'" onclick="acadSetView(&#39;'+d[0]+'&#39;)"><i class="'+d[1]+'"></i> '+d[2]+'</button>';}).join(''); }
+    window._acadRenderWithState=function(st){
+      var isAdmin=(typeof acadIsAdmin==='function')?acadIsAdmin():false;
+      if(isAdmin && _acadView==='desempenho'){ adminBar('desempenho'); var c=document.getElementById('acadContent'); if(c){ c.innerHTML=desempChartsHTML()+(window.acadRenderDesempenhoNovo?window.acadRenderDesempenhoNovo(st):''); setTimeout(function(){window._acadDesempInit(st);},60); } injectLogo(); return; }
+      _prev(st);
+      if(!isAdmin && _acadView==='ranking'){ var cr=document.getElementById('acadContent'); if(cr) cr.innerHTML=window.acadRenderRankingNovo(st); }
+      injectLogo();
+    };
+  }
+  document.addEventListener('DOMContentLoaded',function(){ setTimeout(injectLogo,1500); });
 })();
 
 </script>
