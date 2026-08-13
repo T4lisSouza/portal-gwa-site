@@ -9512,6 +9512,95 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   document.addEventListener('DOMContentLoaded',function(){ setTimeout(injectLogo,1800); });
 })();
 
+/* ===== INTRANET GWA :: Fix imagens Drive + Comunicado Diario (tela de primeiro acesso) 2026-08-05j ===== */
+(function(){
+  if(window.__gwaModJ) return; window.__gwaModJ=true;
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function driveId(u){ u=String(u||''); var m=u.match(/\/d\/([a-zA-Z0-9_-]{10,})/)||u.match(/[?&]id=([a-zA-Z0-9_-]{10,})/); return m?m[1]:''; }
+  function driveThumb(u){ var id=driveId(u); return id?('https://drive.google.com/thumbnail?id='+id+'&sz=w800'):u; }
+  function today(){ try{ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }catch(e){ return ''; } }
+  function cur(){ return window.currentUser || (typeof getSession==='function'?getSession():null) || {}; }
+  function isAdm(){ var r=String((cur()||{}).role||'').toLowerCase(); return r==='admin'||r==='master'||r==='gestor'; }
+  function udepts(u){ var d=(u&&(u.depts||u.departamentos||u.departments))||[]; if(typeof d==='string')d=[d]; return (d||[]).map(function(x){return String(x).toLowerCase();}); }
+  function apiBase(){ return (typeof API_URL!=='undefined')?API_URL:''; }
+  function apiHdr(){ return {'Content-Type':'application/json','X-MC-Token':(typeof API_TOKEN!=='undefined'?API_TOKEN:'')}; }
+
+  /* ---------- FIX de imagens do Google Drive em toda a intranet ---------- */
+  function fixImages(root){ try{ (root||document).querySelectorAll('img').forEach(function(im){ var s=im.getAttribute('src')||''; if(/drive\.google\.com\/(file\/|open\?|uc\?)/.test(s) && s.indexOf('thumbnail?id=')<0){ var t=driveThumb(s); if(t&&t!==s){ im.src=t; } } }); }catch(e){} }
+  window.gwaFixImages=fixImages;
+  setInterval(function(){fixImages();},1500);
+  document.addEventListener('DOMContentLoaded',function(){ setTimeout(function(){fixImages();},1000); });
+  // logo do certificado/academia: garante formato de imagem valido
+  var _prevRender=window._acadRenderWithState;
+  if(typeof _prevRender==='function'){ window._acadRenderWithState=function(st){ _prevRender(st); try{ if(window._acadLogoUrl) window._acadLogoUrl=driveThumb(window._acadLogoUrl); }catch(e){} fixImages(); }; }
+
+  /* ---------- COMUNICADO DIARIO (tela de primeiro acesso do dia) ---------- */
+  async function loadCfg(){ try{ var r=await fetch(apiBase()+'/api/comunicado_diario/atual',{headers:apiHdr()}); if(!r.ok) return null; var j=await r.json(); return (j&&j.ok&&j.data&&j.data.titulo!==undefined)?j.data:((j&&j.ok&&j.data&&j.data.ativo!==undefined)?j.data:null); }catch(e){ return null; } }
+  async function saveCfg(obj){ try{ var r=await fetch(apiBase()+'/api/comunicado_diario/atual',{method:'PUT',headers:apiHdr(),body:JSON.stringify(Object.assign({id:'atual'},obj))}); return r.ok; }catch(e){ return false; } }
+
+  function embedHTML(cfg){ var link=cfg.link||''; var id=driveId(link);
+    if(cfg.dataUrl){ if(/^data:video/i.test(cfg.dataUrl)) return '<video src="'+cfg.dataUrl+'" controls style="width:100%;border-radius:10px;max-height:60vh"></video>'; if(/^data:image/i.test(cfg.dataUrl)) return '<img src="'+cfg.dataUrl+'" style="width:100%;border-radius:10px">'; }
+    if(id) return '<iframe src="https://drive.google.com/file/d/'+id+'/preview" style="width:100%;height:min(60vh,460px);border:0;border-radius:10px" allow="autoplay" allowfullscreen></iframe>';
+    if(/\.mp4($|\?)/i.test(link)) return '<video src="'+esc(link)+'" controls style="width:100%;border-radius:10px;max-height:60vh"></video>';
+    if(link) return '<iframe src="'+esc(link)+'" style="width:100%;height:min(60vh,460px);border:0;border-radius:10px" allowfullscreen></iframe>';
+    return '<p style="color:#6b7280">Sem conteudo configurado.</p>';
+  }
+  function shouldShow(cfg){ if(!cfg||!cfg.ativo) return false; var t=today();
+    if(cfg.dataInicio && t<cfg.dataInicio) return false; if(cfg.dataFim && t>cfg.dataFim) return false;
+    var pub=(cfg.publico||'todos').toLowerCase(); if(pub && pub!=='todos'){ if(isAdm()) {} else { var d=udepts(cur()); if(d.indexOf('todos')<0 && d.indexOf(pub)<0) return false; } }
+    try{ var seen=localStorage.getItem('gwa_splash_seen_'+(cfg.versao||cfg.ts||'0')); if(seen===t) return false; }catch(e){}
+    return true;
+  }
+  function markSeen(cfg){ try{ localStorage.setItem('gwa_splash_seen_'+(cfg.versao||cfg.ts||'0'), today()); }catch(e){} }
+  function showSplash(cfg){
+    if(document.getElementById('gwaSplashOverlay')) return;
+    var ov=document.createElement('div'); ov.id='gwaSplashOverlay';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px';
+    ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:820px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.4)">'+
+      '<div style="background:#111;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;border-radius:16px 16px 0 0"><div style="font-weight:800;font-size:16px"><i class="fas fa-bullhorn" style="color:#FF8000;margin-right:8px"></i>'+esc(cfg.titulo||'Comunicado do dia')+'</div><button id="gwaSplashClose" style="background:#FF8000;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer">Fechar</button></div>'+
+      '<div style="padding:18px">'+(cfg.descricao?'<p style="color:#374151;margin:0 0 12px;font-size:14px">'+esc(cfg.descricao)+'</p>':'')+embedHTML(cfg)+
+      '<div style="text-align:right;margin-top:14px"><button id="gwaSplashOk" style="background:#111;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-weight:700;cursor:pointer">Ok, visualizei</button></div></div></div>';
+    document.body.appendChild(ov);
+    function close(){ markSeen(cfg); var e=document.getElementById('gwaSplashOverlay'); if(e) e.remove(); }
+    document.getElementById('gwaSplashClose').onclick=close; document.getElementById('gwaSplashOk').onclick=close;
+  }
+  async function checkSplash(){ try{ if(!cur()||!cur().login) return; var cfg=await loadCfg(); if(shouldShow(cfg)) showSplash(cfg); }catch(e){} }
+  window.gwaCheckSplash=checkSplash;
+  var _ep=window.enterPortal; if(typeof _ep==='function'){ window.enterPortal=function(){ var r=_ep.apply(this,arguments); setTimeout(checkSplash,2500); return r; }; }
+  document.addEventListener('DOMContentLoaded',function(){ setTimeout(checkSplash,3500); });
+
+  /* ---------- ADMIN: gerenciar o comunicado diario ---------- */
+  window.gwaComunicadoDiarioAdmin=async function(){
+    if(!isAdm()){ try{toast('Acesso restrito a administradores.','error');}catch(e){} return; }
+    var cfg=await loadCfg()||{ativo:false,titulo:'',descricao:'',link:'',dataInicio:today(),dataFim:'',publico:'todos'};
+    var m=document.getElementById('mContent'); if(!m){ alert('Abra a intranet para gerenciar.'); return; }
+    m.innerHTML='<h3><i class="fas fa-bullhorn" style="color:#FF8000"></i> Comunicado / Tela de primeiro acesso do dia</h3>'+
+      '<p style="font-size:12.5px;color:#6b7280">Aparece 1x por dia no primeiro acesso. Aceita link do Google Drive (video, PPT, PDF) ou URL de MP4.</p>'+
+      '<label style="display:flex;align-items:center;gap:8px;margin:8px 0;font-weight:700;color:#111"><input type="checkbox" id="spAtivo" '+(cfg.ativo?'checked':'')+'> Ativo (exibir para os usuarios)</label>'+
+      '<div class="mc-fg"><label>Titulo</label><input id="spTitulo" value="'+esc(cfg.titulo||'')+'" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #d1d5db;border-radius:8px;color:#111;background:#fff"></div>'+
+      '<div class="mc-fg" style="margin-top:8px"><label>Descricao</label><textarea id="spDesc" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #d1d5db;border-radius:8px;color:#111;background:#fff;min-height:56px">'+esc(cfg.descricao||'')+'</textarea></div>'+
+      '<div class="mc-fg" style="margin-top:8px"><label>Link do conteudo (Google Drive / MP4 / apresentacao)</label><input id="spLink" value="'+esc(cfg.link||'')+'" placeholder="https://drive.google.com/file/d/ID/view" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #d1d5db;border-radius:8px;color:#111;background:#fff"></div>'+
+      '<div class="mc-fg" style="margin-top:8px"><label>Ou enviar arquivo direto (imagem/PDF ate ~3MB; para video use o Drive)</label><input type="file" id="spFile" accept="image/*,application/pdf,video/mp4" style="width:100%"></div>'+
+      '<div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap"><div class="mc-fg" style="flex:1"><label>Data inicio</label><input type="date" id="spIni" value="'+esc(cfg.dataInicio||'')+'" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #d1d5db;border-radius:8px;color:#111;background:#fff"></div><div class="mc-fg" style="flex:1"><label>Data termino</label><input type="date" id="spFim" value="'+esc(cfg.dataFim||'')+'" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #d1d5db;border-radius:8px;color:#111;background:#fff"></div></div>'+
+      '<div class="mc-fg" style="margin-top:8px"><label>Publico (digite "todos" ou o departamento)</label><input id="spPub" value="'+esc(cfg.publico||'todos')+'" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #d1d5db;border-radius:8px;color:#111;background:#fff"></div>'+
+      '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="mc-btn mc-btn--primary" onclick="gwaSalvarComunicadoDiario()"><i class="fas fa-save"></i> Salvar e publicar</button><button class="mc-btn mc-btn--outline" onclick="gwaPreviewComunicado()"><i class="fas fa-eye"></i> Pre-visualizar</button><button class="mc-btn mc-btn--outline" onclick="closeM()">Fechar</button></div>';
+    document.getElementById('overlay').classList.add('open');
+  };
+  function readFileB64(file){ return new Promise(function(res,rej){ if(!file){res('');return;} if(file.size>3.2*1024*1024){ rej(new Error('Arquivo grande demais. Use um link do Google Drive para videos.')); return; } var fr=new FileReader(); fr.onload=function(){res(fr.result);}; fr.onerror=function(){rej(new Error('Falha ao ler arquivo'));}; fr.readAsDataURL(file); }); }
+  window.gwaSalvarComunicadoDiario=async function(){
+    try{ var f=document.getElementById('spFile'); var dataUrl=''; if(f&&f.files&&f.files[0]){ dataUrl=await readFileB64(f.files[0]); }
+      var obj={ ativo:!!document.getElementById('spAtivo').checked, titulo:document.getElementById('spTitulo').value||'', descricao:document.getElementById('spDesc').value||'', link:(document.getElementById('spLink').value||'').trim(), dataUrl:dataUrl||undefined, dataInicio:document.getElementById('spIni').value||'', dataFim:document.getElementById('spFim').value||'', publico:(document.getElementById('spPub').value||'todos').trim(), versao:Date.now(), ts:Date.now() };
+      var ok=await saveCfg(obj); if(ok){ try{toast('Comunicado do dia publicado! Sera exibido no primeiro acesso.','success');}catch(e){} try{closeM();}catch(e){} } else { try{toast('Falha ao salvar. Verifique a conexao.','error');}catch(e){} }
+    }catch(e){ try{toast('Erro: '+(e&&e.message||e),'error');}catch(_){} }
+  };
+  window.gwaPreviewComunicado=async function(){ try{ var f=document.getElementById('spFile'); var dataUrl=''; if(f&&f.files&&f.files[0]){ try{dataUrl=await readFileB64(f.files[0]);}catch(e){} } var cfg={titulo:document.getElementById('spTitulo').value||'Pre-visualizacao',descricao:document.getElementById('spDesc').value||'',link:(document.getElementById('spLink').value||'').trim(),dataUrl:dataUrl||undefined}; try{closeM();}catch(e){} showSplash(cfg); }catch(e){} };
+
+  /* botao flutuante para admin abrir o gerenciador */
+  function addAdminBtn(){ try{ if(!isAdm()||document.getElementById('gwaSplashAdminBtn')) return; var b=document.createElement('button'); b.id='gwaSplashAdminBtn'; b.title='Comunicado do dia (admin)'; b.innerHTML='<i class="fas fa-bullhorn"></i>'; b.style.cssText='position:fixed;bottom:22px;left:22px;z-index:9998;width:52px;height:52px;border-radius:50%;background:#111;color:#FF8000;border:2px solid #FF8000;font-size:19px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.3)'; b.onclick=function(){ gwaComunicadoDiarioAdmin(); }; document.body.appendChild(b); }catch(e){} }
+  setInterval(addAdminBtn,2000); document.addEventListener('DOMContentLoaded',function(){setTimeout(addAdminBtn,2500);});
+  var _ep2=window.enterPortal; if(typeof _ep2==='function'){ window.enterPortal=function(){ var r=_ep2.apply(this,arguments); setTimeout(addAdminBtn,1200); return r; }; }
+})();
+
 </script>
 </body>
 </html>
