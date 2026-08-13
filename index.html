@@ -4032,21 +4032,12 @@ async function acadWriteAPI(st){
   const r = await fetch(API_URL+'/api/'+ACAD_API_COL+'/'+_acadAnchorId, {
     method:  'PUT',
     headers: {'X-MC-Token': API_TOKEN, 'Content-Type': 'application/json'},
-    body: JSON.stringify({
-      type:                 ACAD_TYPE,
-      provas:               st.provas               || [],
-      treinamentosAcademia: st.treinamentosAcademia  || [],
-      atividades:           st.atividades            || [],
-      biblioteca:           st.biblioteca            || [],
-      certificados:         st.certificados          || [],
-      respostas:            st.respostas             || [],
-      gamificacao:          st.gamificacao           || [],
-      logs:                 st.logs                  || [],
-      npsNotas:             st.npsNotas              || [],
-      permissoesAcademia:   st.permissoesAcademia    || {},
-      updatedAt: Date.now(),
-      updatedBy: acadCurrentUser().login || 'SISTEMA'
-    }),
+    body: JSON.stringify(Object.assign({
+      type: ACAD_TYPE,
+      provas: st.provas||[], treinamentosAcademia: st.treinamentosAcademia||[], atividades: st.atividades||[],
+      biblioteca: st.biblioteca||[], certificados: st.certificados||[], respostas: st.respostas||[],
+      gamificacao: st.gamificacao||[], logs: st.logs||[], npsNotas: st.npsNotas||[], permissoesAcademia: st.permissoesAcademia||{}
+    }, st, { type: ACAD_TYPE, updatedAt: Date.now(), updatedBy: (function(){try{return acadCurrentUser().login||'SISTEMA';}catch(e){return 'SISTEMA';}})() })),
     signal: AbortSignal.timeout(10000)
   });
   if(!r.ok) throw new Error('PUT /api/ti/'+_acadAnchorId+' HTTP '+r.status);
@@ -4079,20 +4070,10 @@ async function acadFetchState(){
   let anchor = await acadReadAPI();
   if(!anchor) anchor = await acadEnsureAnchor();
   _acadApiOnline = true;
-  return {
-    provas:               anchor.provas               || [],
-    treinamentosAcademia: anchor.treinamentosAcademia  || [],
-    atividades:           anchor.atividades            || [],
-    biblioteca:           anchor.biblioteca            || [],
-    certificados:         anchor.certificados          || [],
-    respostas:            anchor.respostas             || [],
-    gamificacao:          anchor.gamificacao           || [],
-    logs:                 anchor.logs                  || [],
-    npsNotas:             anchor.npsNotas              || [],
-    permissoesAcademia:   anchor.permissoesAcademia    ||
-                          {criadoresProvas:[],diretores:[],acessoTotal:[],gestoresPermissoes:[]},
-    updatedAt:            anchor.updatedAt             || 0
-  };
+  return Object.assign({
+    provas:[], treinamentosAcademia:[], atividades:[], biblioteca:[], certificados:[], respostas:[], gamificacao:[], logs:[], npsNotas:[],
+    permissoesAcademia:{criadoresProvas:[],diretores:[],acessoTotal:[],gestoresPermissoes:[]}, updatedAt:0
+  }, anchor); // preserva campos extras: config, comentarios, loja, academiaLogo
 }
 
 /* ── SALVA NA API (passa state completo) ─────────────────── */
