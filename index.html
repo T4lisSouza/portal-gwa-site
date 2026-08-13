@@ -8686,6 +8686,176 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   };
 })();
 
+/* ===== ACADEMIA GWA :: Consultores + Perfil completo + Dashboard + Media + Comentarios (2026-08-05b) ===== */
+(function(){
+  if(window.__gwaAcadConsultores20260805b) return; window.__gwaAcadConsultores20260805b=true;
+  function esc(v){ try{ return (typeof acadEscape==='function')?acadEscape(v):String(v==null?'':v).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }catch(e){ return String(v==null?'':v); } }
+  function modal(html){ var m=document.getElementById('mContent'); if(!m){ try{toast('Nao foi possivel abrir.','error');}catch(e){} return null; } m.innerHTML=html; var ov=document.getElementById('overlay'); if(ov) ov.classList.add('open'); return m; }
+  async function state(){ if(typeof acadFetchState==='function'){ try{ return await acadFetchState(); }catch(e){} } return (window._acadCurrentSt||{provas:[],respostas:[]}); }
+  function users(){ return (window._usersCache||[]).filter(function(u){ return String((u.login||'')).toUpperCase()!=='TALIS'; }); }
+  function isConsultor(u){ var r=(u.role||'').toLowerCase(); return r==='standard'||r==='user'||r==='usuario'||r==='consultor'||r===''; }
+  function mediaAprov(st){ return (st&&st.config&&Number(st.config.mediaAprovacao))||70; }
+  function fmtDT(ts){ try{ return new Date(ts||Date.now()).toLocaleString('pt-BR'); }catch(e){ return '-'; } }
+  function userRec(login){ return (window._usersCache||[]).find(function(u){ return String(u.login||'').toUpperCase()===String(login||'').toUpperCase(); })||{login:login,nome:login}; }
+
+  function statsOf(st, login){
+    var min=mediaAprov(st);
+    var resp=(st.respostas||[]).filter(function(r){return String(r.user||'').toUpperCase()===String(login||'').toUpperCase();});
+    var provas=resp.filter(function(r){return r.tipo==='prova';});
+    var atividades=resp.filter(function(r){return r.tipo==='atividade';});
+    var treinos=resp.filter(function(r){return r.tipo==='treinamento';});
+    var notas=provas.filter(function(r){return r.nota!=null;}).map(function(r){return r.nota;});
+    var media=notas.length?Math.round(notas.reduce(function(s,n){return s+n;},0)/notas.length):0;
+    var aprovados=provas.filter(function(r){return (r.nota||0)>=min;}).length;
+    var reprovados=provas.length-aprovados;
+    var totalQ=0, acertosQ=0;
+    provas.forEach(function(r){ if(Array.isArray(r.respostasQuestoes)){ totalQ+=r.respostasQuestoes.length; acertosQ+=r.respostasQuestoes.filter(function(d){return d.acertou;}).length; } });
+    var taxa=totalQ?Math.round(acertosQ/totalQ*100):null;
+    var certificados=(st.certificados||[]).filter(function(c){return String(c.user||'').toUpperCase()===String(login||'').toUpperCase();});
+    var evol=provas.filter(function(r){return r.nota!=null;}).sort(function(a,b){return (a.ts||0)-(b.ts||0);}).map(function(r){return {ts:r.ts,nota:r.nota,titulo:r.titulo};});
+    return {min:min,resp:resp,provas:provas,atividades:atividades,treinos:treinos,notas:notas,media:media,aprovados:aprovados,reprovados:reprovados,totalQ:totalQ,acertosQ:acertosQ,taxa:taxa,certificados:certificados,evol:evol,statusGeral:(notas.length?(media>=min?'Aprovado':'Reprovado'):'—')};
+  }
+
+  /* ---------- ABA CONSULTORES ---------- */
+  window.acadRenderConsultores=function(st){
+    var min=mediaAprov(st);
+    var list=users();
+    var rows=list.map(function(u){
+      var s=statsOf(st,u.login);
+      var cor=s.media>=min?'#10b981':'#ef4444';
+      return '<tr style="cursor:pointer" onclick="acadVerConsultor(&#39;'+esc(u.login)+'&#39;)" title="Abrir perfil completo">'+
+        '<td style="font-weight:600">'+esc(u.nome||u.login)+'<br><span style="font-size:11px;color:#6b7280">'+esc(u.login)+'</span></td>'+
+        '<td style="text-align:center">'+s.provas.length+'</td>'+
+        '<td style="text-align:center;font-weight:800;color:'+cor+'">'+(s.notas.length?s.media+'%':'—')+'</td>'+
+        '<td style="text-align:center">'+(s.taxa!=null?s.taxa+'%':'—')+'</td>'+
+        '<td style="text-align:center"><span style="padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:700;background:'+(s.statusGeral==='Aprovado'?'#dcfce7':(s.statusGeral==='Reprovado'?'#fee2e2':'#f3f4f6'))+';color:'+(s.statusGeral==='Aprovado'?'#15803d':(s.statusGeral==='Reprovado'?'#dc2626':'#6b7280'))+'">'+s.statusGeral+'</span></td>'+
+        '<td style="text-align:center"><button class="acad-btn" style="min-width:unset;padding:5px 12px;background:#FF8000;border-color:#FF8000" onclick="event.stopPropagation();acadVerConsultor(&#39;'+esc(u.login)+'&#39;)"><i class="fas fa-user"></i> Perfil</button></td></tr>';
+    }).join('')||'<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:20px">Nenhum consultor cadastrado.</td></tr>';
+    return '<div class="acad-card" style="margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">'+
+        '<div><h3 style="margin:0"><i class="fas fa-users" style="color:#FF8000"></i> Consultores</h3><p class="acad-muted" style="margin:4px 0 0">Clique num consultor para ver o perfil completo e a evolucao.</p></div>'+
+        '<div style="display:flex;align-items:center;gap:8px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:8px 12px">'+
+          '<label style="font-size:12.5px;font-weight:700;color:#7c2d12">Media de aprovacao:</label>'+
+          '<input id="acadMediaInput" type="number" min="0" max="100" value="'+min+'" style="width:70px;padding:6px;border:1px solid #d1d5db;border-radius:8px;color:#111827;background:#fff">'+
+          '<span style="font-size:12px;color:#7c2d12">%</span>'+
+          '<button class="acad-btn" style="min-width:unset;padding:6px 12px;background:#10b981;border-color:#10b981" onclick="acadSalvarMediaAprov()"><i class="fas fa-save"></i> Salvar</button>'+
+        '</div></div></div>'+
+      '<div class="acad-card"><div style="overflow-x:auto"><table class="acad-table"><thead><tr><th>Consultor</th><th>Provas</th><th>Media</th><th>Acertos</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  };
+
+  window.acadSalvarMediaAprov=async function(){
+    try{ var v=parseInt((document.getElementById('acadMediaInput')||{}).value,10); if(isNaN(v)||v<0||v>100){ toast('Informe uma media entre 0 e 100.','error'); return; }
+      var st=await state(); st.config=st.config||{}; st.config.mediaAprovacao=v; await acadWriteAPI(st);
+      try{toast('Media de aprovacao definida em '+v+'%. Aplica a classificacao Aprovado/Reprovado.','success');}catch(e){}
+      if(typeof renderAcademia==='function') renderAcademia();
+    }catch(e){ try{toast('Erro ao salvar media: '+(e&&e.message||e),'error');}catch(_){} }
+  };
+
+  /* ---------- PERFIL COMPLETO + DASHBOARD ---------- */
+  window.acadVerConsultor=async function(login){
+    try{
+      if(typeof acadIsAdmin==='function' && !acadIsAdmin()) return;
+      var st=await state(); var s=statsOf(st,login); var u=userRec(login); var provas=st.provas||[];
+      var deps=(u.depts||u.departamentos||u.departments||[]); if(typeof deps==='string')deps=[deps];
+      var cor=s.media>=s.min?'#10b981':'#ef4444';
+      var kpis='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:12px 0 16px">'+
+        '<div style="background:#eff6ff;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:'+cor+'">'+(s.notas.length?s.media+'%':'—')+'</div><div style="font-size:11px;color:#6b7280">Media geral</div></div>'+
+        '<div style="background:#f0fdf4;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#10b981">'+s.provas.length+'</div><div style="font-size:11px;color:#6b7280">Provas feitas</div></div>'+
+        '<div style="background:#f5f3ff;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#7c3aed">'+(s.taxa!=null?s.taxa+'%':'—')+'</div><div style="font-size:11px;color:#6b7280">Taxa de acertos</div></div>'+
+        '<div style="background:#ecfeff;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#0891b2">'+s.atividades.length+'</div><div style="font-size:11px;color:#6b7280">Atividades</div></div>'+
+        '<div style="background:#dcfce7;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#15803d">'+s.aprovados+'</div><div style="font-size:11px;color:#6b7280">Aprovacoes</div></div>'+
+        '<div style="background:#fee2e2;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#dc2626">'+s.reprovados+'</div><div style="font-size:11px;color:#6b7280">Reprovacoes</div></div>'+
+        '</div>';
+      var cadastro='<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12.5px;color:#374151">'+
+        '<b>Dados cadastrais</b><br>Nome: '+esc(u.nome||login)+' &middot; Login: '+esc(login)+' &middot; Perfil: '+esc(u.role||'consultor')+'<br>Departamentos: '+esc((deps||[]).join(', ')||'-')+'</div>';
+      var histRows=s.provas.sort(function(a,b){return (b.ts||0)-(a.ts||0);}).map(function(r){
+        var pmin=((provas.find(function(p){return p.id===r.itemId;})||{}).notaMinima)||s.min;
+        var c=(r.nota||0)>=pmin?'#10b981':'#ef4444'; var tem=Array.isArray(r.respostasQuestoes)&&r.respostasQuestoes.length;
+        return '<tr style="cursor:pointer" onclick="acadVerRespostaProva(&#39;'+r.id+'&#39;)"><td>'+esc(r.titulo||'')+'</td><td style="text-align:center;font-weight:800;color:'+c+'">'+(r.nota!=null?r.nota+'%':'—')+'</td><td style="text-align:center"><span style="padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:700;background:'+(r.status==='aprovado'?'#dcfce7':'#fee2e2')+';color:'+(r.status==='aprovado'?'#15803d':'#dc2626')+'">'+esc(r.status||'-')+'</span></td><td style="text-align:center;font-size:12px;color:#6b7280">'+fmtDT(r.ts)+'</td><td style="text-align:center">'+(tem?'<i class="fas fa-search" style="color:#2563eb"></i>':'<span style="font-size:11px;color:#9ca3af">sem detalhe</span>')+'</td></tr>';
+      }).join('')||'<tr><td colspan="5" style="text-align:center;color:#6b7280;padding:14px">Nenhuma prova realizada.</td></tr>';
+      var ativRows=s.atividades.concat(s.treinos).sort(function(a,b){return (b.ts||0)-(a.ts||0);}).map(function(r){
+        return '<tr><td>'+esc(r.titulo||'')+'</td><td style="text-align:center">'+esc(r.tipo||'')+'</td><td style="text-align:center;font-size:12px;color:#6b7280">'+fmtDT(r.ts)+'</td></tr>';
+      }).join('')||'<tr><td colspan="3" style="text-align:center;color:#6b7280;padding:12px">Nenhuma atividade/treinamento.</td></tr>';
+      var html='<h3><i class="fas fa-user-graduate" style="color:#FF8000"></i> Perfil completo &mdash; '+esc(u.nome||login)+'</h3>'+
+        '<p style="font-size:12.5px;color:#6b7280;margin:2px 0 6px">Status geral: <b style="color:'+(s.statusGeral==='Aprovado'?'#10b981':(s.statusGeral==='Reprovado'?'#ef4444':'#6b7280'))+'">'+s.statusGeral+'</b> (media minima '+s.min+'%)</p>'+
+        cadastro+kpis+
+        '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:14px"><b style="font-size:13px;color:#111827"><i class="fas fa-chart-line" style="color:#FF8000"></i> Evolucao das notas</b><div style="position:relative;height:220px;margin-top:8px"><canvas id="acadEvolChart"></canvas></div></div>'+
+        '<b style="font-size:13px;color:#111827">Historico de provas</b><div style="overflow-x:auto;margin:6px 0 16px"><table class="acad-table"><thead><tr><th>Prova</th><th>Nota</th><th>Status</th><th>Data</th><th>Detalhe</th></tr></thead><tbody>'+histRows+'</tbody></table></div>'+
+        '<b style="font-size:13px;color:#111827">Atividades e conteudos concluidos</b><div style="overflow-x:auto;margin:6px 0 8px"><table class="acad-table"><thead><tr><th>Item</th><th>Tipo</th><th>Data</th></tr></thead><tbody>'+ativRows+'</tbody></table></div>'+
+        '<p style="font-size:11.5px;color:#9ca3af">Certificados emitidos: '+s.certificados.length+'. Clique numa prova para ver questao a questao, comentarios e feedbacks.</p>';
+      modal(html);
+      // dashboard chart
+      try{
+        if(window.Chart && s.evol.length){ var ctx=document.getElementById('acadEvolChart'); if(ctx){ new Chart(ctx,{type:'line',data:{labels:s.evol.map(function(e,i){return (e.titulo?e.titulo.slice(0,14):'P'+(i+1));}),datasets:[{label:'Nota (%)',data:s.evol.map(function(e){return e.nota;}),borderColor:'#FF8000',backgroundColor:'rgba(255,128,0,.15)',tension:.3,fill:true,pointRadius:4}]},options:{responsive:true,maintainAspectRatio:false,scales:{y:{min:0,max:100}},plugins:{legend:{display:false}}}}); } }
+        else { var el=document.getElementById('acadEvolChart'); if(el && el.parentNode) el.parentNode.innerHTML='<p class="acad-muted" style="text-align:center;padding:20px 0">Sem notas suficientes para o grafico de evolucao.</p>'; }
+      }catch(e){}
+    }catch(e){ try{toast('Erro: '+(e&&e.message||e),'error');}catch(_){} }
+  };
+
+  /* ---------- REVISAO POR QUESTAO + COMENTARIOS ---------- */
+  window.acadVerRespostaProva=async function(respId){
+    try{
+      var st=await state(); var admin=(typeof acadIsAdmin==='function')?acadIsAdmin():false;
+      var r=(st.respostas||[]).find(function(x){return x.id===respId;});
+      if(!r) return;
+      var det=Array.isArray(r.respostasQuestoes)?r.respostasQuestoes:[];
+      var coms=(st.comentarios&&st.comentarios[r.itemId])||{};
+      var head='<button class="acad-btn outline" style="min-width:unset;padding:6px 12px;margin-bottom:10px" onclick="acadVerConsultor(&#39;'+esc(r.user)+'&#39;)"><i class="fas fa-arrow-left"></i> Voltar ao perfil</button>'+
+        '<h3><i class="fas fa-clipboard-check" style="color:#FF8000"></i> '+esc(r.titulo||'Prova')+' &mdash; '+esc(r.nome||r.user)+'</h3>';
+      if(!det.length){ modal(head+'<div style="background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12;border-radius:10px;padding:12px;margin-top:8px;font-size:13px">Nota final: <b>'+(r.nota!=null?r.nota+'%':'&mdash;')+'</b> ('+esc(r.status||'')+'). O detalhamento por questao fica disponivel para provas realizadas apos a atualizacao.</div>'); return; }
+      var acertos=det.filter(function(d){return d.acertou;}).length;
+      var resumo='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:10px 0 16px">'+
+        '<div style="background:#f0fdf4;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#10b981">'+acertos+'</div><div style="font-size:11px;color:#6b7280">Acertos</div></div>'+
+        '<div style="background:#fef2f2;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#ef4444">'+(det.length-acertos)+'</div><div style="font-size:11px;color:#6b7280">Erros</div></div>'+
+        '<div style="background:#eff6ff;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#3b82f6">'+(r.nota!=null?r.nota+'%':'&mdash;')+'</div><div style="font-size:11px;color:#6b7280">Nota</div></div>'+
+        '<div style="background:#f5f3ff;border-radius:10px;padding:12px;text-align:center"><div style="font-size:15px;font-weight:800;color:'+(r.status==='aprovado'?'#10b981':'#ef4444')+'">'+esc(r.status||'-')+'</div><div style="font-size:11px;color:#6b7280">Resultado</div></div></div>';
+      var qs=det.map(function(d,idx){
+        var ok=d.acertou; var border=ok?'#10b981':'#ef4444';
+        var badge=ok?'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:700">Acertou</span>':'<span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:700">Errou</span>';
+        var marc='<div style="font-size:12.5px;margin-top:6px"><b>Marcou:</b> <span style="color:'+(ok?'#15803d':'#dc2626')+'">'+esc(d.marcadaTexto||'(em branco)')+'</span></div>';
+        var cor=ok?'':'<div style="font-size:12.5px;margin-top:2px"><b>Resposta correta:</b> <span style="color:#15803d">'+esc(d.corretaTexto||'')+'</span></div>';
+        var comTxt=(coms[idx]&&coms[idx].texto)||'';
+        var comBox;
+        if(admin){ comBox='<div style="margin-top:8px"><label style="font-size:11.5px;font-weight:700;color:#7c3aed"><i class="fas fa-comment-dots"></i> Comentario/feedback (visivel ao consultor)</label>'+
+            '<textarea id="acadCom_'+r.itemId+'_'+idx+'" style="width:100%;box-sizing:border-box;min-height:52px;padding:8px;border:1px solid #ddd;border-radius:8px;color:#111827;background:#fff;font-size:12.5px" placeholder="Escreva um feedback sobre esta questao...">'+esc(comTxt)+'</textarea>'+
+            '<button class="acad-btn" style="min-width:unset;padding:5px 12px;margin-top:6px;background:#7c3aed;border-color:#7c3aed" onclick="acadSalvarComentarioQuestao(&#39;'+r.itemId+'&#39;,'+idx+')"><i class="fas fa-save"></i> Salvar comentario</button></div>';
+        } else { comBox= comTxt?('<div style="margin-top:8px;background:#f5f3ff;border-left:3px solid #7c3aed;border-radius:8px;padding:8px;font-size:12.5px;color:#4c1d95"><b><i class="fas fa-comment-dots"></i> Feedback do administrador:</b><br>'+esc(comTxt)+'</div>'):''; }
+        return '<div style="border:1px solid #e5e7eb;border-left:4px solid '+border+';border-radius:10px;padding:12px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div style="font-weight:700;color:#111827;font-size:13.5px">'+(idx+1)+'. '+esc(d.pergunta||'')+'</div>'+badge+'</div>'+marc+cor+comBox+'</div>';
+      }).join('');
+      modal(head+resumo+qs);
+    }catch(e){ try{toast('Erro: '+(e&&e.message||e),'error');}catch(_){} }
+  };
+
+  window.acadSalvarComentarioQuestao=async function(provaId, qIndex){
+    try{
+      var ta=document.getElementById('acadCom_'+provaId+'_'+qIndex); if(!ta) return;
+      var texto=ta.value||''; var st=await state();
+      st.comentarios=st.comentarios||{}; st.comentarios[provaId]=st.comentarios[provaId]||{};
+      var quem=''; try{ var cu=acadCurrentUser(); quem=(cu&&(cu.nome||cu.login))||''; }catch(e){}
+      st.comentarios[provaId][qIndex]={texto:texto,por:quem,ts:Date.now()};
+      await acadWriteAPI(st);
+      try{toast('Comentario salvo. O consultor vera ao revisar a prova.','success');}catch(e){}
+    }catch(e){ try{toast('Erro ao salvar comentario: '+(e&&e.message||e),'error');}catch(_){} }
+  };
+
+  /* ---------- INJETA A ABA "CONSULTORES" NO PAINEL ADMIN ---------- */
+  var _origRender=window._acadRenderWithState;
+  if(typeof _origRender==='function'){
+    window._acadRenderWithState=function(st){
+      var isAdmin=(typeof acadIsAdmin==='function')?acadIsAdmin():false;
+      if(isAdmin && _acadView==='consultores'){
+        var tabs=document.getElementById('acadTabs'), cont=document.getElementById('acadContent');
+        var defs=[{id:'admin',icon:'fas fa-cog',label:'Gerenciar'},{id:'desempenho',icon:'fas fa-chart-pie',label:'Desempenho'},{id:'consultores',icon:'fas fa-users',label:'Consultores'}];
+        if(tabs) tabs.innerHTML=defs.map(function(t){return '<button class="acad-tab-btn '+(_acadView===t.id?'active':'')+'" onclick="acadSetView(&#39;'+t.id+'&#39;)"><i class="'+t.icon+'"></i> '+t.label+'</button>';}).join('');
+        if(cont) cont.innerHTML=window.acadRenderConsultores(st);
+        return;
+      }
+      _origRender(st);
+      if(isAdmin){ var tb=document.getElementById('acadTabs'); if(tb && tb.getElementsByTagName && !/onclick="acadSetView\('consultores'\)"|acadSetView\(&#39;consultores&#39;\)/.test(tb.innerHTML) && tb.innerHTML.indexOf('consultores')<0){ tb.insertAdjacentHTML('beforeend','<button class="acad-tab-btn" onclick="acadSetView(&#39;consultores&#39;)"><i class="fas fa-users"></i> Consultores</button>'); } }
+    };
+  }
+})();
+
+
 </script>
 </body>
 </html>
