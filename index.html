@@ -9271,6 +9271,103 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   document.addEventListener('DOMContentLoaded',function(){ setTimeout(injectLogo,1500); });
 })();
 
+/* ===== ACADEMIA GWA :: Logo oficial (SVG) + Graficos Desempenho bonitos (2026-08-05g) ===== */
+(function(){
+  if(window.__gwaAcadModG) return; window.__gwaAcadModG=true;
+  var GWA_LOGO="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20430%20150%22%3E%20%3Cdefs%3E%20%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%20%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23FFC531%22%2F%3E%20%3Cstop%20offset%3D%220.55%22%20stop-color%3D%22%23FF8A1E%22%2F%3E%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23E8571E%22%2F%3E%20%3C%2FlinearGradient%3E%20%3C%2Fdefs%3E%20%3Cpath%20d%3D%22M75%2012c34%200%2061%2026%2061%2060%200%2040-50%2066-61%2066S14%20112%2014%2072c0-34%2027-60%2061-60z%22%20fill%3D%22url%28%23g%29%22%2F%3E%20%3Cg%20fill%3D%22%23ffffff%22%3E%20%3Cpath%20d%3D%22M40%2084c0-3%202-5%204-6l6-16c1-4%205-6%209-6h32c4%200%208%202%209%206l6%2016c2%201%204%203%204%206v13c0%202-2%204-4%204h-4c-2%200-4-2-4-4v-3H52v3c0%202-2%204-4%204h-4c-2%200-4-2-4-4z%22%2F%3E%20%3C%2Fg%3E%20%3Cg%20fill%3D%22url%28%23g%29%22%3E%20%3Ccircle%20cx%3D%2253%22%20cy%3D%2284%22%20r%3D%226%22%2F%3E%3Ccircle%20cx%3D%2297%22%20cy%3D%2284%22%20r%3D%226%22%2F%3E%20%3Cpath%20d%3D%22M55%2062l5-12c.6-2%202-3%204-3h27c2%200%203.4%201%204%203l5%2012z%22%2F%3E%20%3C%2Fg%3E%20%3Ctext%20x%3D%22152%22%20y%3D%2286%22%20font-family%3D%22Arial%2CHelvetica%2Csans-serif%22%20font-weight%3D%22800%22%20font-size%3D%2270%22%20fill%3D%22%23111111%22%20letter-spacing%3D%221%22%3EGWA%3C%2Ftext%3E%20%3Ctext%20x%3D%22154%22%20y%3D%22116%22%20font-family%3D%22Arial%2CHelvetica%2Csans-serif%22%20font-weight%3D%22600%22%20font-size%3D%2223%22%20fill%3D%22%23111111%22%20letter-spacing%3D%227%22%3ECONSULTORIA%3C%2Ftext%3E%20%3C%2Fsvg%3E";
+  window.GWA_LOGO_SVG=GWA_LOGO;
+  function esc(v){ try{ return (typeof acadEscape==='function')?acadEscape(v):String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }catch(e){ return String(v==null?'':v); } }
+  async function state(){ if(typeof acadFetchState==='function'){ try{ return await acadFetchState(); }catch(e){} } return (window._acadCurrentSt||{}); }
+  function mediaAprov(st){ return (st&&st.config&&Number(st.config.mediaAprovacao))||70; }
+  function fmtData(ts){ try{ return new Date(ts||Date.now()).toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'}); }catch(e){ return ''; } }
+  function fmtShort(ts){ try{ return new Date(ts||Date.now()).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); }catch(e){ return ''; } }
+
+  /* --- LOGO oficial no cabecalho da Academia --- */
+  function injectLogo(){ try{ var h=document.getElementById('acadHeroTitle'); if(h){ h.innerHTML='<img src="'+GWA_LOGO+'" alt="GWA" style="height:42px;vertical-align:middle;margin-right:10px"> Academia GWA'; h.setAttribute('data-logo','1'); } }catch(e){} }
+
+  /* --- Certificado com a logo oficial (SVG) --- */
+  function certAprovado(st,c){ return c && c.nota!=null && c.nota>=mediaAprov(st); }
+  function certHTML(c){
+    var nome=esc(c.nome||c.user||''); var titulo=esc(c.titulo||'Prova'); var nota=(c.nota!=null?c.nota+'%':''); var data=fmtData(c.ts); var codigo=esc(c.codigo||'');
+    var frase='Parabéns pela sua conquista! Seu comprometimento, dedicação e evolução são parte do caminho para resultados extraordinários. Continue trilhando com excelência a jornada de crescimento dentro da GWA Consultoria — cada etapa concluída reforça o profissional de alto desempenho que você está se tornando.';
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Certificado - '+nome+'</title><style>'+
+      '@page{size:A4 landscape;margin:0}*{box-sizing:border-box}body{margin:0;font-family:Georgia,serif;background:#222}'+
+      '.wrap{width:1123px;height:794px;margin:0 auto;background:#fff;position:relative;padding:36px;color:#111}'+
+      '.frame{position:absolute;inset:16px;border:4px solid #111;border-radius:4px}.frame:after{content:"";position:absolute;inset:9px;border:2px solid #C0491F;border-radius:3px}'+
+      '.bandtop{position:absolute;left:16px;right:16px;top:16px;height:10px;background:linear-gradient(90deg,#FFC531,#E8571E)}'+
+      '.inner{position:relative;height:100%;display:flex;flex-direction:column;align-items:center;text-align:center;padding:44px 60px}'+
+      '.seal{position:absolute;top:46px;right:74px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle at 50% 38%,#FFC531,#E8571E);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Arial;font-weight:800;font-size:11px;box-shadow:0 3px 10px rgba(0,0,0,.25);border:3px solid #fff;outline:2px solid #111}.seal b{font-size:22px;line-height:1}'+
+      '.kicker{margin-top:6px;letter-spacing:6px;color:#111;font-family:Arial;font-size:13px;font-weight:700}'+
+      '.title{font-size:46px;color:#111;margin:6px 0 2px}.title span{color:#C0491F}.sub{font-family:Arial;color:#6b7280;font-size:14px;margin-bottom:18px}'+
+      '.lead{font-size:16px;color:#333;margin:6px 0 2px}.name{font-size:42px;color:#111;font-weight:700;margin:6px 0;border-bottom:3px solid #C0491F;padding:0 30px 8px}'+
+      '.prova{font-size:20px;color:#111;margin:14px 0 4px;font-weight:700}.meta{font-family:Arial;font-size:14px;color:#333;margin-top:6px}'+
+      '.badge{display:inline-block;margin:14px 0 6px;background:#111;color:#F5A623;font-family:Arial;font-weight:800;letter-spacing:2px;padding:9px 24px;border-radius:9999px;font-size:14px;border:1px solid #C0491F}'+
+      '.frase{font-size:14px;color:#444;max-width:780px;margin:8px auto 0;line-height:1.6;font-style:italic}'+
+      '.foot{position:absolute;bottom:52px;left:0;right:0;display:flex;justify-content:space-around;font-family:Arial}.sig{width:290px;border-top:1.5px solid #111;padding-top:6px;font-size:13px;color:#333}'+
+      '.topbar{position:fixed;top:0;left:0;right:0;background:#111;color:#fff;padding:10px;text-align:center;font-family:Arial;z-index:9}.topbar button{background:#C0491F;color:#fff;border:none;padding:9px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px}'+
+      '@media print{.topbar{display:none}body{background:#fff}}</style></head><body>'+
+      '<div class="topbar">Certificado GWA &nbsp;<button onclick="window.print()">&#11015; Baixar certificado em PDF</button></div>'+
+      '<div class="wrap"><div class="frame"></div><div class="bandtop"></div><div class="seal"><b>GWA</b><span>APROVADO</span></div><div class="inner">'+
+      '<img src="'+GWA_LOGO+'" style="height:90px;object-fit:contain">'+
+      '<div class="kicker">ACADEMIA GWA</div><div class="title">CERTIFICADO<span> DE CONCLUSÃO</span></div><div class="sub">Documento de reconhecimento profissional</div>'+
+      '<div class="lead">Certificamos que</div><div class="name">'+nome+'</div><div class="lead">concluiu com aproveitamento e foi APROVADO(A) na avaliação</div>'+
+      '<div class="prova">'+titulo+'</div><div class="meta">Nota obtida: <b style="color:#C0491F">'+nota+'</b> &nbsp;&middot;&nbsp; Data: <b>'+data+'</b></div>'+
+      '<div class="badge">&#10003; APROVADO</div><div class="frase">"'+frase+'"</div>'+
+      '<div class="foot"><div class="sig">Academia GWA Consultoria</div><div class="sig">Coordenacao de Treinamento &amp; Desenvolvimento</div></div>'+
+      '<div style="position:absolute;bottom:26px;right:42px;font-size:11px;color:#9ca3af;font-family:Arial">Codigo de validacao: '+codigo+'</div></div></div></body></html>';
+  }
+  window.acadBaixarCertificado=async function(certId){ try{ var st=await state(); var c=(st.certificados||[]).find(function(x){return x.id===certId;}); if(!c){toast('Certificado nao encontrado.','error');return;} if(!certAprovado(st,c)){toast('Indisponivel: consultor nao aprovado.','error');return;} var w=window.open('','_blank'); if(!w){toast('Libere pop-ups.','error');return;} w.document.open(); w.document.write(certHTML(c)); w.document.close(); }catch(e){ try{toast('Erro: '+(e&&e.message||e),'error');}catch(_){} } };
+
+  /* --- GRAFICOS de desempenho (layout bonito) --- */
+  function dData(st){
+    var min=mediaAprov(st); var resp=(st.respostas||[]).filter(function(r){return r.tipo==='prova'&&r.nota!=null;});
+    var aprov=resp.filter(function(r){return r.nota>=min;}).length; var reprov=resp.length-aprov;
+    var byU={}; resp.forEach(function(r){ var k=String(r.user||'').toUpperCase(); if(!byU[k])byU[k]={nome:(r.nome||r.user),notas:[],tq:0,ta:0,provas:0}; byU[k].notas.push(r.nota); byU[k].provas++; if(Array.isArray(r.respostasQuestoes)){byU[k].tq+=r.respostasQuestoes.length; byU[k].ta+=r.respostasQuestoes.filter(function(d){return d.acertou;}).length;} });
+    var us=Object.keys(byU).map(function(k){var u=byU[k];return {nome:u.nome,media:Math.round(u.notas.reduce(function(s,n){return s+n;},0)/u.notas.length),taxa:u.tq?Math.round(u.ta/u.tq*100):0,provas:u.provas};});
+    us.sort(function(a,b){return b.media-a.media;}); var top=us.slice(0,8);
+    var ord=resp.slice().sort(function(a,b){return (a.ts||0)-(b.ts||0);});
+    var acc=0; var pts=ord.map(function(r){ if(r.nota>=min)acc+=r.nota; return acc; });
+    return {aprov:aprov,reprov:reprov,top:top,evolL:ord.map(function(r){return fmtShort(r.ts);}),evolN:ord.map(function(r){return r.nota;}),pts:pts};
+  }
+  window._acadDesempInit=function(st){
+    try{ if(!window.Chart) return; var C=window.Chart; var d=dData(st);
+      try{ C.defaults.font.family="'Segoe UI',system-ui,Arial,sans-serif"; C.defaults.font.size=11; C.defaults.color='#374151'; }catch(e){}
+      function grad(el,hex){ try{ var ctx=el.getContext('2d'); var g=ctx.createLinearGradient(0,0,0,200); g.addColorStop(0,hex+'55'); g.addColorStop(1,hex+'05'); return g; }catch(e){ return hex+'22'; } }
+      function mk(id,cfg){ var el=document.getElementById(id); if(el){ try{ new C(el,cfg); }catch(e){} } }
+      var barOpt={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#111'}},scales:{x:{grid:{display:false}},y:{beginAtZero:true,grid:{color:'#eef0f3'}}}};
+      mk('gchAprov',{type:'doughnut',data:{labels:['Aprovados','Reprovados'],datasets:[{data:[d.aprov,d.reprov],backgroundColor:['#16a34a','#ef4444'],borderColor:'#fff',borderWidth:3}]},options:{responsive:true,maintainAspectRatio:false,cutout:'66%',plugins:{legend:{position:'bottom',labels:{usePointStyle:true,pointStyle:'circle',padding:14}}}}});
+      var pct=JSON.parse(JSON.stringify(barOpt)); pct.scales.y.max=100;
+      mk('gchMedia',{type:'bar',data:{labels:d.top.map(function(u){return u.nome;}),datasets:[{data:d.top.map(function(u){return u.media;}),backgroundColor:'#E8571E',borderRadius:8,maxBarThickness:26}]},options:pct});
+      mk('gchTaxa',{type:'bar',data:{labels:d.top.map(function(u){return u.nome;}),datasets:[{data:d.top.map(function(u){return u.taxa;}),backgroundColor:'#7c3aed',borderRadius:8,maxBarThickness:26}]},options:pct});
+      mk('gchProvas',{type:'bar',data:{labels:d.top.map(function(u){return u.nome;}),datasets:[{data:d.top.map(function(u){return u.provas;}),backgroundColor:'#0891b2',borderRadius:8,maxBarThickness:26}]},options:barOpt});
+      var el1=document.getElementById('gchEvol'); mk('gchEvol',{type:'line',data:{labels:d.evolL,datasets:[{data:d.evolN,borderColor:'#F5A623',backgroundColor:el1?grad(el1,'#F5A623'):'#F5A62322',fill:true,tension:.35,borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#E8571E'}]},options:pct});
+      var el2=document.getElementById('gchPts'); mk('gchPts',{type:'line',data:{labels:d.evolL,datasets:[{data:d.pts,borderColor:'#111827',backgroundColor:el2?grad(el2,'#111827'):'#11182722',fill:true,tension:.35,borderWidth:2.5,pointRadius:3,pointBackgroundColor:'#111827'}]},options:barOpt});
+    }catch(e){}
+  };
+  function chartsHTML(){
+    function card(t,ic,col,id){ return '<div style="background:#fff;border:1px solid #eef0f3;border-radius:16px;padding:16px;box-shadow:0 2px 10px rgba(17,24,39,.05)"><div style="font-size:13px;font-weight:700;color:#111827;margin-bottom:8px"><i class="'+ic+'" style="color:'+col+';margin-right:6px"></i>'+t+'</div><div style="position:relative;height:210px"><canvas id="'+id+'"></canvas></div></div>'; }
+    return '<div class="acad-card" style="margin-bottom:16px;background:transparent;border:none;box-shadow:none;padding:0"><h3 style="margin:0 0 12px"><i class="fas fa-chart-bar" style="color:#E8571E"></i> Graficos de desempenho</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">'+
+      card('Aprovacoes x Reprovacoes','fas fa-circle-check','#16a34a','gchAprov')+
+      card('Media por consultor (%)','fas fa-chart-simple','#E8571E','gchMedia')+
+      card('Taxa de acertos (%)','fas fa-bullseye','#7c3aed','gchTaxa')+
+      card('Provas realizadas','fas fa-file-signature','#0891b2','gchProvas')+
+      card('Evolucao das notas','fas fa-arrow-trend-up','#F5A623','gchEvol')+
+      card('Evolucao dos pontos','fas fa-coins','#111827','gchPts')+
+      '</div></div>';
+  }
+
+  var _prev=window._acadRenderWithState;
+  if(typeof _prev==='function'){
+    function adminBar(active){ var defs=[['admin','fas fa-cog','Gerenciar'],['desempenho','fas fa-chart-pie','Desempenho'],['consultores','fas fa-users','Consultores'],['bibadmin','fas fa-book','Biblioteca'],['certadmin','fas fa-certificate','Certificados'],['lojaadmin','fas fa-store','Loja']]; var t=document.getElementById('acadTabs'); if(t) t.innerHTML=defs.map(function(d){return '<button class="acad-tab-btn '+(active===d[0]?'active':'')+'" onclick="acadSetView(&#39;'+d[0]+'&#39;)"><i class="'+d[1]+'"></i> '+d[2]+'</button>';}).join(''); }
+    window._acadRenderWithState=function(st){
+      var isAdmin=(typeof acadIsAdmin==='function')?acadIsAdmin():false;
+      if(isAdmin && _acadView==='desempenho'){ adminBar('desempenho'); var c=document.getElementById('acadContent'); if(c){ c.innerHTML=chartsHTML()+(window.acadRenderDesempenhoNovo?window.acadRenderDesempenhoNovo(st):''); setTimeout(function(){window._acadDesempInit(st);},60); } injectLogo(); return; }
+      _prev(st); injectLogo();
+    };
+  }
+  document.addEventListener('DOMContentLoaded',function(){ setTimeout(injectLogo,1600); });
+})();
+
 </script>
 </body>
 </html>
