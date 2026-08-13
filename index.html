@@ -9466,6 +9466,71 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   document.addEventListener('DOMContentLoaded',function(){ setTimeout(injectLogo,1700); });
 })();
 
+/* ===== ACADEMIA GWA :: Logo SEPARADA para Academia/Certificado (nao mexe na intranet) 2026-08-05i ===== */
+(function(){
+  if(window.__gwaAcadModI) return; window.__gwaAcadModI=true;
+  function esc(v){ try{ return (typeof acadEscape==='function')?acadEscape(v):String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }catch(e){ return String(v==null?'':v); } }
+  async function state(){ if(typeof acadFetchState==='function'){ try{ return await acadFetchState(); }catch(e){} } return (window._acadCurrentSt||{}); }
+  function mediaAprov(st){ return (st&&st.config&&Number(st.config.mediaAprovacao))||70; }
+  function fmtData(ts){ try{ return new Date(ts||Date.now()).toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'}); }catch(e){ return ''; } }
+  function defLogo(){ try{ if(typeof LOGO_DEFAULT!=='undefined'&&LOGO_DEFAULT) return LOGO_DEFAULT; }catch(e){} return ''; }
+  function driveConv(u){ u=String(u||'').trim(); var m=u.match(/\/d\/([a-zA-Z0-9_-]{10,})/)||u.match(/[?&]id=([a-zA-Z0-9_-]{10,})/); if(m) return 'https://drive.google.com/thumbnail?id='+m[1]+'&sz=w800'; return u; }
+  function acadLogo(){ return window._acadLogoUrl || defLogo(); }
+  function certAprovado(st,c){ return c && c.nota!=null && c.nota>=mediaAprov(st); }
+
+  function certHTML(c){
+    var LG=acadLogo();
+    var logoBlock = LG ? '<img src="'+esc(LG)+'" style="height:92px;object-fit:contain" crossorigin="anonymous">' : '<div style="font-family:Arial;font-weight:900;font-size:42px;color:#111">GWA <span style="color:#C0491F">CONSULTORIA</span></div>';
+    var nome=esc(c.nome||c.user||''); var titulo=esc(c.titulo||'Prova'); var nota=(c.nota!=null?c.nota+'%':''); var data=fmtData(c.ts); var codigo=esc(c.codigo||'');
+    var frase='Parabéns pela sua conquista! Seu comprometimento, dedicação e evolução são parte do caminho para resultados extraordinários. Continue trilhando com excelência a jornada de crescimento dentro da GWA Consultoria — cada etapa concluída reforça o profissional de alto desempenho que você está se tornando.';
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Certificado - '+nome+'</title><style>'+
+      '@page{size:A4 landscape;margin:0}*{box-sizing:border-box}body{margin:0;font-family:Georgia,serif;background:#222}'+
+      '.wrap{width:1123px;height:794px;margin:0 auto;background:#fff;position:relative;padding:36px;color:#111}'+
+      '.frame{position:absolute;inset:16px;border:4px solid #111;border-radius:4px}.frame:after{content:"";position:absolute;inset:9px;border:2px solid #C0491F;border-radius:3px}'+
+      '.bandtop{position:absolute;left:16px;right:16px;top:16px;height:10px;background:linear-gradient(90deg,#FFC531,#E8571E)}'+
+      '.inner{position:relative;height:100%;display:flex;flex-direction:column;align-items:center;text-align:center;padding:40px 60px}'+
+      '.seal{position:absolute;top:46px;right:74px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle at 50% 38%,#FFC531,#E8571E);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Arial;font-weight:800;font-size:11px;box-shadow:0 3px 10px rgba(0,0,0,.25);border:3px solid #fff;outline:2px solid #111}.seal b{font-size:22px;line-height:1}'+
+      '.kicker{margin-top:4px;letter-spacing:6px;color:#111;font-family:Arial;font-size:13px;font-weight:700}'+
+      '.title{font-size:46px;color:#111;margin:6px 0 2px}.title span{color:#C0491F}.sub{font-family:Arial;color:#6b7280;font-size:14px;margin-bottom:16px}'+
+      '.lead{font-size:16px;color:#333;margin:6px 0 2px}.name{font-size:42px;color:#111;font-weight:700;margin:4px 0;border-bottom:3px solid #C0491F;padding:0 30px 8px}'+
+      '.prova{font-size:20px;color:#111;margin:14px 0 4px;font-weight:700}.meta{font-family:Arial;font-size:14px;color:#333;margin-top:6px}'+
+      '.badge{display:inline-block;margin:14px 0 6px;background:#111;color:#F5A623;font-family:Arial;font-weight:800;letter-spacing:2px;padding:9px 24px;border-radius:9999px;font-size:14px;border:1px solid #C0491F}'+
+      '.frase{font-size:14px;color:#444;max-width:780px;margin:6px auto 0;line-height:1.6;font-style:italic}'+
+      '.foot{position:absolute;bottom:52px;left:0;right:0;display:flex;justify-content:space-around;font-family:Arial}.sig{width:290px;border-top:1.5px solid #111;padding-top:6px;font-size:13px;color:#333}'+
+      '.topbar{position:fixed;top:0;left:0;right:0;background:#111;color:#fff;padding:10px;text-align:center;font-family:Arial;z-index:9}.topbar button{background:#C0491F;color:#fff;border:none;padding:9px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px}'+
+      '@media print{.topbar{display:none}body{background:#fff}}</style></head><body>'+
+      '<div class="topbar">Certificado GWA &nbsp;<button onclick="window.print()">&#11015; Baixar certificado em PDF</button></div>'+
+      '<div class="wrap"><div class="frame"></div><div class="bandtop"></div><div class="seal"><b>GWA</b><span>APROVADO</span></div><div class="inner">'+logoBlock+
+      '<div class="kicker">ACADEMIA GWA</div><div class="title">CERTIFICADO<span> DE CONCLUSÃO</span></div><div class="sub">Documento de reconhecimento profissional</div>'+
+      '<div class="lead">Certificamos que</div><div class="name">'+nome+'</div><div class="lead">concluiu com aproveitamento e foi APROVADO(A) na avaliação</div>'+
+      '<div class="prova">'+titulo+'</div><div class="meta">Nota obtida: <b style="color:#C0491F">'+nota+'</b> &nbsp;&middot;&nbsp; Data: <b>'+data+'</b></div>'+
+      '<div class="badge">&#10003; APROVADO</div><div class="frase">"'+frase+'"</div>'+
+      '<div class="foot"><div class="sig">Academia GWA Consultoria</div><div class="sig">Coordenacao de Treinamento &amp; Desenvolvimento</div></div>'+
+      '<div style="position:absolute;bottom:26px;right:42px;font-size:11px;color:#9ca3af;font-family:Arial">Codigo: '+codigo+'</div></div></div></body></html>';
+  }
+  window.acadBaixarCertificado=async function(certId){ try{ var st=await state(); var c=(st.certificados||[]).find(function(x){return x.id===certId;}); if(!c){toast('Certificado nao encontrado.','error');return;} if(!certAprovado(st,c)){toast('Indisponivel: consultor nao aprovado.','error');return;} var w=window.open('','_blank'); if(!w){toast('Libere pop-ups.','error');return;} w.document.open(); w.document.write(certHTML(c)); w.document.close(); }catch(e){ try{toast('Erro: '+(e&&e.message||e),'error');}catch(_){} } };
+
+  function injectLogo(){ try{ var h=document.getElementById('acadHeroTitle'); if(h){ var LG=acadLogo(); h.innerHTML=(LG?'<img src="'+esc(LG)+'" alt="GWA" style="height:44px;vertical-align:middle;margin-right:10px"> ':'<i class="fas fa-university"></i> ')+'Academia GWA'; h.setAttribute('data-logo','1'); } }catch(e){} }
+
+  /* Certificados ADM: caixa de config da LOGO + tabela (so aprovados) */
+  window.acadRenderCertAdmin=function(st){
+    var atual=(st.config&&st.config.academiaLogo)||'';
+    var certs=(st.certificados||[]).filter(function(c){return certAprovado(st,c);}).sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+    var rows=certs.map(function(c){ return '<tr><td style="font-weight:600">'+esc(c.nome||c.user||'')+'<br><span style="font-size:11px;color:#6b7280">'+esc(c.user||'')+'</span></td><td>'+esc(c.titulo||'')+'</td><td style="text-align:center;font-weight:700;color:#16a34a">'+(c.nota!=null?c.nota+'%':'—')+'</td><td style="text-align:center;font-size:12px;color:#6b7280">'+fmtData(c.ts)+'</td><td style="text-align:center;font-size:11px;color:#9ca3af">'+esc(c.codigo||'')+'</td><td style="text-align:center"><button class="acad-btn" style="min-width:unset;padding:6px 12px;background:#C0491F;border-color:#C0491F" onclick="acadBaixarCertificado(&#39;'+esc(c.id)+'&#39;)"><i class="fas fa-file-pdf"></i> Ver / Baixar PDF</button></td></tr>'; }).join('')||'<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:20px">Nenhum certificado conquistado. So contam consultores aprovados.</td></tr>';
+    var prev=acadLogo();
+    var cfgBox='<div class="acad-card" style="margin-bottom:16px;border-left:4px solid #C0491F"><h4 style="margin:0 0 6px"><i class="fas fa-image" style="color:#C0491F"></i> Logo da Academia / Certificado (PDF)</h4><p class="acad-muted" style="margin:0 0 10px">Logo usada SO na Academia e no certificado — nao altera a logo da intranet. Cole a URL (ex.: link do Google Drive) e salve. Vazio = usa a logo padrao.</p>'+
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><img src="'+esc(prev)+'" style="height:44px;background:#f3f4f6;border-radius:8px;padding:4px" onerror="this.style.display=\'none\'"><input id="acadLogoInput" value="'+esc(atual)+'" placeholder="https://drive.google.com/file/d/ID/view" style="flex:1;min-width:220px;padding:9px;border:1px solid #d1d5db;border-radius:8px;color:#111827;background:#fff"><button class="acad-btn" style="background:#10b981;border-color:#10b981" onclick="acadSalvarLogoAcademia()"><i class="fas fa-save"></i> Salvar logo</button></div></div>';
+    return cfgBox+'<div class="acad-card"><h3 style="margin:0 0 4px"><i class="fas fa-certificate" style="color:#C0491F"></i> Certificados conquistados <span style="background:#111;color:#F5A623;border-radius:9999px;padding:2px 10px;font-size:13px;margin-left:6px">'+certs.length+'</span></h3><p class="acad-muted" style="margin:0 0 12px">Somente consultores aprovados.</p><div style="overflow-x:auto"><table class="acad-table"><thead><tr><th>Consultor</th><th>Prova/Curso</th><th>Nota</th><th>Data</th><th>Codigo</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  };
+  window.acadSalvarLogoAcademia=async function(){ try{ var v=(document.getElementById('acadLogoInput')||{}).value||''; v=driveConv(v.trim()); var st=await state(); st.config=st.config||{}; st.config.academiaLogo=v; await acadWriteAPI(st); window._acadLogoUrl=v||defLogo(); try{toast('Logo da Academia/certificado salva.','success');}catch(e){} if(typeof renderAcademia==='function') renderAcademia(); }catch(e){ try{toast('Erro: '+(e&&e.message||e),'error');}catch(_){} } };
+
+  var _prev=window._acadRenderWithState;
+  if(typeof _prev==='function'){
+    window._acadRenderWithState=function(st){ try{ window._acadLogoUrl=(st&&st.config&&st.config.academiaLogo)||defLogo(); }catch(e){} _prev(st); injectLogo(); };
+  }
+  document.addEventListener('DOMContentLoaded',function(){ setTimeout(injectLogo,1800); });
+})();
+
 </script>
 </body>
 </html>
