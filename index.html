@@ -9368,6 +9368,104 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   document.addEventListener('DOMContentLoaded',function(){ setTimeout(injectLogo,1600); });
 })();
 
+/* ===== ACADEMIA GWA :: Logo oficial (Drive) + tamanho graficos + cert count + loja saldos (2026-08-05h) ===== */
+(function(){
+  if(window.__gwaAcadModH) return; window.__gwaAcadModH=true;
+  var LOGO='https://drive.google.com/thumbnail?id=1zLVXzu-yEsS8dwlD1UzRYAEWrEyzPgrZ&sz=w800';
+  function esc(v){ try{ return (typeof acadEscape==='function')?acadEscape(v):String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }catch(e){ return String(v==null?'':v); } }
+  async function state(){ if(typeof acadFetchState==='function'){ try{ return await acadFetchState(); }catch(e){} } return (window._acadCurrentSt||{}); }
+  function mediaAprov(st){ return (st&&st.config&&Number(st.config.mediaAprovacao))||70; }
+  function fmtData(ts){ try{ return new Date(ts||Date.now()).toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'}); }catch(e){ return ''; } }
+  function fmtDT(ts){ try{ return new Date(ts||Date.now()).toLocaleString('pt-BR'); }catch(e){ return '-'; } }
+  function saldo(st,l){ return (typeof window.acadSaldoPontos==='function')?window.acadSaldoPontos(st,l):0; }
+  function curUser(){ try{ return acadCurrentUser(); }catch(e){ return (window.currentUser||{}); } }
+  function certAprovado(st,c){ return c && c.nota!=null && c.nota>=mediaAprov(st); }
+  function allC(st){ var m={}; (window._usersCache||[]).forEach(function(u){var k=String(u.login||'').toUpperCase(); if(!k||k==='TALIS')return; var r=(u.role||'').toLowerCase(); if(r==='admin'||r==='master'||r==='gestor')return; m[k]={login:u.login,nome:u.nome||u.login};}); (st.respostas||[]).forEach(function(r){var k=String(r.user||'').toUpperCase(); if(!k||k==='TALIS')return; if(!m[k])m[k]={login:r.user,nome:r.nome||r.user};}); return Object.keys(m).map(function(k){return m[k];}); }
+
+  /* --- LOGO oficial (Drive) --- */
+  function injectLogo(){ try{ var h=document.getElementById('acadHeroTitle'); if(h){ h.innerHTML='<img src="'+LOGO+'" alt="GWA" style="height:44px;vertical-align:middle;margin-right:10px"> Academia GWA'; h.setAttribute('data-logo','1'); } }catch(e){} }
+
+  /* --- CERTIFICADO com logo do Drive --- */
+  function certHTML(c){
+    var nome=esc(c.nome||c.user||''); var titulo=esc(c.titulo||'Prova'); var nota=(c.nota!=null?c.nota+'%':''); var data=fmtData(c.ts); var codigo=esc(c.codigo||'');
+    var frase='Parabéns pela sua conquista! Seu comprometimento, dedicação e evolução são parte do caminho para resultados extraordinários. Continue trilhando com excelência a jornada de crescimento dentro da GWA Consultoria — cada etapa concluída reforça o profissional de alto desempenho que você está se tornando.';
+    return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Certificado - '+nome+'</title><style>'+
+      '@page{size:A4 landscape;margin:0}*{box-sizing:border-box}body{margin:0;font-family:Georgia,serif;background:#222}'+
+      '.wrap{width:1123px;height:794px;margin:0 auto;background:#fff;position:relative;padding:36px;color:#111}'+
+      '.frame{position:absolute;inset:16px;border:4px solid #111;border-radius:4px}.frame:after{content:"";position:absolute;inset:9px;border:2px solid #C0491F;border-radius:3px}'+
+      '.bandtop{position:absolute;left:16px;right:16px;top:16px;height:10px;background:linear-gradient(90deg,#FFC531,#E8571E)}'+
+      '.inner{position:relative;height:100%;display:flex;flex-direction:column;align-items:center;text-align:center;padding:40px 60px}'+
+      '.seal{position:absolute;top:46px;right:74px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle at 50% 38%,#FFC531,#E8571E);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Arial;font-weight:800;font-size:11px;box-shadow:0 3px 10px rgba(0,0,0,.25);border:3px solid #fff;outline:2px solid #111}.seal b{font-size:22px;line-height:1}'+
+      '.kicker{margin-top:4px;letter-spacing:6px;color:#111;font-family:Arial;font-size:13px;font-weight:700}'+
+      '.title{font-size:46px;color:#111;margin:6px 0 2px}.title span{color:#C0491F}.sub{font-family:Arial;color:#6b7280;font-size:14px;margin-bottom:16px}'+
+      '.lead{font-size:16px;color:#333;margin:6px 0 2px}.name{font-size:42px;color:#111;font-weight:700;margin:4px 0;border-bottom:3px solid #C0491F;padding:0 30px 8px}'+
+      '.prova{font-size:20px;color:#111;margin:14px 0 4px;font-weight:700}.meta{font-family:Arial;font-size:14px;color:#333;margin-top:6px}'+
+      '.badge{display:inline-block;margin:14px 0 6px;background:#111;color:#F5A623;font-family:Arial;font-weight:800;letter-spacing:2px;padding:9px 24px;border-radius:9999px;font-size:14px;border:1px solid #C0491F}'+
+      '.frase{font-size:14px;color:#444;max-width:780px;margin:6px auto 0;line-height:1.6;font-style:italic}'+
+      '.foot{position:absolute;bottom:52px;left:0;right:0;display:flex;justify-content:space-around;font-family:Arial}.sig{width:290px;border-top:1.5px solid #111;padding-top:6px;font-size:13px;color:#333}'+
+      '.topbar{position:fixed;top:0;left:0;right:0;background:#111;color:#fff;padding:10px;text-align:center;font-family:Arial;z-index:9}.topbar button{background:#C0491F;color:#fff;border:none;padding:9px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px}'+
+      '@media print{.topbar{display:none}body{background:#fff}}</style></head><body>'+
+      '<div class="topbar">Certificado GWA &nbsp;<button onclick="window.print()">&#11015; Baixar certificado em PDF</button></div>'+
+      '<div class="wrap"><div class="frame"></div><div class="bandtop"></div><div class="seal"><b>GWA</b><span>APROVADO</span></div><div class="inner">'+
+      '<img src="'+LOGO+'" style="height:92px;object-fit:contain" crossorigin="anonymous">'+
+      '<div class="kicker">ACADEMIA GWA</div><div class="title">CERTIFICADO<span> DE CONCLUSÃO</span></div><div class="sub">Documento de reconhecimento profissional</div>'+
+      '<div class="lead">Certificamos que</div><div class="name">'+nome+'</div><div class="lead">concluiu com aproveitamento e foi APROVADO(A) na avaliação</div>'+
+      '<div class="prova">'+titulo+'</div><div class="meta">Nota obtida: <b style="color:#C0491F">'+nota+'</b> &nbsp;&middot;&nbsp; Data: <b>'+data+'</b></div>'+
+      '<div class="badge">&#10003; APROVADO</div><div class="frase">"'+frase+'"</div>'+
+      '<div class="foot"><div class="sig">Academia GWA Consultoria</div><div class="sig">Coordenacao de Treinamento &amp; Desenvolvimento</div></div>'+
+      '<div style="position:absolute;bottom:26px;right:42px;font-size:11px;color:#9ca3af;font-family:Arial">Codigo: '+codigo+'</div></div></div></body></html>';
+  }
+  window.acadBaixarCertificado=async function(certId){ try{ var st=await state(); var c=(st.certificados||[]).find(function(x){return x.id===certId;}); if(!c){toast('Certificado nao encontrado.','error');return;} if(!certAprovado(st,c)){toast('Indisponivel: consultor nao aprovado.','error');return;} var w=window.open('','_blank'); if(!w){toast('Libere pop-ups.','error');return;} w.document.open(); w.document.write(certHTML(c)); w.document.close(); }catch(e){ try{toast('Erro: '+(e&&e.message||e),'error');}catch(_){} } };
+
+  /* --- CERTIFICADOS ADM: contar somente aprovados --- */
+  window.acadRenderCertAdmin=function(st){
+    var certs=(st.certificados||[]).filter(function(c){return certAprovado(st,c);}).sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+    var rows=certs.map(function(c){ return '<tr><td style="font-weight:600">'+esc(c.nome||c.user||'')+'<br><span style="font-size:11px;color:#6b7280">'+esc(c.user||'')+'</span></td><td>'+esc(c.titulo||'')+'</td><td style="text-align:center;font-weight:700;color:#16a34a">'+(c.nota!=null?c.nota+'%':'—')+'</td><td style="text-align:center;font-size:12px;color:#6b7280">'+fmtData(c.ts)+'</td><td style="text-align:center;font-size:11px;color:#9ca3af">'+esc(c.codigo||'')+'</td><td style="text-align:center"><button class="acad-btn" style="min-width:unset;padding:6px 12px;background:#C0491F;border-color:#C0491F" onclick="acadBaixarCertificado(&#39;'+esc(c.id)+'&#39;)"><i class="fas fa-file-pdf"></i> Ver / Baixar PDF</button></td></tr>'; }).join('')||'<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:20px">Nenhum certificado conquistado. So contam consultores aprovados (nota &ge; media).</td></tr>';
+    return '<div class="acad-card"><h3 style="margin:0 0 4px"><i class="fas fa-certificate" style="color:#C0491F"></i> Certificados conquistados <span style="background:#111;color:#F5A623;border-radius:9999px;padding:2px 10px;font-size:13px;margin-left:6px">'+certs.length+'</span></h3><p class="acad-muted" style="margin:0 0 12px">Somente consultores efetivamente aprovados.</p><div style="overflow-x:auto"><table class="acad-table"><thead><tr><th>Consultor</th><th>Prova/Curso</th><th>Nota</th><th>Data</th><th>Codigo</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  };
+
+  /* --- LOJA ADM: produtos + trocas + SALDO por consultor --- */
+  function loja(st){ st.loja=st.loja||{produtos:[],trocas:[]}; if(!Array.isArray(st.loja.produtos))st.loja.produtos=[]; if(!Array.isArray(st.loja.trocas))st.loja.trocas=[]; return st.loja; }
+  window.acadRenderLojaAdmin=function(st){
+    var L=loja(st);
+    var prods=L.produtos.map(function(p){ return '<div style="border:1px solid #e5e7eb;border-radius:12px;padding:12px;display:flex;gap:12px;align-items:center">'+(p.imagem?'<img src="'+esc(p.imagem)+'" style="width:64px;height:64px;object-fit:cover;border-radius:8px">':'<div style="width:64px;height:64px;border-radius:8px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;color:#9ca3af"><i class="fas fa-gift"></i></div>')+'<div style="flex:1"><div style="font-weight:700;color:#111">'+esc(p.nome)+'</div><div style="font-size:12px;color:#6b7280">'+esc(p.descricao||'')+'</div><div style="font-size:12px;margin-top:2px"><b style="color:#C0491F">'+(Number(p.preco)||0)+' pts</b> · Estoque: <b>'+(Number(p.estoque)||0)+'</b></div></div><div style="display:flex;flex-direction:column;gap:6px"><button class="acad-btn" style="min-width:unset;padding:5px 10px" onclick="acadLojaFormProduto(&#39;'+esc(p.id)+'&#39;)"><i class="fas fa-edit"></i></button><button class="acad-btn danger" style="min-width:unset;padding:5px 10px" onclick="acadLojaExcluirProduto(&#39;'+esc(p.id)+'&#39;)"><i class="fas fa-trash"></i></button></div></div>'; }).join('')||'<p class="acad-muted" style="text-align:center;padding:12px">Nenhum produto cadastrado.</p>';
+    var saldos=allC(st).map(function(u){return {nome:u.nome,login:u.login,s:saldo(st,u.login)};}).sort(function(a,b){return b.s-a.s;});
+    var saldoRows=saldos.map(function(u){ return '<tr><td style="font-weight:600">'+esc(u.nome)+'<br><span style="font-size:11px;color:#6b7280">'+esc(u.login)+'</span></td><td style="text-align:center;font-weight:800;color:#C0491F">'+u.s+' pts</td></tr>'; }).join('')||'<tr><td colspan="2" style="text-align:center;color:#6b7280;padding:12px">Nenhum consultor.</td></tr>';
+    var trocas=(L.trocas||[]).slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);}).map(function(t){ return '<tr><td>'+esc(t.nome||t.user)+'</td><td>'+esc(t.produtoNome||'')+'</td><td style="text-align:center;color:#C0491F;font-weight:700">'+(Number(t.pontos)||0)+' pts</td><td style="text-align:center;font-size:12px;color:#6b7280">'+fmtDT(t.ts)+'</td></tr>'; }).join('')||'<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:12px">Nenhuma troca ainda.</td></tr>';
+    return '<div class="acad-card" style="margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h3 style="margin:0"><i class="fas fa-store" style="color:#C0491F"></i> Loja de recompensas</h3><button class="acad-btn" style="background:#C0491F;border-color:#C0491F" onclick="acadLojaFormProduto()"><i class="fas fa-plus"></i> Novo produto</button></div><div style="display:grid;gap:10px;margin-top:12px">'+prods+'</div></div>'+
+      '<div class="acad-card" style="margin-bottom:16px"><h4 style="margin:0 0 8px"><i class="fas fa-coins" style="color:#C0491F"></i> Saldo de pontos por consultor</h4><p class="acad-muted" style="margin:0 0 8px">Mesma base do Ranking e do perfil (provas aprovadas menos resgates).</p><div style="overflow-x:auto"><table class="acad-table"><thead><tr><th>Consultor</th><th>Saldo</th></tr></thead><tbody>'+saldoRows+'</tbody></table></div></div>'+
+      '<div class="acad-card"><h4 style="margin:0 0 8px"><i class="fas fa-exchange-alt" style="color:#C0491F"></i> Trocas realizadas</h4><div style="overflow-x:auto"><table class="acad-table"><thead><tr><th>Consultor</th><th>Produto</th><th>Pontos</th><th>Data</th></tr></thead><tbody>'+trocas+'</tbody></table></div></div>';
+  };
+
+  /* --- GRAFICOS com controle de TAMANHO --- */
+  function sizeCfg(){ var s=window._acadChartSize||'medio'; if(s==='pequeno') return {h:150,col:230}; if(s==='grande') return {h:320,col:520}; return {h:220,col:320}; }
+  function chartsHTML(){
+    var sc=sizeCfg(); var s=window._acadChartSize||'medio';
+    function opt(v,l){ return '<option value="'+v+'"'+(s===v?' selected':'')+'>'+l+'</option>'; }
+    function card(t,ic,col,id){ return '<div style="background:#fff;border:1px solid #eef0f3;border-radius:16px;padding:16px;box-shadow:0 2px 10px rgba(17,24,39,.05)"><div style="font-size:13px;font-weight:700;color:#111827;margin-bottom:8px"><i class="'+ic+'" style="color:'+col+';margin-right:6px"></i>'+t+'</div><div style="position:relative;height:'+sc.h+'px"><canvas id="'+id+'"></canvas></div></div>'; }
+    return '<div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h3 style="margin:0"><i class="fas fa-chart-bar" style="color:#E8571E"></i> Graficos de desempenho</h3><div><label style="font-size:12.5px;font-weight:700;color:#374151;margin-right:6px">Tamanho dos graficos:</label><select onchange="acadSetChartSize(this.value)" style="padding:7px 10px;border:1px solid #d1d5db;border-radius:8px;color:#111827;background:#fff">'+opt('pequeno','Pequeno')+opt('medio','Medio')+opt('grande','Grande')+'</select></div></div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax('+sc.col+'px,1fr));gap:16px;margin-bottom:16px">'+
+      card('Aprovacoes x Reprovacoes','fas fa-circle-check','#16a34a','gchAprov')+
+      card('Media por consultor (%)','fas fa-chart-simple','#E8571E','gchMedia')+
+      card('Taxa de acertos (%)','fas fa-bullseye','#7c3aed','gchTaxa')+
+      card('Provas realizadas','fas fa-file-signature','#0891b2','gchProvas')+
+      card('Evolucao das notas','fas fa-arrow-trend-up','#F5A623','gchEvol')+
+      card('Evolucao dos pontos','fas fa-coins','#111827','gchPts')+'</div>';
+  }
+  window.acadSetChartSize=function(v){ window._acadChartSize=v||'medio'; if(typeof renderAcademia==='function') renderAcademia(); };
+
+  var _prev=window._acadRenderWithState;
+  if(typeof _prev==='function'){
+    function adminBar(active){ var defs=[['admin','fas fa-cog','Gerenciar'],['desempenho','fas fa-chart-pie','Desempenho'],['consultores','fas fa-users','Consultores'],['bibadmin','fas fa-book','Biblioteca'],['certadmin','fas fa-certificate','Certificados'],['lojaadmin','fas fa-store','Loja']]; var t=document.getElementById('acadTabs'); if(t) t.innerHTML=defs.map(function(d){return '<button class="acad-tab-btn '+(active===d[0]?'active':'')+'" onclick="acadSetView(&#39;'+d[0]+'&#39;)"><i class="'+d[1]+'"></i> '+d[2]+'</button>';}).join(''); }
+    window._acadRenderWithState=function(st){
+      var isAdmin=(typeof acadIsAdmin==='function')?acadIsAdmin():false;
+      if(isAdmin && _acadView==='desempenho'){ adminBar('desempenho'); var c=document.getElementById('acadContent'); if(c){ c.innerHTML=chartsHTML()+(window.acadRenderDesempenhoNovo?window.acadRenderDesempenhoNovo(st):''); setTimeout(function(){ if(window._acadDesempInit) window._acadDesempInit(st); },60); } injectLogo(); return; }
+      _prev(st); injectLogo();
+    };
+  }
+  document.addEventListener('DOMContentLoaded',function(){ setTimeout(injectLogo,1700); });
+})();
+
 </script>
 </body>
 </html>
