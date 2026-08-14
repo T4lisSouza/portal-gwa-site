@@ -9601,6 +9601,96 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   var _ep2=window.enterPortal; if(typeof _ep2==='function'){ window.enterPortal=function(){ var r=_ep2.apply(this,arguments); setTimeout(addAdminBtn,1200); return r; }; }
 })();
 
+/* ===== INTRANET GWA :: Documentos RH — excluir, PDF maior, copias assinadas, alerta pendencia (2026-08-05k) ===== */
+(function(){
+  if(window.__gwaRhDocK) return; window.__gwaRhDocK=true;
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function base(){ return (typeof API_URL!=='undefined')?API_URL:''; }
+  function hdr(){ return {'Content-Type':'application/json','X-MC-Token':(typeof API_TOKEN!=='undefined'?API_TOKEN:'')}; }
+  function dbGet(){ try{ return (typeof DB!=='undefined'&&DB)?DB:{}; }catch(e){ return {}; } }
+  function docs(){ var d=dbGet(); return Array.isArray(d.rhDocuments)?d.rhDocuments:[]; }
+  function findDoc(id){ return docs().find(function(d){return String(d.id)===String(id);}); }
+  function curU(){ return window.currentUser||(typeof getSession==='function'?getSession():{})||{}; }
+  function loginOf(u){ return String((u&&(u.login||u.user||u.email||u.nome))||'').toUpperCase(); }
+  function isAdm(){ var r=String((curU()||{}).role||'').toLowerCase(); return r==='admin'||r==='master'||r==='gestor'; }
+  function fmtDT(ts){ try{ return new Date(ts||Date.now()).toLocaleString('pt-BR'); }catch(e){ return '-'; } }
+  function loadAud(){ try{ return (typeof loadAudit==='function')?loadAudit():JSON.parse(localStorage.getItem('gwa_audit_local_v1')||'{}'); }catch(e){ return {}; } }
+  function sigOf(docId){ try{ var st=loadAud(); return (st.rhDocumentSignatures&&st.rhDocumentSignatures[docId])||{}; }catch(e){ return {}; } }
+
+  /* ---------- EXCLUIR documento ---------- */
+  window.gwaRhDocExcluir=async function(docId){
+    if(!isAdm()){ try{toast('Acesso restrito.','error');}catch(e){} return; }
+    if(!confirm('Excluir este documento RH e seu painel de assinaturas? Esta acao nao pode ser desfeita.')) return;
+    try{
+      var d=dbGet(); if(Array.isArray(d.rhDocuments)) d.rhDocuments=d.rhDocuments.filter(function(x){return String(x.id)!==String(docId);});
+      try{ localStorage.setItem('gwa_db_cache',JSON.stringify(d)); }catch(e){}
+      try{ await fetch(base()+'/api/rhDocuments/'+encodeURIComponent(docId),{method:'DELETE',headers:hdr()}); }catch(e){}
+      try{ if(typeof closeM==='function') closeM(); }catch(e){}
+      try{ if(typeof adminNav==='function') adminNav('rhdocs'); }catch(e){}
+      try{toast('Documento excluido.','success');}catch(e){}
+      scanAdmin(); setTimeout(checkPend,300);
+    }catch(e){ try{toast('Erro: '+(e&&e.message||e),'error');}catch(_){} }
+  };
+  function scanAdmin(){ try{ var root=document.getElementById('rhDocsAdminRoot'); if(!root) return; root.querySelectorAll('tr').forEach(function(tr){ if(tr.getAttribute('data-del')) return; var b=tr.querySelector('button[onclick*="gwaRhDoc"],a[onclick*="gwaRhDoc"]'); if(!b) return; var m=(b.getAttribute('onclick')||'').match(/['"]([A-Za-z0-9_\-]{6,})['"]/); if(!m) return; var id=m[1]; var cells=tr.querySelectorAll('td'); var last=cells[cells.length-1]; if(!last) return; var del=document.createElement('button'); del.className='mc-btn mc-btn--sm'; del.style.cssText='background:#dc2626;border-color:#dc2626;color:#fff;margin-left:4px;padding:4px 8px'; del.title='Excluir documento'; del.innerHTML='<i class="fas fa-trash"></i>'; del.onclick=function(){ gwaRhDocExcluir(id); }; last.appendChild(del); tr.setAttribute('data-del','1'); }); }catch(e){} }
+  setInterval(scanAdmin,1500);
+
+  /* ---------- COPIA ASSINADA (PDF) ---------- */
+  function signedHTML(doc, sig){
+    var codigo=esc(doc.code||doc.codigo||('GWA-RH-'+String(doc.id||'').slice(-6).toUpperCase()));
+    var orig=doc.driveLink?('<p><b>Documento original:</b> <a href="'+esc(doc.driveLink)+'">abrir</a></p>'):(doc.originalFile&&doc.originalFile.fileName?('<p><b>Arquivo original:</b> '+esc(doc.originalFile.fileName)+'</p>'):'');
+    return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Assinado - '+esc(doc.title||'')+'</title><style>@page{margin:16mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;font-size:13px;margin:0}'+
+      '.hd{background:#111;color:#fff;padding:16px;display:flex;justify-content:space-between;align-items:center}.hd b{color:#FF8000}'+
+      '.body{padding:22px}.h{color:#FF8000;margin:0 0 6px}'+
+      '.sig{margin-top:26px;border:2px solid #16a34a;border-radius:12px;padding:18px;background:#f0fdf4}.sig b{color:#15803d}'+
+      '.bar{position:fixed;top:0;left:0;right:0;background:#111;color:#fff;padding:8px;text-align:center;z-index:9}.bar button{background:#FF8000;color:#fff;border:none;padding:8px 18px;border-radius:6px;font-weight:700;cursor:pointer}'+
+      '@media print{.bar{display:none}}</style></head><body>'+
+      '<div class="bar">Comprovante assinado &nbsp;<button onclick="window.print()">&#11015; Baixar em PDF</button></div>'+
+      '<div class="hd"><div style="font-weight:800;font-size:18px">GWA <b>CONSULTORIA</b></div><div style="font-size:12px">Documento RH — Assinatura eletronica</div></div>'+
+      '<div class="body"><h2 class="h">'+esc(doc.title||'')+'</h2><p><b>Codigo:</b> '+codigo+' &nbsp;·&nbsp; <b>Publicado:</b> '+esc(fmtDT(doc.ts))+'</p><p>'+esc(doc.description||'')+'</p>'+orig+
+      '<div class="sig"><div style="font-size:16px;font-weight:800"><b>&#10004; ASSINADO DIGITALMENTE</b></div><div style="margin-top:8px">Consultor: <b>'+esc(sig.nome||sig.login||'')+'</b> ('+esc(sig.login||'')+')<br>Data e hora da assinatura: <b>'+esc(fmtDT(sig.ts))+'</b></div><div style="font-size:11px;color:#6b7280;margin-top:8px">Assinatura eletronica de ciencia registrada de forma central na Intranet GWA. Documento valido como comprovante de leitura e concordancia.</div></div>'+
+      '</div></body></html>';
+  }
+  window.gwaRhDocBaixarAssinado=function(docId, login){
+    var doc=findDoc(docId); if(!doc){ try{toast('Documento nao encontrado.','error');}catch(e){} return; }
+    var L=String(login||loginOf(curU())).toUpperCase(); var s=sigOf(docId)[L]||{login:L,nome:L,ts:Date.now()};
+    var w=window.open('','_blank'); if(!w){ try{toast('Libere pop-ups para baixar.','error');}catch(e){} return; }
+    w.document.open(); w.document.write(signedHTML(doc,s)); w.document.close();
+  };
+
+  /* ---------- PDF maior + botoes no modal do documento ---------- */
+  function enhanceModal(docId){ try{ var m=document.getElementById('mContent'); if(!m) return;
+    m.querySelectorAll('iframe,embed,video').forEach(function(el){ el.style.width='100%'; el.style.height='72vh'; el.style.minHeight='540px'; });
+    m.querySelectorAll('img').forEach(function(el){ if(el.closest('.mc-post-card__type'))return; el.style.maxWidth='100%'; el.style.maxHeight='72vh'; el.style.objectFit='contain'; });
+    try{ var box=m.parentElement, i=0; while(box && box!==document.body && i<6){ var cs=getComputedStyle(box); if(cs.maxWidth&&cs.maxWidth!=='none'&&parseInt(cs.maxWidth)<960){ box.style.maxWidth='1000px'; box.style.width='95vw'; break; } box=box.parentElement; i++; } }catch(e){}
+    var admin=isAdm(); var h=m.querySelector('h3');
+    if(admin && h && !document.getElementById('gwaRhDelInModal')){ var del=document.createElement('button'); del.id='gwaRhDelInModal'; del.className='mc-btn mc-btn--sm'; del.style.cssText='background:#dc2626;border-color:#dc2626;color:#fff;margin-left:8px'; del.innerHTML='<i class="fas fa-trash"></i> Excluir'; del.onclick=function(){ gwaRhDocExcluir(docId); }; h.appendChild(del); }
+    var L=loginOf(curU()); var mine=sigOf(docId)[L];
+    if(mine && mine.confirmed && h && !document.getElementById('gwaRhMyCopy')){ var b=document.createElement('button'); b.id='gwaRhMyCopy'; b.className='mc-btn mc-btn--sm'; b.style.cssText='background:#16a34a;border-color:#16a34a;color:#fff;margin-left:8px'; b.innerHTML='<i class="fas fa-download"></i> Baixar meu comprovante assinado'; b.onclick=function(){ gwaRhDocBaixarAssinado(docId,L); }; h.appendChild(b); }
+    if(admin){ m.querySelectorAll('table tr').forEach(function(tr){ if(tr.getAttribute('data-dl'))return; var tds=tr.querySelectorAll('td'); if(tds.length>=4){ var stt=(tds[2]&&tds[2].textContent||'').toLowerCase(); var lg=(tds[1]&&tds[1].textContent||'').trim(); if(stt.indexOf('assinado')>=0 && lg){ var last=tds[tds.length-1]; var btn=document.createElement('button'); btn.className='mc-btn mc-btn--sm'; btn.style.cssText='background:#111;border-color:#111;color:#fff;margin-left:6px;padding:3px 8px'; btn.title='Baixar copia assinada deste colaborador'; btn.innerHTML='<i class="fas fa-download"></i>'; btn.onclick=function(){ gwaRhDocBaixarAssinado(docId, lg); }; last.appendChild(btn); tr.setAttribute('data-dl','1'); } } }); }
+  }catch(e){} }
+  var _open=window.gwaOpenRhDoc; if(typeof _open==='function'){ window.gwaOpenRhDoc=function(docId){ var r=_open.apply(this,arguments); setTimeout(function(){ enhanceModal(docId); },140); setTimeout(function(){ enhanceModal(docId); },600); return r; }; }
+  var _sign=window.gwaSignRhDoc; if(typeof _sign==='function'){ window.gwaSignRhDoc=function(docId){ var r=_sign.apply(this,arguments); setTimeout(function(){ try{ var L=loginOf(curU()); var st=loadAud(); st.rhDocumentSignatures=st.rhDocumentSignatures||{}; st.rhDocumentSignatures[docId]=st.rhDocumentSignatures[docId]||{}; if(!st.rhDocumentSignatures[docId][L]) st.rhDocumentSignatures[docId][L]={login:L,nome:(curU().nome||curU().name||L),confirmed:true,ts:Date.now()}; }catch(e){} enhanceModal(docId); checkPend(); try{toast('Assinado! Use "Baixar meu comprovante assinado".','success');}catch(e){} },500); return r; }; }
+
+  /* ---------- ALERTA de pendencia (igual aos avisos) ---------- */
+  function showBanner(n){ var ex=document.getElementById('gwaRhPendBanner'); if(!n){ if(ex) ex.remove(); return; }
+    if(!ex){ ex=document.createElement('div'); ex.id='gwaRhPendBanner'; ex.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9996;background:linear-gradient(90deg,#dc2626,#b91c1c);color:#fff;padding:11px 16px;text-align:center;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.25)'; ex.onclick=function(){ try{ if(typeof goTab==='function'){ goTab('rhdocs'); } }catch(e){} }; document.body.appendChild(ex); }
+    ex.innerHTML='<i class="fas fa-file-signature"></i> Voce tem '+n+' documento(s) de RH pendente(s) de assinatura. Clique aqui para assinar.';
+  }
+  var _pendBusy=false;
+  async function checkPend(){ if(_pendBusy) return; _pendBusy=true; try{ var L=loginOf(curU()); if(!L){ showBanner(0); _pendBusy=false; return; }
+    var list=docs().filter(function(d){ return d && d.status!=='closed'; }); var pend=0;
+    for(var i=0;i<list.length;i++){ var d=list[i]; var signed=false; var s=sigOf(d.id); if(s[L]&&s[L].confirmed) signed=true;
+      if(!signed){ try{ var r=await fetch(base()+'/api/signatures/rhDocuments/'+encodeURIComponent(d.id),{headers:hdr()}); if(r.ok){ var j=await r.json(); if(j&&j.ok){ var mine=(j.data||[]).find(function(x){return String(x.login).toUpperCase()===L&&x.confirmed;}); if(mine) signed=true; } } }catch(e){} }
+      if(!signed) pend++;
+    }
+    showBanner(pend);
+  }catch(e){}finally{ _pendBusy=false; } }
+  window.gwaRhCheckPend=checkPend;
+  var _ep=window.enterPortal; if(typeof _ep==='function'){ window.enterPortal=function(){ var r=_ep.apply(this,arguments); setTimeout(checkPend,3000); return r; }; }
+  document.addEventListener('DOMContentLoaded',function(){ setTimeout(checkPend,4000); });
+  setInterval(checkPend,120000);
+})();
+
 </script>
 </body>
 </html>
