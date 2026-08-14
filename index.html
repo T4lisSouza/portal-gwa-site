@@ -9691,6 +9691,69 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   setInterval(checkPend,120000);
 })();
 
+/* ===== INTRANET GWA :: Documentos RH — exibir CONTEUDO inline (Drive/PDF) no modal e na copia (2026-08-05l) ===== */
+(function(){
+  if(window.__gwaRhDocL) return; window.__gwaRhDocL=true;
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function driveId(u){ u=String(u||''); var m=u.match(/\/d\/([a-zA-Z0-9_-]{10,})/)||u.match(/[?&]id=([a-zA-Z0-9_-]{10,})/); return m?m[1]:''; }
+  function dbGet(){ try{ return (typeof DB!=='undefined'&&DB)?DB:{}; }catch(e){ return {}; } }
+  function findDoc(id){ var a=(dbGet().rhDocuments)||[]; return a.find(function(d){return String(d.id)===String(id);}); }
+  function curU(){ return window.currentUser||(typeof getSession==='function'?getSession():{})||{}; }
+  function loginOf(u){ return String((u&&(u.login||u.user||u.email||u.nome))||'').toUpperCase(); }
+  function fmtDT(ts){ try{ return new Date(ts||Date.now()).toLocaleString('pt-BR'); }catch(e){ return '-'; } }
+  function loadAud(){ try{ return (typeof loadAudit==='function')?loadAudit():JSON.parse(localStorage.getItem('gwa_audit_local_v1')||'{}'); }catch(e){ return {}; } }
+  function sigOf(id){ try{ var st=loadAud(); return (st.rhDocumentSignatures&&st.rhDocumentSignatures[id])||{}; }catch(e){ return {}; } }
+
+  // Monta o embed do conteudo do documento (Drive preview, PDF base64, imagem, ou link)
+  function embedFor(doc, h){
+    h=h||'72vh';
+    var id=driveId(doc.driveLink||doc.link||'');
+    if(id) return '<iframe src="https://drive.google.com/file/d/'+id+'/preview" style="width:100%;height:'+h+';min-height:520px;border:1px solid #e5e7eb;border-radius:10px" allow="autoplay" allowfullscreen></iframe>';
+    var du=(doc.originalFile&&doc.originalFile.dataUrl)||'';
+    if(du){ if(/^data:application\/pdf/i.test(du)) return '<iframe src="'+du+'" style="width:100%;height:'+h+';min-height:520px;border:1px solid #e5e7eb;border-radius:10px"></iframe>';
+            if(/^data:image/i.test(du)) return '<img src="'+du+'" style="max-width:100%;max-height:'+h+';display:block;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px">';
+            return '<embed src="'+du+'" style="width:100%;height:'+h+';border:1px solid #e5e7eb;border-radius:10px">'; }
+    if(doc.driveLink) return '<iframe src="'+esc(doc.driveLink)+'" style="width:100%;height:'+h+';min-height:520px;border:1px solid #e5e7eb;border-radius:10px"></iframe>';
+    return '<div style="padding:16px;border:1px dashed #d1d5db;border-radius:10px;color:#6b7280;text-align:center">Nenhum arquivo/documento anexado. Publique um PDF ou cole um link do Google Drive.</div>';
+  }
+
+  // Insere o conteudo inline dentro do modal do documento
+  function injectContent(docId){ try{ var m=document.getElementById('mContent'); if(!m) return; var doc=findDoc(docId); if(!doc) return;
+    if(document.getElementById('gwaRhContent')) return;
+    var wrap=document.createElement('div'); wrap.id='gwaRhContent'; wrap.style.cssText='margin:14px 0';
+    wrap.innerHTML='<div style="font-weight:700;color:#111827;margin-bottom:6px"><i class="fas fa-file-lines" style="color:#FF8000"></i> Conteudo do documento</div>'+embedFor(doc,'70vh');
+    // insere antes do botao "Abrir documento original" (ou dos botoes de export), senao antes da lista de assinaturas
+    var ref=Array.from(m.querySelectorAll('button,a')).find(function(b){return /abrir documento original|documento original/i.test(b.textContent||'');});
+    var anchor=ref?(ref.closest('div')||ref):null;
+    if(!anchor){ anchor=Array.from(m.querySelectorAll('.mc-admin-card')).find(function(c){return /lista detalhada/i.test(c.textContent||'');}); }
+    if(anchor && anchor.parentNode){ anchor.parentNode.insertBefore(wrap, anchor); } else { m.appendChild(wrap); }
+  }catch(e){} }
+  var _open=window.gwaOpenRhDoc; if(typeof _open==='function'){ window.gwaOpenRhDoc=function(docId){ var r=_open.apply(this,arguments); setTimeout(function(){ injectContent(docId); },160); setTimeout(function(){ injectContent(docId); },650); return r; }; }
+
+  // Copia assinada COM o conteudo do documento embutido
+  window.gwaRhDocBaixarAssinado=function(docId, login){
+    var doc=findDoc(docId); if(!doc){ try{toast('Documento nao encontrado.','error');}catch(e){} return; }
+    var L=String(login||loginOf(curU())).toUpperCase(); var s=sigOf(docId)[L]||{login:L,nome:L,ts:Date.now()};
+    var codigo=esc(doc.code||doc.codigo||('GWA-RH-'+String(doc.id||'').slice(-6).toUpperCase()));
+    var conteudo=embedFor(doc,'640px');
+    var html='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Assinado - '+esc(doc.title||'')+'</title><style>@page{margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;font-size:13px;margin:0}'+
+      '.bar{position:fixed;top:0;left:0;right:0;background:#111;color:#fff;padding:8px;text-align:center;z-index:9}.bar button{background:#FF8000;color:#fff;border:none;padding:8px 18px;border-radius:6px;font-weight:700;cursor:pointer}'+
+      '.hd{background:#111;color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center}.hd b{color:#FF8000}'+
+      '.body{padding:20px}.h{color:#FF8000;margin:0 0 6px}'+
+      '.sig{margin-top:22px;border:2px solid #16a34a;border-radius:12px;padding:16px;background:#f0fdf4}.sig b{color:#15803d}'+
+      '@media print{.bar{display:none}}</style></head><body>'+
+      '<div class="bar">Comprovante assinado (com o conteudo do documento) &nbsp;<button onclick="window.print()">&#11015; Baixar em PDF</button></div>'+
+      '<div class="hd"><div style="font-weight:800;font-size:18px">GWA <b>CONSULTORIA</b></div><div style="font-size:12px">Documento RH — Assinatura eletronica</div></div>'+
+      '<div class="body"><h2 class="h">'+esc(doc.title||'')+'</h2><p><b>Codigo:</b> '+codigo+' &nbsp;·&nbsp; <b>Publicado:</b> '+esc(fmtDT(doc.ts))+'</p><p>'+esc(doc.description||'')+'</p>'+
+      '<h3 class="h" style="font-size:15px;margin-top:14px">Documento</h3>'+conteudo+
+      '<div class="sig"><div style="font-size:16px;font-weight:800"><b>&#10004; ASSINADO DIGITALMENTE</b></div><div style="margin-top:8px">Consultor: <b>'+esc(s.nome||s.login||'')+'</b> ('+esc(s.login||'')+')<br>Data e hora da assinatura: <b>'+esc(fmtDT(s.ts))+'</b></div><div style="font-size:11px;color:#6b7280;margin-top:8px">Assinatura eletronica de ciencia registrada de forma central na Intranet GWA.</div></div>'+
+      '<p style="font-size:11px;color:#9ca3af;margin-top:14px">Observacao: para documentos hospedados no Google Drive, o conteudo e exibido pelo visualizador do Drive; para impressao integral, use tambem o botao "Abrir documento original".</p>'+
+      '</div></body></html>';
+    var w=window.open('','_blank'); if(!w){ try{toast('Libere pop-ups para baixar.','error');}catch(e){} return; }
+    w.document.open(); w.document.write(html); w.document.close();
+  };
+})();
+
 </script>
 </body>
 </html>
