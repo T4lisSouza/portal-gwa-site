@@ -9793,6 +9793,51 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   var _sign=window.gwaSignRhDoc; if(typeof _sign==='function'){ window.gwaSignRhDoc=function(docId){ var r=_sign.apply(this,arguments); setTimeout(function(){ processar(docId); },900); return r; }; }
 })();
 
+/* ===== INTRANET GWA :: Documentos RH — stats SEMPRE pela API central (painel + modal) 2026-08-05n ===== */
+(function(){
+  if(window.__gwaRhDocN) return; window.__gwaRhDocN=true;
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function base(){ return (typeof API_URL!=='undefined')?API_URL:''; }
+  function hdr(){ return {'X-MC-Token':(typeof API_TOKEN!=='undefined'?API_TOKEN:'')}; }
+  function curU(){ return window.currentUser||(typeof getSession==='function'?getSession():{})||{}; }
+  function isAdm(){ var r=String((curU()||{}).role||'').toLowerCase(); return r==='admin'||r==='master'||r==='gestor'; }
+  function fmtDT(ts){ try{ return new Date(ts||Date.now()).toLocaleString('pt-BR'); }catch(e){ return '-'; } }
+  function consultores(us){ return (us||[]).filter(function(u){ var r=String(u.role||'').toLowerCase(); return r!=='admin'&&r!=='master'&&r!=='gestor'&&String(u.login||'').toUpperCase()!=='TALIS'; }); }
+  var _usCache=null;
+  async function loadUsers(){ if(window._usersCache&&window._usersCache.length){ return window._usersCache; } if(_usCache){ return _usCache; } try{ var r=await fetch(base()+'/api/usuarios',{headers:hdr()}); var j=await r.json(); if(j&&j.data){ _usCache=j.data; window._usersCache=window._usersCache&&window._usersCache.length?window._usersCache:j.data; return j.data; } }catch(e){} return window._usersCache||[]; }
+  async function allSigs(){ try{ var r=await fetch(base()+'/api/signatures?collection=rhDocuments',{headers:hdr()}); var j=await r.json(); var map={}; if(j&&j.ok){ (j.data||[]).forEach(function(s){ if(s.confirmed){ var k=s.item_id; (map[k]=map[k]||{})[String(s.login||'').toUpperCase()]={nome:s.nome,ts:s.confirmed_at||s.last_view_at}; } }); } return map; }catch(e){ return {}; } }
+  async function docSigs(id){ try{ var r=await fetch(base()+'/api/signatures/rhDocuments/'+encodeURIComponent(id),{headers:hdr()}); var j=await r.json(); var m={}; if(j&&j.ok){ (j.data||[]).forEach(function(s){ if(s.confirmed) m[String(s.login||'').toUpperCase()]={nome:s.nome,ts:s.confirmed_at||s.last_view_at}; }); } return m; }catch(e){ return {}; } }
+
+  /* ---- PAINEL (Painel de controle RH): numeros pela API central ---- */
+  var panelBusy=false;
+  async function updatePanel(){ if(panelBusy) return; panelBusy=true; try{
+    var root=document.getElementById('rhDocsAdminRoot'); if(!root){ panelBusy=false; return; }
+    var us=await loadUsers(); var total=consultores(us).length; var map=await allSigs();
+    root.querySelectorAll('table tr').forEach(function(tr){ var tds=tr.querySelectorAll('td'); if(tds.length<5) return; var b=tr.querySelector('[onclick*="RhDoc"],[onclick*="gwaOpenRhDoc"]'); var id=''; if(b){ var mm=(b.getAttribute('onclick')||'').match(/['"]([A-Za-z0-9_\-]{6,})['"]/); if(mm) id=mm[1]; } if(!id) return; var signed=map[id]?Object.keys(map[id]).length:0; var pend=Math.max(0,total-signed); var rate=total?Math.round(signed/total*100):0; tds[2].textContent=signed; tds[3].textContent=pend; tds[4].textContent=rate+'%'; });
+  }catch(e){}finally{ panelBusy=false; } }
+  setInterval(updatePanel,4000);
+  document.addEventListener('DOMContentLoaded',function(){ setTimeout(updatePanel,3000); });
+  var _an=window.adminNav; if(typeof _an==='function'){ window.adminNav=function(sec,el){ var r=_an.apply(this,arguments); if(sec==='rhdocs') setTimeout(updatePanel,300); return r; }; }
+
+  /* ---- MODAL do documento: admin ve central + total certo; consultor nao ve lista ---- */
+  function listaCard(m){ return Array.from(m.querySelectorAll('.mc-admin-card')).find(function(c){return /lista detalhada de assinaturas/i.test(c.textContent||'');}); }
+  function setNum(m,label,val){ Array.from(m.querySelectorAll('*')).forEach(function(el){ if(el.children.length===0 && new RegExp('^\\s*'+label+'\\s*$','i').test(el.textContent||'')){ var box=el.parentElement; if(box){ var big=Array.from(box.querySelectorAll('*')).find(function(x){var fs=parseInt(getComputedStyle(x).fontSize)||0; return fs>=18;}); if(big) big.textContent=val; } } }); }
+  async function processar(docId){ try{ var m=document.getElementById('mContent'); if(!m) return; var card=listaCard(m);
+    if(!isAdm()){ if(card) card.style.display='none'; Array.from(m.querySelectorAll('*')).forEach(function(el){ if(el.children.length===0 && /^\s*Pendentes\s*$/i.test(el.textContent||'')){ var box=el.parentElement; if(box) box.style.display='none'; } }); return; }
+    var us=await loadUsers(); var cons=consultores(us); var signed=await docSigs(docId);
+    var list=cons.slice();
+    Object.keys(signed).forEach(function(L){ if(!list.find(function(u){return String(u.login||'').toUpperCase()===L;})) list.push({login:L,nome:signed[L].nome||L}); });
+    var signedCount=0;
+    var rows=list.sort(function(a,b){ var sa=signed[String(a.login).toUpperCase()]?0:1, sb=signed[String(b.login).toUpperCase()]?0:1; return sa-sb; }).map(function(u){ var L=String(u.login||'').toUpperCase(); var sg=signed[L]; if(sg)signedCount++;
+      return '<tr data-dl="1"><td>'+esc(u.nome||u.login)+'</td><td>'+esc(u.login)+'</td><td>'+(sg?'<span style="color:#16a34a;font-weight:700">Assinado</span>':'<span style="color:#dc2626;font-weight:600">Pendente</span>')+'</td><td>'+(sg?esc(fmtDT(sg.ts)):'-')+(sg?' <button class="mc-btn mc-btn--sm" style="padding:3px 8px;background:#111;border-color:#111;color:#fff;margin-left:6px" title="Baixar copia assinada" onclick="gwaRhDocBaixarAssinado(&#39;'+esc(docId)+'&#39;,&#39;'+esc(u.login)+'&#39;)"><i class="fas fa-download"></i></button>':'')+'</td></tr>'; }).join('');
+    if(card){ var tb=card.querySelector('tbody'); if(tb) tb.innerHTML=rows||'<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:10px">Nenhum colaborador.</td></tr>'; card.style.display=''; }
+    var total=cons.length||list.length; var pend=Math.max(0,total-signedCount); var rate=total?Math.round(signedCount/total*100):0;
+    setNum(m,'Assinaram',signedCount); setNum(m,'Pendentes',pend); setNum(m,'Adesao',rate+'%'); setNum(m,'Adesão',rate+'%');
+  }catch(e){} }
+  var _open=window.gwaOpenRhDoc; if(typeof _open==='function'){ window.gwaOpenRhDoc=function(docId){ var r=_open.apply(this,arguments); setTimeout(function(){ processar(docId); },320); setTimeout(function(){ processar(docId); },1000); return r; }; }
+  var _sign=window.gwaSignRhDoc; if(typeof _sign==='function'){ window.gwaSignRhDoc=function(docId){ var r=_sign.apply(this,arguments); setTimeout(function(){ processar(docId); updatePanel(); },1100); return r; }; }
+})();
+
 </script>
 </body>
 </html>
