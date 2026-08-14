@@ -9754,6 +9754,45 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   };
 })();
 
+/* ===== INTRANET GWA :: Documentos RH — assinaturas so p/ admin + ler da API central (2026-08-05m) ===== */
+(function(){
+  if(window.__gwaRhDocM) return; window.__gwaRhDocM=true;
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function base(){ return (typeof API_URL!=='undefined')?API_URL:''; }
+  function hdr(){ return {'X-MC-Token':(typeof API_TOKEN!=='undefined'?API_TOKEN:'')}; }
+  function curU(){ return window.currentUser||(typeof getSession==='function'?getSession():{})||{}; }
+  function isAdm(){ var r=String((curU()||{}).role||'').toLowerCase(); return r==='admin'||r==='master'||r==='gestor'; }
+  function fmtDT(ts){ try{ return new Date(ts||Date.now()).toLocaleString('pt-BR'); }catch(e){ return '-'; } }
+  function listaCard(m){ return Array.from(m.querySelectorAll('.mc-admin-card')).find(function(c){return /lista detalhada de assinaturas/i.test(c.textContent||'');}); }
+
+  async function processar(docId){ try{ var m=document.getElementById('mContent'); if(!m) return;
+    var card=listaCard(m);
+    if(!isAdm()){
+      // consultor NAO ve quem esta pendente
+      if(card) card.style.display='none';
+      // esconde a caixa "Pendentes" do resumo (mantem so o que e do proprio)
+      Array.from(m.querySelectorAll('*')).forEach(function(el){ if(el.children.length===0 && /^\s*Pendentes\s*$/i.test(el.textContent||'')){ var box=el.parentElement; if(box) box.style.display='none'; } });
+      return;
+    }
+    // ADMIN: le assinaturas da API central (cross-maquina)
+    var sigs=[]; try{ var r=await fetch(base()+'/api/signatures/rhDocuments/'+encodeURIComponent(docId),{headers:hdr()}); if(r.ok){ var j=await r.json(); if(j&&j.ok) sigs=j.data||[]; } }catch(e){}
+    var signed={}; sigs.forEach(function(s){ if(s.confirmed) signed[String(s.login).toUpperCase()]={nome:s.nome,ts:s.confirmed_at||s.last_view_at}; });
+    var users=(window._usersCache||[]).filter(function(u){ var role=String(u.role||'').toLowerCase(); return role!=='admin'&&role!=='master'&&role!=='gestor'&&String(u.login||'').toUpperCase()!=='TALIS'; });
+    Object.keys(signed).forEach(function(L){ if(!users.find(function(u){return String(u.login||'').toUpperCase()===L;})) users.push({login:L,nome:signed[L].nome||L}); });
+    var signedCount=0;
+    var rows=users.sort(function(a,b){ var sa=signed[String(a.login).toUpperCase()]?0:1, sb=signed[String(b.login).toUpperCase()]?0:1; return sa-sb; }).map(function(u){ var L=String(u.login||'').toUpperCase(); var sg=signed[L]; if(sg)signedCount++;
+      return '<tr data-dl="1"><td>'+esc(u.nome||u.login)+'</td><td>'+esc(u.login)+'</td><td>'+(sg?'<span style="color:#16a34a;font-weight:700">Assinado</span>':'<span style="color:#dc2626;font-weight:600">Pendente</span>')+'</td><td>'+(sg?esc(fmtDT(sg.ts)):'-')+(sg?' <button class="mc-btn mc-btn--sm" style="padding:3px 8px;background:#111;border-color:#111;color:#fff;margin-left:6px" title="Baixar copia assinada" onclick="gwaRhDocBaixarAssinado(&#39;'+esc(docId)+'&#39;,&#39;'+esc(u.login)+'&#39;)"><i class="fas fa-download"></i></button>':'')+'</td></tr>'; }).join('');
+    if(card){ var tb=card.querySelector('tbody'); if(tb) tb.innerHTML=rows||'<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:10px">Nenhum colaborador.</td></tr>'; }
+    // atualiza os numeros do resumo (Assinaram / Pendentes / Adesao) com base na API central
+    var total=users.length, pend=total-signedCount, rate=total?Math.round(signedCount/total*100):0;
+    function setNum(label,val){ Array.from(m.querySelectorAll('*')).forEach(function(el){ if(el.children.length===0 && new RegExp('^\\s*'+label+'\\s*$','i').test(el.textContent||'')){ var box=el.parentElement; if(box){ var num=box.querySelector('b,strong,div,span'); var big=Array.from(box.querySelectorAll('*')).find(function(x){var fs=parseInt(getComputedStyle(x).fontSize)||0; return fs>=18;}); if(big) big.textContent=val; else if(num) num.textContent=val; } } }); }
+    setNum('Assinaram', signedCount); setNum('Pendentes', pend); setNum('Adesao', rate+'%'); setNum('Adesão', rate+'%');
+  }catch(e){} }
+
+  var _open=window.gwaOpenRhDoc; if(typeof _open==='function'){ window.gwaOpenRhDoc=function(docId){ var r=_open.apply(this,arguments); setTimeout(function(){ processar(docId); },220); setTimeout(function(){ processar(docId); },800); return r; }; }
+  var _sign=window.gwaSignRhDoc; if(typeof _sign==='function'){ window.gwaSignRhDoc=function(docId){ var r=_sign.apply(this,arguments); setTimeout(function(){ processar(docId); },900); return r; }; }
+})();
+
 </script>
 </body>
 </html>
