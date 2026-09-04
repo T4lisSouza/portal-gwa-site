@@ -9916,7 +9916,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function podeDept(dept){ if(isMaster()) return true; var pd=(_cfg&&_cfg.permissoesDept&&_cfg.permissoesDept[loginU(curU())])||{}; return dept==='comercial'?!!pd.admComercial:!!pd.admNegociacao; }
 
   var _vendasKnown={}, _watchTimer=null;
-  function open(){ ensurePanel(); document.getElementById('gwaVendasOverlay').style.display='flex'; if(!podeDept(_dept)) _dept=userDept(curU()); loadCfg().then(loadVendas).then(function(){ (_vendas||[]).forEach(function(v){ _vendasKnown[v.id]=1; }); startWatch(); render(); }); }
+  function open(){ ensurePanel(); document.getElementById('gwaVendasOverlay').style.display='flex'; if(isAdmin()) _filtro.periodo='hoje'; if(!podeDept(_dept)) _dept=userDept(curU()); loadCfg().then(loadVendas).then(function(){ (_vendas||[]).forEach(function(v){ _vendasKnown[v.id]=1; }); startWatch(); render(); }); }
   function close(){ var o=document.getElementById('gwaVendasOverlay'); if(o) o.style.display='none'; stopWatch(); }
 
   /* ---- aviso ao vivo para o admin quando um vendedor fecha venda ---- */
@@ -9956,7 +9956,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       else body.innerHTML='';
     }catch(e){ body.innerHTML='<div style="color:'+Co.red+';padding:20px">Erro ao renderizar: '+esc(e&&e.message||e)+'</div>'; }
   }
-  window.__gwaVendasView=function(v){ _view=v; render(); };
+  window.__gwaVendasView=function(v){ if(v==='dash') _filtro.periodo='hoje'; _view=v; render(); };
   window.__gwaVendasClose=close;
   window.__gwaVendasSetDept=function(d){ _dept=d; render(); };
 
@@ -10065,10 +10065,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return metaDia; }
   function viewDash(dept){ var deptList=dept?[dept]:['comercial','negociacao'];
     var metaDia=deptList.reduce(function(s,d){return s+(metaDe(d).dia||0);},0), metaMes=deptList.reduce(function(s,d){return s+(metaDe(d).mes||0);},0);
-    var lbl='Hoje'; var aPer=agg(filterHoje(deptList)); var metaPer=metaDia; var pctPer=metaPer?(aPer.liq/metaPer*100):0;
+    var lbl=periodoLabel(); var aPer=agg(vendasPeriodo(deptList)); var metaPer=metaPeriodo(deptList); var pctPer=metaPer?(aPer.liq/metaPer*100):0;
     var aMes=agg(aplicaFiltroMes(deptList)); var pctMes=metaMes?(aMes.liq/metaMes*100):0;
     var du=diasUteisMes(); var mediaDia=du.trabalhados?aMes.liq/du.trabalhados:0; var projMes=mediaDia*du.total;
-    var ehHoje=true;
+    var ehHoje=(_filtro.periodo==='hoje');
     var exp=(_cfg&&_cfg.expediente)||{ini:9,fim:18}; var now=new Date(); var horasTot=Math.max(1,exp.fim-exp.ini); var hAgora=now.getHours()+now.getMinutes()/60; var horasTransc=Math.min(horasTot,Math.max(0,hAgora-exp.ini)); var ritmo=horasTransc>0?aPer.liq/horasTransc:0; var projDia=ritmo*horasTot;
     var heroRow=sec('Visão geral','fa-bullseye','<div style="display:flex;gap:16px;flex-wrap:wrap">'+hero('Faturamento — '+lbl,money(aPer.liq),metaPer,pctPer)+hero('Faturamento do mês',money(aMes.liq),metaMes,pctMes)+'</div>');
     var gaugeCol='<div style="flex:1;min-width:280px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,.35)"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px"><i class="fas fa-gauge-high" style="color:'+Co.orange+'"></i> Velocímetro — meta ('+lbl+')</div><div style="position:relative;height:170px"><canvas id="gwaGauge"></canvas><div style="position:absolute;left:0;right:0;bottom:14px;text-align:center"><div style="font-size:30px;font-weight:800;color:#fff">'+pct(pctPer)+'</div><div style="font-size:11px;color:'+Co.mut+'">da meta</div></div></div><div style="text-align:center;color:'+Co.sub+';margin-top:8px;font-size:13px">Realizado <b style="color:'+Co.green+'">'+money(aPer.liq)+'</b> · falta <b>'+money(Math.max(0,metaPer-aPer.liq))+'</b></div></div>';
@@ -10078,10 +10078,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var chartSec=sec('Faturamento no mês — dia a dia','fa-chart-line','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px;box-shadow:0 3px 14px rgba(0,0,0,.28)"><div style="height:300px"><canvas id="gwaLineChart"></canvas></div></div>');
     var mesSec=sec('Mês','fa-calendar-days','<div style="display:flex;gap:14px;flex-wrap:wrap">'+stat('Faturamento',money(aMes.liq),null,Co.green)+stat('Contratos',aMes.n)+stat('Ticket médio',money(aMes.tm))+stat('Meta do mês',money(metaMes))+stat('% da meta',pct(pctMes),null,pctMes>=100?Co.green:Co.orangeL)+stat('Projeção',money(projMes),'média × dias úteis')+'</div>');
     var duSec=sec('Dias úteis','fa-business-time','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;display:flex;flex-wrap:wrap;box-shadow:0 3px 14px rgba(0,0,0,.28)">'+mini('Úteis no mês',du.total)+mini('Trabalhados',du.trabalhados,Co.orange)+mini('Restantes',du.restantes)+mini('% do mês',pct(du.total?du.trabalhados/du.total*100:0))+'</div>');
-    return heroRow+perSec+chartSec+mesSec+duSec;
+    return filtroBar()+heroRow+perSec+chartSec+mesSec+duSec;
   }
   var _gaugeChart=null, _lineChart=null;
-  function initGauge(dept){ try{ if(!window.Chart) return; var deptList=dept?[dept]:['comercial','negociacao']; var aPer=agg(filterHoje(deptList)); var metaPer=deptList.reduce(function(s,d){return s+(metaDe(d).dia||0);},0); var p=metaPer?Math.min(100,aPer.liq/metaPer*100):0; var el=document.getElementById('gwaGauge'); if(!el) return; if(_gaugeChart){try{_gaugeChart.destroy();}catch(e){}} var col=p>=100?Co.green:(p>=70?Co.orangeL:Co.burnt); _gaugeChart=new Chart(el,{type:'doughnut',data:{datasets:[{data:[p,100-p],backgroundColor:[col,Co.card2],borderWidth:0,circumference:180,rotation:270}]},options:{cutout:'75%',plugins:{legend:{display:false},tooltip:{enabled:false}}}}); }catch(e){} }
+  function initGauge(dept){ try{ if(!window.Chart) return; var deptList=dept?[dept]:['comercial','negociacao']; var aPer=agg(vendasPeriodo(deptList)); var metaPer=metaPeriodo(deptList); var p=metaPer?Math.min(100,aPer.liq/metaPer*100):0; var el=document.getElementById('gwaGauge'); if(!el) return; if(_gaugeChart){try{_gaugeChart.destroy();}catch(e){}} var col=p>=100?Co.green:(p>=70?Co.orangeL:Co.burnt); _gaugeChart=new Chart(el,{type:'doughnut',data:{datasets:[{data:[p,100-p],backgroundColor:[col,Co.card2],borderWidth:0,circumference:180,rotation:270}]},options:{cutout:'75%',plugins:{legend:{display:false},tooltip:{enabled:false}}}}); }catch(e){} }
   function initLineChart(dept){ try{ if(!window.Chart) return; var deptList=dept?[dept]:['comercial','negociacao']; var metaDia=deptList.reduce(function(s,d){return s+(metaDe(d).dia||0);},0); var now=new Date(); var y=now.getFullYear(),m=now.getMonth(); var last=new Date(y,m+1,0).getDate(); var byDay={}; (_vendas||[]).forEach(function(v){ if(deptList.indexOf(v.dept||'comercial')<0) return; var dt=vDate(v); if(dt.getMonth()===m&&dt.getFullYear()===y){ var d=dt.getDate(); byDay[d]=(byDay[d]||0)+(Number(v.liquido)||0); } }); var days=Object.keys(byDay).map(Number).filter(function(d){return byDay[d]>0;}).sort(function(a,b){return a-b;}); var labels=[],fat=[],meta=[]; days.forEach(function(i){ labels.push('Dia '+i); fat.push(byDay[i]); var dd=new Date(y,m,i); meta.push(isUtil(dd)?metaDia:0); }); var el=document.getElementById('gwaLineChart'); if(!el) return; if(_lineChart){try{_lineChart.destroy();}catch(e){}} _lineChart=new Chart(el,{type:'line',data:{labels:labels,datasets:[{label:'Faturamento',data:fat,borderColor:Co.orange,backgroundColor:'rgba(224,120,32,.15)',fill:true,tension:.3,pointRadius:2,pointBackgroundColor:Co.orange},{label:'Meta diária',data:meta,borderColor:Co.green,borderDash:[6,4],fill:false,tension:0,pointRadius:0}]},options:{maintainAspectRatio:false,plugins:{legend:{labels:{color:Co.sub}}},scales:{x:{title:{display:true,text:'Dia do mês',color:Co.mut},ticks:{color:Co.mut},grid:{color:'rgba(255,255,255,.05)'}},y:{ticks:{color:Co.mut,callback:function(v){return 'R$ '+(Math.round(v/1000))+'k';}},grid:{color:'rgba(255,255,255,.05)'}}}}}); }catch(e){} }
 
   /* ---- QUARTIS (40/30/20/10 do faturamento do departamento) ---- */
