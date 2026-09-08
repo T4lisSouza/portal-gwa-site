@@ -10161,6 +10161,145 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   setInterval(addNav,3000); document.addEventListener('DOMContentLoaded',function(){ setTimeout(addNav,3000); });
   var _ep=window.enterPortal; if(typeof _ep==='function'){ window.enterPortal=function(){ var r=_ep.apply(this,arguments); setTimeout(addNav,1500); return r; }; }
 })();
+
+/* ===== INTRANET GWA :: MODULO DE CUSTOS (V1) ===== */
+(function(){
+  if(window.__gwaCustos) return; window.__gwaCustos=true;
+  var Co={ bgA:'#0d0d0d', bgB:'#161616', card:'#1c1c1c', card2:'#242424', line:'rgba(255,255,255,.07)', orange:'#e07820', orangeD:'#c4661a', orangeL:'#f0943a', burnt:'#C0491F', sub:'#c8c8c8', mut:'#8a8a8a', green:'#3fae5a', red:'#e5533c', gradO:'linear-gradient(135deg,#f0943a,#c4661a)' };
+  var GWA_LOGO='https://drive.google.com/thumbnail?id=1erF3Vfah-MgTbl2QNLph7oyfIqENLn9m&sz=w240';
+  var MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function base(){ return (typeof API_URL!=='undefined')?API_URL:''; }
+  function H(){ return {'Content-Type':'application/json','X-MC-Token':(typeof API_TOKEN!=='undefined'?API_TOKEN:'')}; }
+  function curU(){ return window.currentUser||(typeof getSession==='function'?getSession():{})||{}; }
+  function loginU(u){ return String((u&&(u.login||u.user||u.email||u.nome))||'').toUpperCase(); }
+  function role(){ return String((curU()||{}).role||'').toLowerCase(); }
+  function isMaster(){ return loginU(curU())==='TALIS' || role()==='master'; }
+  function money(n){ n=Number(n)||0; try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }catch(e){ return 'R$ '+n.toFixed(2); } }
+  function norm(s){ return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim(); }
+  function slug(s){ return norm(s).replace(/\s+/g,'_'); }
+  function num(v){ if(v==null||v==='') return 0; if(typeof v==='number') return v; var s=String(v).replace(/[^0-9,.-]/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.'); var n=parseFloat(s); return isNaN(n)?0:n; }
+
+  var _cfg=null, _custos=null;
+  var DEF_CFG={ permissoes:{}, mapaVinculos:{}, sheetId:'', sheetName:'Custos' };
+  async function loadCfg(){ try{ var r=await fetch(base()+'/api/custos_config/atual',{headers:H()}); if(r.ok){ var j=await r.json(); if(j&&j.ok&&j.data){ _cfg=Object.assign({},DEF_CFG,j.data); return _cfg; } } }catch(e){} _cfg=JSON.parse(JSON.stringify(DEF_CFG)); return _cfg; }
+  async function saveCfg(){ try{ await fetch(base()+'/api/custos_config/atual',{method:'PUT',headers:H(),body:JSON.stringify(Object.assign({id:'atual'},_cfg))}); return true; }catch(e){ return false; } }
+  async function loadCustos(){ try{ var r=await fetch(base()+'/api/custos',{headers:H()}); if(r.ok){ var j=await r.json(); if(j&&j.ok){ _custos=j.data||[]; return _custos; } } }catch(e){} _custos=_custos||[]; return _custos; }
+
+  function podeCustos(){ if(isMaster()) return true; return !!(_cfg&&_cfg.permissoes&&_cfg.permissoes[loginU(curU())]); }
+  function usuarios(){ return window._usersCache||[]; }
+  function acharFunc(nome){ var n=norm(nome); if(!n) return null; if(_cfg&&_cfg.mapaVinculos&&_cfg.mapaVinculos[n]) return {id:_cfg.mapaVinculos[n],via:'mapa'}; var us=usuarios(); for(var i=0;i<us.length;i++){ if(norm(us[i].nome||us[i].name||us[i].login)===n) return {id:loginU(us[i]),nome:us[i].nome,via:'exato'}; } return null; }
+
+  var _view='painel', _import=null;
+  function open(){ ensurePanel(); document.getElementById('gwaCustosOverlay').style.display='flex'; loadCfg().then(loadCustos).then(function(){ render(); }); }
+  function close(){ var o=document.getElementById('gwaCustosOverlay'); if(o) o.style.display='none'; }
+  window.gwaAbrirCustos=open;
+  function ensurePanel(){ if(document.getElementById('gwaCustosOverlay')) return; var o=document.createElement('div'); o.id='gwaCustosOverlay'; o.style.cssText='position:fixed;inset:0;z-index:99990;background:linear-gradient(180deg,'+Co.bgA+','+Co.bgB+');display:none;flex-direction:column;overflow:auto'; o.innerHTML='<div id="gwaCustosHead" style="position:sticky;top:0;background:'+Co.bgA+';border-bottom:3px solid '+Co.orangeD+';color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;z-index:3;box-shadow:0 4px 18px rgba(0,0,0,.4)"></div><div id="gwaCustosBody" style="padding:22px;max-width:1240px;margin:0 auto;width:100%;box-sizing:border-box"></div>'; document.body.appendChild(o); }
+
+  function tabs(){ var t=[['painel','Painel','fa-chart-pie'],['importar','Importar','fa-file-import'],['lancamentos','Lançamentos','fa-table-list'],['conciliacao','Conciliação','fa-people-arrows']]; if(isMaster()) t.push(['permissoes','Permissões','fa-user-shield']); return t; }
+  function render(){ ensurePanel(); var head=document.getElementById('gwaCustosHead'), body=document.getElementById('gwaCustosBody'); if(!head||!body) return;
+    head.innerHTML='<div style="display:flex;align-items:center;gap:14px"><img src="'+GWA_LOGO+'" alt="GWA" style="height:42px;width:auto;max-width:120px;object-fit:contain"><div><div style="font-size:18px;font-weight:800">Custos GWA</div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:1px">Gestão de custos</div></div></div>'+
+      '<div style="display:flex;gap:7px;flex-wrap:wrap">'+tabs().map(function(t){var on=_view===t[0]; return '<button onclick="__gwaCustosView(&#39;'+t[0]+'&#39;)" style="padding:8px 14px;border-radius:10px;border:1px solid '+(on?'transparent':Co.line)+';background:'+(on?Co.gradO:Co.card2)+';color:#fff;font-size:13px;font-weight:600;cursor:pointer"><i class="fas '+t[2]+'"></i> '+t[1]+'</button>';}).join('')+'<button onclick="__gwaCustosClose()" style="width:38px;height:38px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:'+Co.sub+';cursor:pointer"><i class="fas fa-times"></i></button></div>';
+    try{
+      if(_view==='painel') body.innerHTML=viewPainel(); else if(_view==='importar') body.innerHTML=viewImportar(); else if(_view==='lancamentos') body.innerHTML=viewLanc(); else if(_view==='conciliacao') body.innerHTML=viewConcil(); else if(_view==='permissoes') body.innerHTML=viewPerm(); else body.innerHTML='';
+      if(_view==='painel') setTimeout(initChart,60);
+    }catch(e){ body.innerHTML='<div style="color:'+Co.red+';padding:20px">Erro: '+esc(e&&e.message||e)+'</div>'; }
+  }
+  window.__gwaCustosView=function(v){ _view=v; render(); };
+  window.__gwaCustosClose=close;
+
+  function sec(t,ic,inner){ return '<div style="margin:0 0 22px"><div style="display:flex;align-items:center;gap:10px;margin:0 0 12px"><span style="width:5px;height:20px;border-radius:3px;background:'+Co.gradO+'"></span><h3 style="margin:0;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:'+Co.sub+'"><i class="fas '+ic+'" style="color:'+Co.orange+';margin-right:6px"></i>'+t+'</h3></div>'+inner+'</div>'; }
+  function stat(l,v,col){ return '<div style="flex:1 1 160px;min-width:160px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px;box-shadow:0 3px 14px rgba(0,0,0,.28);overflow:hidden"><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px">'+l+'</div><div style="font-size:20px;font-weight:800;color:'+(col||'#fff')+';margin-top:6px;overflow-wrap:anywhere">'+v+'</div></div>'; }
+  function inp(){ return 'style="padding:9px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"'; }
+
+  /* ---------- helpers de dados ---------- */
+  function anos(){ var s={}; (_custos||[]).forEach(function(r){ if(r.ano) s[r.ano]=1; }); var a=Object.keys(s).map(Number).sort(); return a.length?a:[new Date().getFullYear()]; }
+  var _fAno=null,_fMes='',_fDep='';
+  function anoAtual(){ if(_fAno==null){ var a=anos(); _fAno=a[a.length-1]; } return _fAno; }
+  function recs(tipo){ return (_custos||[]).filter(function(r){ return r.tipo===tipo && r.ano===anoAtual() && (!_fDep|| (r.dept||r.centroCusto)===_fDep); }); }
+  function somaRec(r){ if(_fMes) return num((r.meses||{})[_fMes]); var t=0; for(var m=1;m<=12;m++) t+=num((r.meses||{})[m]); return t; }
+  function totalTipo(tipo){ return recs(tipo).reduce(function(s,r){return s+somaRec(r);},0); }
+  function depsLista(){ var s={}; (_custos||[]).forEach(function(r){ var d=r.dept||r.centroCusto; if(d)s[d]=1; }); return Object.keys(s).sort(); }
+
+  function viewPainel(){ if(!(_custos&&_custos.length)) return '<div style="text-align:center;color:'+Co.mut+';padding:50px"><i class="fas fa-file-import" style="font-size:34px;color:'+Co.orange+'"></i><h3 style="color:#fff">Nenhum custo importado</h3><p>Vá em <b style="color:'+Co.orange+'">Importar</b> e envie a planilha para começar.</p></div>';
+    var aOpts=anos().map(function(a){return '<option value="'+a+'"'+(a===anoAtual()?' selected':'')+'>'+a+'</option>';}).join('');
+    var mOpts='<option value="">Ano inteiro</option>'+MESES.map(function(m,i){return '<option value="'+(i+1)+'"'+(String(_fMes)===String(i+1)?' selected':'')+'>'+m+'</option>';}).join('');
+    var dOpts='<option value="">Todos os depart.</option>'+depsLista().map(function(d){return '<option value="'+esc(d)+'"'+(_fDep===d?' selected':'')+'>'+esc(d)+'</option>';}).join('');
+    var filtros='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"><select onchange="__gwaCustosF(&#39;ano&#39;,this.value)" '+inp()+'>'+aOpts+'</select><select onchange="__gwaCustosF(&#39;mes&#39;,this.value)" '+inp()+'>'+mOpts+'</select><select onchange="__gwaCustosF(&#39;dep&#39;,this.value)" '+inp()+'>'+dOpts+'</select></div>';
+    var custoEmpresa=totalTipo('empresa'), sal=totalTipo('salario'), ben=totalTipo('beneficio'), prem=totalTipo('premiacao');
+    var cards='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px">'+stat('Custo total da empresa',money(custoEmpresa),Co.orangeL)+stat('Salários líquidos',money(sal))+stat('Benefícios',money(ben))+stat('Premiações',money(prem))+'</div>';
+    // por categoria (empresa)
+    var byCat={}; recs('empresa').forEach(function(r){ var k=r.categoria||'—'; byCat[k]=(byCat[k]||0)+somaRec(r); });
+    var catRows=Object.keys(byCat).sort(function(a,b){return byCat[b]-byCat[a];}).map(function(k){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:9px 10px">'+esc(k)+'</td><td style="padding:9px 10px;color:'+Co.orangeL+';font-weight:700">'+money(byCat[k])+'</td></tr>';}).join('')||'<tr><td colspan="2" style="padding:14px;text-align:center;color:'+Co.mut+'">—</td></tr>';
+    var catTbl=sec('Custos por categoria','fa-tags','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Categoria</th><th style="padding:10px">Valor</th></tr></thead><tbody>'+catRows+'</tbody></table></div>');
+    // por funcionario
+    var byF={}; ['salario','beneficio','premiacao'].forEach(function(tp){ recs(tp).forEach(function(r){ var k=r.funcNome||r.funcId; if(!byF[k])byF[k]={nome:r.funcNome,dept:r.dept,salario:0,beneficio:0,premiacao:0,vinc:!!r.funcId}; byF[k][tp]+=somaRec(r); }); });
+    var fRows=Object.keys(byF).map(function(k){var f=byF[k]; var tot=f.salario+f.beneficio+f.premiacao; return {f:f,tot:tot};}).sort(function(a,b){return b.tot-a.tot;}).map(function(o){var f=o.f; return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:9px 10px;color:#fff">'+esc(f.nome)+(f.vinc?'':' <span style="color:'+Co.red+';font-size:10px">(não vinculado)</span>')+'</td><td style="padding:9px 10px">'+esc(f.dept||'')+'</td><td style="padding:9px 10px">'+money(f.salario)+'</td><td style="padding:9px 10px">'+money(f.beneficio)+'</td><td style="padding:9px 10px">'+money(f.premiacao)+'</td><td style="padding:9px 10px;color:'+Co.green+';font-weight:700">'+money(o.tot)+'</td></tr>';}).join('')||'<tr><td colspan="6" style="padding:14px;text-align:center;color:'+Co.mut+'">—</td></tr>';
+    var fTbl=sec('Custo por funcionário','fa-users','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Funcionário</th><th style="padding:10px">Depto</th><th style="padding:10px">Salário Líq.</th><th style="padding:10px">Benefícios</th><th style="padding:10px">Premiações</th><th style="padding:10px">Total</th></tr></thead><tbody>'+fRows+'</tbody></table></div></div>');
+    var chart=sec('Evolução mensal — custo da empresa ('+anoAtual()+')','fa-chart-line','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px"><div style="height:280px"><canvas id="gwaCustosChart"></canvas></div></div>');
+    return filtros+cards+chart+catTbl+fTbl;
+  }
+  window.__gwaCustosF=function(k,v){ if(k==='ano')_fAno=Number(v); if(k==='mes')_fMes=v; if(k==='dep')_fDep=v; render(); };
+  var _chart=null;
+  function initChart(){ try{ if(!window.Chart) return; var el=document.getElementById('gwaCustosChart'); if(!el) return; var meses=[]; for(var m=1;m<=12;m++){ var t=0; recs('empresa').forEach(function(r){ t+=num((r.meses||{})[m]); }); meses.push(t); } if(_chart){try{_chart.destroy();}catch(e){}} _chart=new Chart(el,{type:'line',data:{labels:MESES,datasets:[{label:'Custo da empresa',data:meses,borderColor:Co.orange,backgroundColor:'rgba(224,120,32,.15)',fill:true,tension:.3,pointRadius:2}]},options:{maintainAspectRatio:false,plugins:{legend:{labels:{color:Co.sub}}},scales:{x:{ticks:{color:Co.mut},grid:{color:'rgba(255,255,255,.05)'}},y:{ticks:{color:Co.mut,callback:function(v){return 'R$ '+(Math.round(v/1000))+'k';}},grid:{color:'rgba(255,255,255,.05)'}}}}}); }catch(e){} }
+
+  /* ---------- IMPORTAR ---------- */
+  function viewImportar(){ var ano=new Date().getFullYear();
+    var prev=''; if(_import){ prev=importPreviewHtml(); }
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:22px;max-width:760px;margin:0 auto;color:'+Co.sub+'">'+
+      '<h3 style="margin:0 0 6px;color:#fff"><i class="fas fa-file-import" style="color:'+Co.orange+'"></i> Importar planilha de custos</h3>'+
+      '<p style="font-size:12px;color:'+Co.mut+'">Envie o arquivo .xlsx com as abas <b>CUSTOS DA EMPRESA</b>, <b>PREMIAÇÕES MENSAIS</b>, <b>BENEFÍCIO MENSAIS</b> e <b>SALARIO LIQUIDO</b>. As colunas dos meses são lidas automaticamente e os funcionários são conciliados por nome.</p>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0"><label style="font-size:12px;color:'+Co.mut+'">Ano das abas mensais:</label><input id="cImpAno" type="number" value="'+ano+'" style="width:100px;padding:8px;border-radius:8px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"><input id="cImpFile" type="file" accept=".xlsx,.xls,.csv" onchange="__gwaCustosLerArquivo(this)" style="color:'+Co.sub+'"></div>'+
+      '<div id="cImpStatus" style="font-size:13px;color:'+Co.orangeL+'"></div>'+prev+'</div>'; }
+  function importPreviewHtml(){ var p=_import; var tot=p.registros.length; var pend=p.pendentes.length;
+    return '<div style="margin-top:14px;background:'+Co.bgA+';border:1px solid '+Co.line+';border-radius:12px;padding:14px"><div style="color:#fff;font-weight:700;margin-bottom:6px">Prévia da importação</div><div style="font-size:13px">Registros lidos: <b>'+tot+'</b> · Funcionários não conciliados: <b style="color:'+(pend?Co.red:Co.green)+'">'+pend+'</b></div>'+(pend?'<div style="font-size:12px;color:'+Co.red+';margin-top:6px"><i class="fas fa-triangle-exclamation"></i> '+esc(p.pendentes.slice(0,8).join(', '))+(pend>8?'…':'')+'<br>Você poderá vinculá-los na aba Conciliação depois de salvar.</div>':'')+
+      '<div style="margin-top:12px"><button onclick="__gwaCustosSalvarImport()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:11px 20px;font-weight:700;cursor:pointer"><i class="fas fa-save"></i> Salvar na base</button> <span id="cImpProg" style="color:'+Co.mut+';font-size:12px"></span></div></div>'; }
+  function loadXLSX(cb){ if(window.XLSX) return cb(); var s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload=cb; s.onerror=function(){ document.getElementById('cImpStatus').textContent='Falha ao carregar leitor de planilha.'; }; document.head.appendChild(s); }
+  window.__gwaCustosLerArquivo=function(inputEl){ var f=inputEl.files&&inputEl.files[0]; if(!f) return; var ano=parseInt((document.getElementById('cImpAno')||{}).value)||new Date().getFullYear(); document.getElementById('cImpStatus').textContent='Lendo arquivo...';
+    loadXLSX(function(){ var rd=new FileReader(); rd.onload=function(e){ try{ var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'}); _import=parseWorkbook(wb,ano); document.getElementById('cImpStatus').textContent='Arquivo lido. Confira a prévia abaixo.'; render(); }catch(err){ document.getElementById('cImpStatus').textContent='Erro ao ler: '+(err&&err.message||err); } }; rd.readAsArrayBuffer(f); }); };
+  function achaAba(wb,alvo){ var n=norm(alvo); var found=null; wb.SheetNames.forEach(function(sn){ if(!found && norm(sn).indexOf(n)>=0) found=sn; }); return found?wb.Sheets[found]:null; }
+  function mesIdxFromHeader(h){ var n=norm(h); for(var i=0;i<12;i++){ if(norm(MESES[i])===n) return i+1; } return 0; }
+  function parseWorkbook(wb,ano){ var registros=[]; var pendSet={};
+    // CUSTOS DA EMPRESA (lista)
+    var wsE=achaAba(wb,'CUSTOS DA EMPRESA'); if(wsE){ var rowsE=XLSX.utils.sheet_to_json(wsE,{header:1}); for(var i=1;i<rowsE.length;i++){ var r=rowsE[i]||[]; var mesNome=r[2], centro=r[3], cat=r[4], val=num(r[5]); var anoLinha=Number(r[1])||ano; if((!centro&&!cat)||!val) continue; var mi=mesIdxFromHeader(mesNome); if(!mi) continue; var id='cst_emp_'+anoLinha+'_'+slug(centro)+'_'+slug(cat); var ex=registros.filter(function(x){return x.id===id;})[0]; if(!ex){ ex={id:id,tipo:'empresa',ano:anoLinha,centroCusto:centro,dept:centro,categoria:cat,meses:{}}; registros.push(ex);} ex.meses[mi]=(num(ex.meses[mi])+val); } }
+    // abas por funcionario
+    [['PREMIAÇÕES MENSAIS','premiacao'],['BENEFÍCIO MENSAIS','beneficio'],['SALARIO LIQUIDO','salario']].forEach(function(par){ var ws=achaAba(wb,par[0]); if(!ws) return; var rows=XLSX.utils.sheet_to_json(ws,{header:1}); if(!rows.length) return; var head=rows[0]||[]; var colMes={}; for(var c=0;c<head.length;c++){ var mi=mesIdxFromHeader(head[c]); if(mi) colMes[c]=mi; }
+      for(var i=1;i<rows.length;i++){ var r=rows[i]||[]; var nome=r[0], dep=r[1]; if(!nome||!String(nome).trim()) continue; var meses={}; var temValor=false; Object.keys(colMes).forEach(function(c){ var v=num(r[c]); if(v){ meses[colMes[c]]=v; temValor=true; } }); if(!temValor) continue; var m=acharFunc(nome); var id='cst_'+par[1]+'_'+ano+'_'+slug(nome); registros.push({id:id,tipo:par[1],ano:ano,funcNome:String(nome).trim(),funcId:(m?m.id:''),dept:dep,meses:meses}); if(!m) pendSet[norm(nome)]=String(nome).trim(); } });
+    return {registros:registros,pendentes:Object.keys(pendSet).map(function(k){return pendSet[k];})}; }
+  window.__gwaCustosSalvarImport=async function(){ if(!_import||!_import.registros.length){ alert('Nada para salvar.'); return; } var regs=_import.registros; var prog=document.getElementById('cImpProg'); var ok=0,er=0; for(var i=0;i<regs.length;i++){ try{ var r=await fetch(base()+'/api/custos/'+encodeURIComponent(regs[i].id),{method:'PUT',headers:H(),body:JSON.stringify(Object.assign({atualizadoEm:Date.now()},regs[i]))}); if(r.ok)ok++; else er++; }catch(e){ er++; } if(prog&&(i%10===0)) prog.textContent='Salvando '+(i+1)+'/'+regs.length+'...'; }
+    if(prog) prog.textContent='Concluído: '+ok+' salvos'+(er?(', '+er+' erros'):''); await loadCustos(); _import=null; alert('Importação concluída: '+ok+' registros.'); _view='painel'; render(); };
+
+  /* ---------- LANÇAMENTOS ---------- */
+  function viewLanc(){ if(!(_custos&&_custos.length)) return '<div style="color:'+Co.mut+';padding:30px;text-align:center">Nada importado ainda.</div>';
+    var tipos=[['empresa','Custos da empresa'],['salario','Salário líquido'],['beneficio','Benefícios'],['premiacao','Premiações']];
+    var html=''; tipos.forEach(function(tp){ var rows=recs(tp[0]); if(!rows.length) return; var body=rows.map(function(r){ var linha=(r.tipo==='empresa'?(esc(r.centroCusto||'')+' · '+esc(r.categoria||'')):esc(r.funcNome||'')+' ('+esc(r.dept||'')+')'); var mesesTxt=''; for(var m=1;m<=12;m++){ var v=num((r.meses||{})[m]); if(v) mesesTxt+='<span style="display:inline-block;margin:2px;font-size:11px;color:'+Co.mut+'">'+MESES[m-1].slice(0,3)+': <b style="color:'+Co.sub+'">'+money(v)+'</b></span>'; } var tot=somaRec(r); return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:9px 10px;color:#fff">'+linha+'</td><td style="padding:9px 10px">'+mesesTxt+'</td><td style="padding:9px 10px;color:'+Co.green+';font-weight:700;white-space:nowrap">'+money(tot)+'</td></tr>'; }).join('');
+      html+=sec(tp[1]+' — '+anoAtual(),'fa-table-list','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><tbody>'+body+'</tbody></table></div></div>'); });
+    return html||'<div style="color:'+Co.mut+'">Sem lançamentos para '+anoAtual()+'.</div>'; }
+
+  /* ---------- CONCILIAÇÃO ---------- */
+  function viewConcil(){ var pend={}; (_custos||[]).forEach(function(r){ if((r.tipo==='salario'||r.tipo==='beneficio'||r.tipo==='premiacao') && !r.funcId){ pend[norm(r.funcNome)]=r.funcNome; } });
+    var nomes=Object.keys(pend).map(function(k){return pend[k];}); if(!nomes.length) return '<div style="text-align:center;color:'+Co.green+';padding:40px"><i class="fas fa-circle-check" style="font-size:34px"></i><h3 style="color:#fff">Tudo conciliado!</h3><p>Nenhum funcionário pendente de vínculo.</p></div>';
+    var optsU='<option value="">— selecionar funcionário —</option>'+usuarios().slice().sort(function(a,b){return String(a.nome||a.login).localeCompare(String(b.nome||b.login));}).map(function(u){return '<option value="'+esc(loginU(u))+'">'+esc(u.nome||u.login)+'</option>';}).join('');
+    var rows=nomes.map(function(nm){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:10px;color:#fff">'+esc(nm)+'</td><td style="padding:10px"><select id="cvin_'+slug(nm)+'" '+inp()+'>'+optsU+'</select></td><td style="padding:10px"><button onclick="__gwaCustosVincular(&#39;'+esc(nm).replace(/'/g,"\\'")+'&#39;)" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:8px;padding:7px 12px;cursor:pointer">Vincular</button></td></tr>'; }).join('');
+    return sec('Funcionários a vincular','fa-people-arrows','<p style="font-size:12px;color:'+Co.mut+';margin:0 0 10px">Estes nomes vieram na planilha mas não bateram com nenhum cadastro. Vincule cada um — a partir daí o vínculo fica memorizado para as próximas importações.</p><div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><tbody>'+rows+'</tbody></table></div>'); }
+  window.__gwaCustosVincular=async function(nome){ var sel=document.getElementById('cvin_'+slug(nome)); if(!sel||!sel.value){ alert('Selecione um funcionário.'); return; } var fid=sel.value; _cfg.mapaVinculos=_cfg.mapaVinculos||{}; _cfg.mapaVinculos[norm(nome)]=fid; await saveCfg();
+    var alvos=(_custos||[]).filter(function(r){ return (r.tipo==='salario'||r.tipo==='beneficio'||r.tipo==='premiacao') && norm(r.funcNome)===norm(nome); });
+    for(var i=0;i<alvos.length;i++){ alvos[i].funcId=fid; try{ await fetch(base()+'/api/custos/'+encodeURIComponent(alvos[i].id),{method:'PUT',headers:H(),body:JSON.stringify(alvos[i])}); }catch(e){} }
+    alert('Vinculado! Próximas importações reconhecem automaticamente.'); render(); };
+
+  /* ---------- PERMISSÕES ---------- */
+  function viewPerm(){ if(!isMaster()) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito ao Master.</div>';
+    var us=usuarios().filter(function(u){ return loginU(u)!=='TALIS' && role()!=='master'; }).sort(function(a,b){return String(a.nome||a.login).localeCompare(String(b.nome||b.login));});
+    var rows=us.map(function(u){ var L=loginU(u); var on=!!(_cfg.permissoes&&_cfg.permissoes[L]); return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:9px 10px;color:#fff">'+esc(u.nome||u.login)+'<div style="font-size:10px;color:'+Co.mut+'">'+esc(u.login||'')+'</div></td><td style="padding:9px 10px;text-align:center"><input type="checkbox" id="cperm_'+L+'" '+(on?'checked':'')+' style="width:18px;height:18px;accent-color:'+Co.orange+'"></td></tr>'; }).join('');
+    return sec('Quem pode acessar a área de Custos','fa-user-shield','<p style="font-size:12px;color:'+Co.mut+';margin:0 0 10px">Marque os administradores que podem ver os custos. Só o Master vê esta aba.</p><div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px;text-align:left">Usuário</th><th style="padding:10px">Acesso</th></tr></thead><tbody>'+rows+'</tbody></table></div><div style="margin-top:14px"><button onclick="__gwaCustosSalvarPerm()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:11px 20px;font-weight:700;cursor:pointer"><i class="fas fa-save"></i> Salvar permissões</button></div>'); }
+  window.__gwaCustosSalvarPerm=async function(){ _cfg.permissoes={}; usuarios().forEach(function(u){ var L=loginU(u); var el=document.getElementById('cperm_'+L); if(el&&el.checked) _cfg.permissoes[L]=true; }); var ok=await saveCfg(); alert(ok?'Permissões salvas!':'Falha ao salvar.'); render(); };
+
+  /* ---------- NAV ---------- */
+  function addNav(){ try{ if(document.getElementById('gwaCustosNav')) return; if(!podeCustos()){ if(_cfg===null){ loadCfg().then(function(){ if(podeCustos()) addNav(); }); } return; } var ref=document.getElementById('gwaVendasNav')||document.getElementById('navIAGWA'); var nav=document.querySelector('.mc-nav')||document.querySelector('nav'); var a=document.createElement('a'); a.id='gwaCustosNav'; a.className='mc-nav__item'; a.style.cursor='pointer'; a.innerHTML='<i class="fas fa-coins"></i> Custos'; a.onclick=function(){ gwaAbrirCustos(); }; if(ref&&ref.parentNode){ ref.parentNode.insertBefore(a,ref.nextSibling); } else if(nav){ nav.appendChild(a); } else { var b=document.createElement('button'); b.id='gwaCustosNav'; b.innerHTML='<i class="fas fa-coins"></i> Custos'; b.style.cssText='position:fixed;bottom:22px;right:170px;z-index:9990;background:linear-gradient(135deg,#f0943a,#c4661a);color:#fff;border:none;border-radius:30px;padding:12px 20px;font-weight:700;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35)'; b.onclick=function(){gwaAbrirCustos();}; document.body.appendChild(b); } }catch(e){} }
+  setInterval(addNav,3500); document.addEventListener('DOMContentLoaded',function(){ setTimeout(addNav,3500); });
+  var _ep=window.enterPortal; if(typeof _ep==='function'){ window.enterPortal=function(){ var r=_ep.apply(this,arguments); setTimeout(function(){ loadCfg().then(addNav); },1500); return r; }; }
+  loadCfg();
+})();
 </script>
 </body>
 </html>
