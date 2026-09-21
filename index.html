@@ -10160,7 +10160,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var titulo='Vendas GWA — '+periodoLabel()+((_dept==='consolidado')?' (Consolidado)':' ('+_dept+')');
     var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Vendas</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table border="1"><caption style="text-align:left;font-weight:bold">'+esc(titulo)+'</caption><thead>'+thead+'</thead><tbody>'+body+totalRow+'</tbody></table></body></html>';
     var blob=new Blob(['\ufeff'+html],{type:'application/vnd.ms-excel;charset=utf-8'});
-    var nome='vendas_'+(_dept||'todos')+'_'+_filtro.periodo+'_'+ymd(new Date())+'.xls';
+    var _hj=new Date(); var _hjs=_hj.getFullYear()+'-'+String(_hj.getMonth()+1).padStart(2,'0')+'-'+String(_hj.getDate()).padStart(2,'0'); var nome='vendas_'+(_dept||'todos')+'_'+_filtro.periodo+'_'+_hjs+'.xls';
     var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nome; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },1500);
   }catch(e){ alert('Erro ao exportar: '+(e&&e.message||e)); } };
   function viewMetasAdmin(dept){ var deptList=dept?[dept]:['comercial','negociacao'].filter(function(d){return podeDept(d);}); var mv=(_cfg&&_cfg.metasVendedor)||{};
