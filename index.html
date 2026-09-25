@@ -10926,8 +10926,31 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   async function loadTodos(){ for(var i=0;i<ORDEM.length;i++){ await loadRegs(ORDEM[i]); } return _regs; }
   async function saveReg(o){ try{ var r=await fetch(base()+'/api/'+col()+'/'+encodeURIComponent(o.id),{method:'PUT',headers:H(),body:JSON.stringify(o)}); return r.ok; }catch(e){ return false; } }
 
+  /* ---- Encaixe dos tipos de defesa antigos nos 10 tipos oficiais ---- */
+  function canonTipos(txt){ var t=norm(txt); if(!t) return [];
+    t=t.replace(/\b\d+\b/g,' ');
+    t=t.replace(/\bSU\w*PENS\w*/g,'SUSPENSAO').replace(/\bSUSP\b/g,'SUSPENSAO');
+    t=t.replace(/\bCASS\w*/g,'CASSACAO');
+    t=t.replace(/\b(REC\w*|REF\w*)\s+(DE\s+)?MU\w*/g,'RECMULTA');
+    t=t.replace(/\bMULTA DE TRANSITO\b/g,'RECMULTA').replace(/\bMULTA\b/g,'RECMULTA');
+    t=t.replace(/\bALCOOL\w*/g,'ALCOOLEMIA').replace(/\bPRESC\w*/g,'PRESCRICAO');
+    t=t.replace(/\s+/g,' ').trim();
+    var alc=t.indexOf('ALCOOLEMIA')>=0, pres=t.indexOf('PRESCRICAO')>=0, out=[];
+    if(t.indexOf('SUSPENSAO')>=0) out.push(pres?'SUSPENSÃO PRESCRIÇÃO':((alc&&t.indexOf('RECMULTA')<0)?'SUSPENSÃO POR ALCOOLEMIA':'SUSPENSÃO'));
+    if(t.indexOf('CASSACAO')>=0) out.push(pres?'CASSAÇÃO PRESCRIÇÃO':'CASSAÇÃO');
+    if(t.indexOf('RECMULTA')>=0) out.push(alc?'RECURSO DE MULTA ALCOOLEMIA':'RECURSO DE MULTA');
+    if(t.indexOf('PROVISORIA')>=0) out.push('PROVISÓRIA');
+    if(t.indexOf('REQUERIMENTO')>=0) out.push('REQUERIMENTO');
+    if(t.indexOf('NOTIFICACAO')>=0) out.push('NOTIFICAÇÃO EXTRAJUDICIAL');
+    if(!out.length&&alc) out.push('SUSPENSÃO POR ALCOOLEMIA');
+    var r=[]; out.forEach(function(x){ if(r.indexOf(x)<0) r.push(x); });
+    if(!r.length && String(txt||'').trim()) r.push('OUTROS');
+    return r; }
+  function tiposDoRegistro(r){ if(r&&r.defesas&&r.defesas.length){ var l=[]; r.defesas.forEach(function(d){ (canonTipos(d.tipo)||[]).forEach(function(x){ if(l.indexOf(x)<0)l.push(x); }); }); if(l.length) return l; }
+    return canonTipos(r&&r.tipoDefesa); }
   /* ---------------- categoria / status / data ---------------- */
-  function categoriaDe(t,r){ var v=t==='defesa'?r.tipoDefesa:(t==='doc'?r.servicoContratado:r.plataforma); return String(v||'').trim()||'(sem categoria)'; }
+  function categoriaDe(t,r){ if(t==='defesa'){ var l=tiposDoRegistro(r); return l.length?l.join(' + '):'(nao informado)'; }
+    var v=(t==='doc')?r.servicoContratado:r.plataforma; return String(v||'').trim()||'(sem categoria)'; }
   function statusDe(t,r){ if(t==='defesa'){ if(String(r.objeto||'').trim()) return 'Com rastreio'; return String(r.tipoEnvio||'').toUpperCase()==='CORREIOS'?'Aguardando rastreio':(String(r.tipoEnvio||'').trim()||'(sem status)'); }
     if(t==='doc') return String(r.docsOkPasta||'').trim()||'(sem status)'; return String(r.status||'').trim()||'(sem status)'; }
   function dataDe(t,r){ return r.data||r.concluidoEm||r.dataContrato||r.feitoEm||''; }
@@ -11207,7 +11230,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px"><div><label style="font-size:12px;color:'+Co.sub+'">ID do cliente Google (OAuth)</label><input id="dgCid" value="'+esc(_cfg.googleClientId||'')+'" placeholder="xxxx.apps.googleusercontent.com" style="'+inpStyle()+'"></div><div><label style="font-size:12px;color:'+Co.sub+'">Nome da planilha</label><input id="dgName" value="'+esc(_cfg.sheetName||'Documentacao GWA')+'" style="'+inpStyle()+'"></div></div>'+
       (conectada?('<div style="margin-top:10px;font-size:12px;color:'+Co.green+'"><i class="fas fa-circle-check"></i> Planilha vinculada: <a href="https://docs.google.com/spreadsheets/d/'+esc(_cfg.sheetId)+'" target="_blank" style="color:'+Co.orangeL+'">abrir</a></div>'):'')+
       '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="__gwaDocGsConectar()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:12px 18px;font-weight:700;cursor:pointer"><i class="fab fa-google"></i> '+(conectada?'Reconectar / recriar':'Conectar e gerar planilha')+'</button>'+(conectada?'<button onclick="__gwaDocGsSync()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:#fff;border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer"><i class="fas fa-rotate"></i> Exportar tudo agora</button>':'')+'</div></div>';
-    return '<div style="max-width:860px">'+google+
+    var norma='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:16px"><h3 style="margin:0 0 6px;color:#fff;font-size:15px"><i class="fas fa-broom" style="color:'+Co.orange+'"></i> Limpar tipos de defesa antigos</h3><p style="font-size:12px;color:'+Co.mut+';margin:0 0 12px">Os registros importados das planilhas tem o tipo escrito de varias formas (SUSPENSAO, SUSP, SUSPENSCAO, 2 CASSACOES...). Isso encaixa cada um nos <b>10 tipos oficiais</b> e preenche a lista de defesas do registro. Roda uma vez; pode repetir sem problema.</p><button onclick="__gwaDocNormalizarTipos()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-wand-magic-sparkles"></i> Normalizar tipos de defesa</button><div id="normProg" style="margin-top:10px;font-size:12px;color:'+Co.orangeL+'"></div></div>';
+    return '<div style="max-width:860px">'+norma+google+
       '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:10px">Campos de: <b style="color:'+Co.orange+'">'+esc(TIPOS[_tipo].plural.toUpperCase())+'</b> (troque no seletor do topo)</div>'+
       '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:16px"><h3 style="margin:0 0 8px;color:#fff;font-size:15px"><i class="fas fa-list" style="color:'+Co.orange+'"></i> Campos padrao</h3><div>'+baseList+'</div></div>'+
       '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px"><h3 style="margin:0 0 12px;color:#fff;font-size:15px"><i class="fas fa-plus" style="color:'+Co.orange+'"></i> Campos personalizados</h3>'+
@@ -11217,6 +11241,21 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     _cfg.camposExtra=_cfg.camposExtra||{}; if(Array.isArray(_cfg.camposExtra)) _cfg.camposExtra={defesa:_cfg.camposExtra}; _cfg.camposExtra[_tipo]=_cfg.camposExtra[_tipo]||[]; _cfg.camposExtra[_tipo].push({key:key,label:lbl,tipo:tipo,opcoes:opc});
     var ok=await saveCfg(); if(ok){ render(); } else { alert('Falha ao salvar.'); _cfg.camposExtra[_tipo].pop(); } };
   window.__gwaDocCampoRemover=async function(key){ if(!confirm('Remover este campo? (os dados ja lancados nele nao sao apagados)')) return; _cfg.camposExtra[_tipo]=(extras(_tipo)).filter(function(c){return c.key!==key;}); var ok=await saveCfg(); if(ok) render(); else alert('Falha ao salvar.'); };
+
+  window.__gwaDocNormalizarTipos=async function(){ if(!ehAdminDoc()) return;
+    await loadRegs('defesa'); var lista=regs('defesa');
+    var alvo=lista.filter(function(r){ var novo=canonTipos(r.tipoDefesa).join(' + '); return novo && novo!==String(r.tipoDefesa||'').trim(); });
+    if(!alvo.length){ alert('Nada para normalizar — os tipos já estão encaixados.'); return; }
+    if(!confirm('Normalizar '+alvo.length+' registro(s) de defesa para os 10 tipos oficiais?')) return;
+    var p=document.getElementById('normProg'); var ok=0, fail=0;
+    for(var i=0;i<alvo.length;i+=8){ var lote=alvo.slice(i,i+8);
+      await Promise.all(lote.map(async function(r){ var tp=canonTipos(r.tipoDefesa);
+        if(!r.defesas||!r.defesas.length){ r.defesas=tp.map(function(t){ return {tipo:t,protocolos:(r.protocolo?[r.protocolo]:[])}; }); }
+        r.tipoDefesaOriginal=r.tipoDefesaOriginal||r.tipoDefesa; r.tipoDefesa=tp.join(' + '); r.atualizadoEm=Date.now();
+        try{ var res=await fetch(base()+'/api/doc_defesa/'+encodeURIComponent(r.id),{method:'PUT',headers:H(),body:JSON.stringify(r)}); if(res.ok) ok++; else fail++; }catch(e){ fail++; } }));
+      if(p) p.textContent='Normalizando... '+Math.min(i+8,alvo.length)+'/'+alvo.length; }
+    if(p) p.textContent='Concluído: '+ok+' normalizado(s)'+(fail?(' | '+fail+' falha(s)'):'')+'.';
+    alert('Normalização concluída: '+ok+' registro(s).'); render(); };
 
   /* ---------------- IMPORTAR ---------------- */
   function viewImportar(){ if(!ehAdminDoc()) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito.</div>';
@@ -11559,7 +11598,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       if(_rPer!=='tudo'){ var sav=_dPer,si=_dIni,sf=_dFim; _dPer=_rPer;_dIni=_rIni;_dFim=_rFim; var ok=dentroPeriodo(d); _dPer=sav;_dIni=si;_dFim=sf; if(!ok) return false; }
       if(_rCons && !mesmoConsultor(consultorDe(r),_rCons)) return false;
       if(_rEquipe){ var sup=supervisorDoRegistro(r); if(!mesmoConsultor(sup,_rEquipe)) return false; }
-      if(_rTipo && String(r.tipoDefesa||'').toUpperCase().indexOf(_rTipo.toUpperCase())<0) return false;
+      if(_rTipo && tiposDoRegistro(r).indexOf(_rTipo)<0) return false;
       if(_rEnvio && String(r.tipoEnvio||'')!==_rEnvio) return false;
       if(_rOrgao && norm(r.orgao||r.municipio)!==norm(_rOrgao)) return false;
       if(_rMun && norm(r.municipio)!==norm(_rMun)) return false;
@@ -11583,7 +11622,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       sel('status','Status',uniq(function(r){return statusDe('defesa',r);}),_rStatus,150)+
       '<button onclick="__gwaRel(&#39;limpar&#39;,&#39;&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:9px;padding:9px 14px;cursor:pointer">Limpar</button></div>';
     var arr=relFiltra();
-    var porCons={}; arr.forEach(function(r){ var c=consultorDe(r); if(!porCons[c])porCons[c]={consultor:c,sup:supervisorDoRegistro(r)||'-',total:0,correio:0,online:0,tipos:{}}; var o=porCons[c]; o.total++; if(String(r.tipoEnvio||'').toUpperCase()==='CORREIOS')o.correio++; else if(String(r.tipoEnvio||'').toUpperCase()==='ONLINE')o.online++; (r.defesas&&r.defesas.length?r.defesas.map(function(d){return d.tipo;}):[r.tipoDefesa]).forEach(function(t){ t=String(t||'').trim(); if(t)o.tipos[t]=(o.tipos[t]||0)+1; }); });
+    var porCons={}; arr.forEach(function(r){ var c=consultorDe(r); if(!porCons[c])porCons[c]={consultor:c,sup:supervisorDoRegistro(r)||'-',total:0,correio:0,online:0,tipos:{}}; var o=porCons[c]; o.total++; if(String(r.tipoEnvio||'').toUpperCase()==='CORREIOS')o.correio++; else if(String(r.tipoEnvio||'').toUpperCase()==='ONLINE')o.online++; tiposDoRegistro(r).forEach(function(t){ o.tipos[t]=(o.tipos[t]||0)+1; }); });
     var linhas=Object.keys(porCons).map(function(k){return porCons[k];}).sort(function(a,b){return b.total-a.total;});
     var totCor=arr.filter(function(r){return String(r.tipoEnvio||'').toUpperCase()==='CORREIOS';}).length;
     var totOn=arr.filter(function(r){return String(r.tipoEnvio||'').toUpperCase()==='ONLINE';}).length;
@@ -11603,8 +11642,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var porCons={}; arr.forEach(function(r){ var c=consultorDe(r); (porCons[c]=porCons[c]||[]).push(r); });
     var nomes=Object.keys(porCons).sort();
     var blocos=nomes.map(function(c){ var its=porCons[c].slice().sort(function(a,b){ var da=parseData(a.data),db=parseData(b.data); return (da?da.getTime():0)-(db?db.getTime():0); });
-      var linhas=its.map(function(r){ return '<tr><td>'+esc(r.data||'')+'</td><td>'+esc(r.nome||'')+'</td><td>'+esc(r.cpf||'')+'</td><td>'+esc(r.tipoDefesa||'')+'</td><td>'+esc(r.protocolosTxt||r.protocolo||'')+'</td><td>'+esc((r.orgao||r.municipio||'')+(r.uf?(' / '+r.uf):''))+'</td><td style="text-align:center">'+esc(r.tipoEnvio||'')+'</td></tr>'; }).join('');
-      var tipos={}; its.forEach(function(r){ (r.defesas&&r.defesas.length?r.defesas.map(function(d){return d.tipo;}):[r.tipoDefesa]).forEach(function(t){ t=String(t||'').trim(); if(t)tipos[t]=(tipos[t]||0)+1; }); });
+      var linhas=its.map(function(r){ return '<tr><td>'+esc(r.data||'')+'</td><td>'+esc(r.nome||'')+'</td><td>'+esc(r.cpf||'')+'</td><td>'+esc(tiposDoRegistro(r).join(' + '))+'</td><td>'+esc(r.protocolosTxt||r.protocolo||'')+'</td><td>'+esc((r.orgao||r.municipio||'')+(r.uf?(' / '+r.uf):''))+'</td><td style="text-align:center">'+esc(r.tipoEnvio||'')+'</td></tr>'; }).join('');
+      var tipos={}; its.forEach(function(r){ tiposDoRegistro(r).forEach(function(t){ tipos[t]=(tipos[t]||0)+1; }); });
       var resumo=Object.keys(tipos).map(function(t){ return t+': '+tipos[t]; }).join(' &middot; ');
       return '<div class="bloco"><h3>'+esc(c)+' <span class="qtd">'+its.length+' defesa(s)</span></h3><div class="res">'+esc(supervisorDoRegistro(its[0])||'')+(resumo?(' — '+resumo):'')+'</div><table><thead><tr><th>Data</th><th>Cliente</th><th>CPF</th><th>Tipo(s) de defesa</th><th>Protocolos</th><th>Orgao / UF</th><th>Envio</th></tr></thead><tbody>'+linhas+'</tbody></table><div class="tot">Total do consultor: <b>'+its.length+'</b></div></div>'; }).join('');
     var totCor=arr.filter(function(r){return String(r.tipoEnvio||'').toUpperCase()==='CORREIOS';}).length;
