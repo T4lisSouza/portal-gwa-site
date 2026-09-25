@@ -10972,12 +10972,12 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   /* ---------------- overlay ---------------- */
   function open(){ ensurePanel(); document.getElementById('gwaDocOverlay').style.display='flex';
-    loadCfg().then(function(){ if(!temAcesso()){ render(); return null; } return loadRegs(_tipo); }).then(function(){ if(!_view)_view=(ehAdminDoc()||ehSupervisor())?'dash':'lancar'; render(); }); }
+    loadCfg().then(function(){ if(!temAcesso()){ render(); return null; } return loadRegs(_tipo); }).then(function(){ if(!_view)_view='dash'; render(); }); }
   function close(){ var o=document.getElementById('gwaDocOverlay'); if(o)o.style.display='none'; }
   window.gwaAbrirDocumentacao=open;
   function ensurePanel(){ if(document.getElementById('gwaDocOverlay')) return; var o=document.createElement('div'); o.id='gwaDocOverlay'; o.style.cssText='position:fixed;inset:0;z-index:99991;background:linear-gradient(180deg,'+Co.bgA+','+Co.bgB+');display:none;flex-direction:column;overflow:auto;font-family:inherit'; o.innerHTML='<div id="gwaDocHead" style="position:sticky;top:0;background:'+Co.bgA+';border-bottom:3px solid '+Co.orangeD+';color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;z-index:3;box-shadow:0 4px 18px rgba(0,0,0,.4)"></div><div id="gwaDocBody" style="padding:22px;max-width:1280px;margin:0 auto;width:100%;box-sizing:border-box"></div>'; document.body.appendChild(o); }
   function tabs(){ var t=[];
-    if(ehAdminDoc()||ehSupervisor()) t.push(['dash','Dashboard','fa-chart-pie']);
+    t.push(['dash',(ehAdminDoc()||ehSupervisor())?'Dashboard':'Meu painel','fa-chart-pie']);
     t.push(['lista', ehAdminDoc()?T().plural:(ehSupervisor()?'Equipe':'Meus registros'),'fa-table-list']);
     t.push(['lancar','Lancar','fa-plus']);
     t.push(['cashback','Premiação DOC','fa-wallet']);
@@ -10987,14 +10987,14 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function render(){ ensurePanel(); var head=document.getElementById('gwaDocHead'), body=document.getElementById('gwaDocBody'); if(!head||!body) return;
     if(!temAcesso()){ head.innerHTML='<div style="font-size:18px;font-weight:800">Documentacao GWA</div><button onclick="__gwaDocClose()" style="width:38px;height:38px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:'+Co.sub+';cursor:pointer"><i class="fas fa-times"></i></button>';
       body.innerHTML='<div style="max-width:520px;margin:50px auto;text-align:center;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:34px;color:'+Co.sub+'"><i class="fas fa-lock" style="font-size:36px;color:'+Co.orange+'"></i><h3 style="color:#fff;margin:16px 0 8px">Acesso nao liberado</h3><p style="line-height:1.5">Seu usuario ainda nao tem permissao na Documentacao GWA.<br>Peca ao administrador para liberar em <b style="color:'+Co.orange+'">Documentacao &rarr; Acessos</b>.</p></div>'; return; }
-    if(!_view)_view=(ehAdminDoc()||ehSupervisor())?'dash':'lancar';
+    if(!_view)_view='dash';
     var mostraSel=(_view!=='dash'&&_view!=='acessos'&&_view!=='correios'&&_view!=='cashback'&&_view!=='relatorios'&&_view!=='orgaos');
     var sel=mostraSel?('<select onchange="__gwaDocTipo(this.value)" style="padding:8px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;font-weight:700;cursor:pointer">'+ORDEM.map(function(k){ return '<option value="'+k+'"'+(_tipo===k?' selected':'')+'>'+esc(TIPOS[k].plural.toUpperCase())+'</option>'; }).join('')+'</select>'):'';
     var nv=nivel(); var badge='<span style="background:'+Co.card2+';border:1px solid '+(nv==='admin'?Co.orange:(nv==='supervisor'?Co.blue:Co.line))+';color:'+(nv==='admin'?Co.orangeL:(nv==='supervisor'?Co.blue:Co.sub))+';border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;text-transform:uppercase">'+esc(nv)+'</span>';
     head.innerHTML='<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><img src="'+GWA_LOGO+'" style="height:40px;width:auto;max-width:120px;object-fit:contain;background:#fff;padding:4px 6px;border-radius:8px"><div><div style="font-size:18px;font-weight:800">Documentacao GWA</div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:1px">Defesas, documentacao e elogios</div></div>'+badge+sel+'</div>'+
       '<div style="display:flex;gap:7px;flex-wrap:wrap">'+tabs().map(function(t){var on=_view===t[0]; return '<button onclick="__gwaDocView(&#39;'+t[0]+'&#39;)" style="padding:8px 14px;border-radius:10px;border:1px solid '+(on?'transparent':Co.line)+';background:'+(on?Co.gradO:Co.card2)+';color:#fff;font-size:13px;font-weight:600;cursor:pointer"><i class="fas '+t[2]+'"></i> '+t[1]+'</button>';}).join('')+'<button onclick="__gwaDocClose()" style="width:38px;height:38px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:'+Co.sub+';cursor:pointer"><i class="fas fa-times"></i></button></div>';
     try{
-      if(_view==='dash'&&(ehAdminDoc()||ehSupervisor())) body.innerHTML=viewDash();
+      if(_view==='dash') body.innerHTML=(ehAdminDoc()||ehSupervisor())?viewDash():viewDashMeu();
       else if(_view==='acessos'&&ehAdminDoc()) body.innerHTML=viewAcessos();
       else if(_view==='config'&&ehAdminDoc()) body.innerHTML=viewConfig();
       else if(_view==='importar'&&ehAdminDoc()) body.innerHTML=viewImportar();
@@ -11128,6 +11128,55 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   window.__gwaDocDash=function(k,v){ if(k==='envio')_dEnvio=v; else if(k==='tipo')_dTipo=v; else if(k==='cons')_dCons=v; else if(k==='sup')_dSup=v; else if(k==='cat')_dCat=v; else if(k==='status')_dStatus=v; else if(k==='per')_dPer=v; else if(k==='ini')_dIni=v; else if(k==='fim')_dFim=v;
     else if(k==='limpar'){ _dTipo='';_dCons='';_dSup='';_dCat='';_dStatus='';_dEnvio='';_dPer='mes';_dIni='';_dFim=''; } render(); };
 
+  /* ---------------- DASHBOARD DO OPERADOR (metricas pessoais) ---------------- */
+  function viewDashMeu(){ var itens=dadosDash(); var hj=new Date();
+    var meuNome=canonConsultor((curU()||{}).nome||loginU(curU()));
+    var defsAll=filtraEscopo(regs('defesa'));
+    var dts=defsAll.map(function(r){ return parseData(dataDe('defesa',r)); });
+    var noDia=dts.filter(function(d){ return d&&d.getDate()===hj.getDate()&&d.getMonth()===hj.getMonth()&&d.getFullYear()===hj.getFullYear(); }).length;
+    var noMes=dts.filter(function(d){ return d&&d.getMonth()===hj.getMonth()&&d.getFullYear()===hj.getFullYear(); }).length;
+    var noAno=dts.filter(function(d){ return d&&d.getFullYear()===hj.getFullYear(); }).length;
+    var porTipo={}; itens.forEach(function(i){ porTipo[i.tipo]=(porTipo[i.tipo]||0)+1; });
+    var cor=itens.filter(function(i){ return i.tipo==='defesa'&&String(i.reg.tipoEnvio||'').toUpperCase()==='CORREIOS'; }).length;
+    var onl=itens.filter(function(i){ return i.tipo==='defesa'&&String(i.reg.tipoEnvio||'').toUpperCase()==='ONLINE'; }).length;
+    var comRast=itens.filter(function(i){ return i.tipo==='defesa'&&String(i.reg.objeto||'').trim(); }).length;
+    var pctRast=cor?Math.round(comRast/cor*100):0;
+    /* premiacao do mes */
+    var per=perAtual(); var eu=resumoCashback(per,false).filter(function(x){ return mesmoConsultor(x.consultor,meuNome); })[0]||{enviados:0,concluidos:0,pendentes:0,valorUnit:0,total:0,pct:0,faixa:faixaDe(0)};
+    var prox=proxFaixa(eu.concluidos); var faltam=prox?Math.max(0,Number(prox.de)-eu.concluidos):0;
+
+    var per2='<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">Periodo</label><select onchange="__gwaDocDash(&#39;per&#39;,this.value)" style="padding:8px 10px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff">'+
+      [['mes','Mes atual'],['mesant','Mes anterior'],['d30','Ultimos 30 dias'],['d90','Ultimos 90 dias'],['ano','Ano atual'],['tudo','Tudo'],['custom','Personalizado']].map(function(o){return '<option value="'+o[0]+'"'+(_dPer===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select></div>'+
+      (_dPer==='custom'?('<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">De</label><input type="date" value="'+esc(_dIni)+'" onchange="__gwaDocDash(&#39;ini&#39;,this.value)" style="padding:7px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"></div><div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">Ate</label><input type="date" value="'+esc(_dFim)+'" onchange="__gwaDocDash(&#39;fim&#39;,this.value)" style="padding:7px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"></div>'):'');
+    var envSel='<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">Tipo de envio</label><select onchange="__gwaDocDash(&#39;envio&#39;,this.value)" style="padding:8px 10px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"><option value="">Todos</option><option value="CORREIOS"'+(_dEnvio==='CORREIOS'?' selected':'')+'>Correio</option><option value="ONLINE"'+(_dEnvio==='ONLINE'?' selected':'')+'>Online</option></select></div>';
+    var areaSel='<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">Area</label><select onchange="__gwaDocDash(&#39;tipo&#39;,this.value)" style="padding:8px 10px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"><option value="">Todas</option>'+ORDEM.map(function(t){return '<option value="'+t+'"'+(_dTipo===t?' selected':'')+'>'+esc(TIPOS[t].plural)+'</option>';}).join('')+'</select></div>';
+    var filtros='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:14px 16px;margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">'+per2+areaSel+envSel+'<button onclick="__gwaDocDash(&#39;limpar&#39;,&#39;&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:9px;padding:9px 14px;cursor:pointer">Limpar</button></div>';
+
+    var ola='<div style="background:linear-gradient(135deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:16px;padding:16px 20px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px">Meu painel</div><div style="font-size:20px;font-weight:800;color:#fff;margin-top:3px">'+esc(meuNome)+'</div></div><div style="text-align:right"><div style="font-size:11px;color:'+Co.mut+'">Minhas defesas hoje</div><div style="font-size:30px;font-weight:900;color:'+Co.green+'">'+noDia+'</div></div></div>';
+    var cards='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
+      card('Defesas no dia',noDia,'hoje',Co.green)+card('Defesas no mes',noMes,null,Co.orangeL)+card('Defesas no ano',noAno,null,Co.blue)+
+      card('Registros no periodo',itens.length,'todas as areas',Co.orangeL)+
+      card('Por correio',cor,null,Co.green)+card('Online',onl,null,Co.blue)+'</div>';
+    var cards2='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
+      card('Defesas',porTipo.defesa||0,'no periodo')+card('Documentacao',porTipo.doc||0,'no periodo')+card('Elogios',porTipo.elogio||0,'no periodo')+
+      card('Rastreio Correios',pctRast+'%',comRast+' de '+cor,pctRast>=80?Co.green:Co.orangeL)+'</div>';
+
+    var prem='<div style="background:'+Co.card+';border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px;margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px"><h4 style="margin:0;color:#fff;font-size:14px"><i class="fas fa-wallet" style="color:'+Co.orange+'"></i> Minha Premiacao DOC &middot; '+perLabel(per)+'</h4><button onclick="__gwaDocView(&#39;cashback&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orangeL+';border-radius:9px;padding:7px 13px;cursor:pointer;font-size:12px">Ver detalhes</button></div>'+
+      '<div style="display:flex;gap:14px;flex-wrap:wrap">'+gauge('Enviados', eu.enviados/Math.max(1,Math.max(eu.enviados,50)), String(eu.enviados), Co.blue)+gauge('Verificados', eu.concluidos/Math.max(1,prox?Number(prox.de):Math.max(1,eu.concluidos)), String(eu.concluidos), Co.orangeL)+gauge('% de elogio', (eu.pct||0)/100, (eu.pct||0).toFixed(1)+'%', Co.green)+
+      '<div style="flex:1 1 180px;min-width:180px;background:linear-gradient(160deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:16px;padding:16px;text-align:center;display:flex;flex-direction:column;justify-content:center"><div style="font-size:28px">&#127942;</div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;margin-top:3px">Premiacao</div><div style="font-size:26px;font-weight:900;color:'+Co.orangeL+'">'+moedaBR(eu.total)+'</div></div></div>'+
+      (prox?('<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;font-size:12px;color:'+Co.sub+'"><span>Proxima faixa</span><span>'+eu.concluidos+' / '+prox.de+'</span></div><div style="height:12px;border-radius:8px;background:'+Co.card2+';overflow:hidden;margin:6px 0"><div style="height:100%;width:'+Math.min(100,eu.concluidos/Number(prox.de)*100)+'%;background:'+Co.gradO+'"></div></div><div style="font-size:12px;color:'+Co.orangeL+'">Faltam <b>'+faltam+'</b> elogio(s) verificado(s) para '+moedaBR(prox.valor)+' por elogio.</div></div>'):'')+
+      (eu.pendentes?('<div style="margin-top:10px;font-size:12px;color:'+Co.mut+'"><i class="fas fa-hourglass-half" style="color:'+Co.orangeL+'"></i> '+eu.pendentes+' elogio(s) aguardando verificacao do supervisor.</div>'):'')+'</div>';
+
+    var meses={}; itens.forEach(function(i){ if(!i.d) return; var k=String(i.d.getMonth()+1).padStart(2,'0')+'/'+String(i.d.getFullYear()).slice(2); meses[k]=(meses[k]||0)+1; });
+    var ordM=Object.keys(meses).sort(function(a,b){ var pa=a.split('/'),pb=b.split('/'); return (pa[1]-pb[1])||(pa[0]-pb[0]); }).map(function(k){return {k:k,v:meses[k]};});
+    var grafMes=colunas('Meus registros por mes',ordM.slice(-12));
+    var defItens=itens.filter(function(i){return i.tipo==='defesa';});
+    var graficos='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
+      barras('Minhas defesas por tipo',contarPor(defItens,function(i){return i.cat;}).slice(0,10))+
+      barras('Por status',contarPor(itens,function(i){return i.st;}).slice(0,10),'linear-gradient(135deg,#3fae5a,#2b7a3f)')+
+      barras('Por orgao / municipio',contarPor(defItens,function(i){return i.reg.orgao||i.reg.municipio||'(nao informado)';}).slice(0,10),'linear-gradient(135deg,#4a9fd5,#2d6fa0)')+'</div>';
+    return filtros+ola+cards+cards2+prem+grafMes+graficos; }
+
   /* ---------------- ACESSOS ---------------- */
   function viewAcessos(){ if(!ehAdminDoc()) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito.</div>';
     var us=usuarios().slice().sort(function(a,b){return String(a.nome||a.login).localeCompare(String(b.nome||b.login));});
@@ -11228,13 +11277,16 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function cbCfg(){ var c=(_cfg&&_cfg.cashback)||{}; return {faixas:(c.faixas&&c.faixas.length)?c.faixas:FAIXAS_PADRAO, campanha:c.campanha||'Campanha documentos'}; }
   function faixaDe(q){ var fx=cbCfg().faixas.slice().sort(function(a,b){return a.de-b.de;}); for(var i=0;i<fx.length;i++){ if(q>=Number(fx[i].de)&&q<=Number(fx[i].ate)) return fx[i]; } return fx.length?fx[fx.length-1]:{de:0,ate:0,valor:0}; }
   function proxFaixa(q){ var fx=cbCfg().faixas.slice().sort(function(a,b){return a.de-b.de;}); for(var i=0;i<fx.length;i++){ if(Number(fx[i].de)>q) return fx[i]; } return null; }
-  function elogioConcluido(r){ if(r.validado===true) return true; if(r.validado===false) return false; return !!String(r.feitoEm||'').trim(); }
+  function elogioEnviado(r){ var st=norm(r.status||''); return st.indexOf('ENVIAD')>=0; }
+  function elogioConcluido(r){ return r.validado===true; }
+  function elogioAguardando(r){ return elogioEnviado(r) && r.validado===undefined; }
   function mesRef(r){ var d=parseData(r.data)||parseData(r.feitoEm); if(!d) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
   function perAtual(){ if(_cbPer) return _cbPer; var h=new Date(); return h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0'); }
   function perLabel(p){ var M=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']; var a=p.split('-'); return (M[(+a[1])-1]||'')+'/'+a[0]; }
   function resumoCashback(per,todos){ var lista=todos?regs('elogio'):filtraEscopo(regs('elogio')); var m={};
     lista.forEach(function(r){ if(mesRef(r)!==per) return; var c=consultorDe(r); if(!m[c]) m[c]={consultor:c,enviados:0,concluidos:0,pendentes:0};
-      m[c].enviados++; if(elogioConcluido(r)) m[c].concluidos++; else if(r.validado!==false) m[c].pendentes++; });
+      if(!elogioEnviado(r)) return;
+      m[c].enviados++; if(elogioConcluido(r)) m[c].concluidos++; else if(r.validado===undefined) m[c].pendentes++; });
     return Object.keys(m).map(function(k){ var o=m[k]; var f=faixaDe(o.concluidos); o.valorUnit=Number(f.valor)||0; o.total=o.concluidos*o.valorUnit; o.faixa=f;
       o.pct=o.enviados?(o.concluidos/o.enviados*100):0; return o; }).sort(function(a,b){return b.total-a.total;}); }
   function moedaBR(n){ n=Number(n)||0; try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }catch(e){ return 'R$ '+n.toFixed(2); } }
@@ -11251,7 +11303,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   function viewCashback(){ var subs=[['meu','Minha premiação','fa-wallet']];
     if(ehAdminDoc()||ehSupervisor()) subs.push(['equipe','Equipe','fa-users']);
-    if(ehAdminDoc()) subs.push(['validar','Validar elogios','fa-circle-check']);
+    if(ehAdminDoc()||ehSupervisor()) subs.push(['validar','Verificar elogios','fa-circle-check']);
     if(ehAdminDoc()||ehSupervisor()) subs.push(['pagamentos','Pagamentos','fa-file-invoice-dollar']);
     if(ehAdminDoc()) subs.push(['regras','Regras','fa-sliders']);
     if(!subs.filter(function(s){return s[0]===_cbView;}).length) _cbView='meu';
@@ -11265,12 +11317,12 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var prox=proxFaixa(eu.concluidos); var faltam=prox?Math.max(0,Number(prox.de)-eu.concluidos):0;
     var metaVis=prox?Number(prox.de):Math.max(1,eu.concluidos);
     var cards='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
-      gauge('Solicitados', eu.enviados/Math.max(1,Math.max(eu.enviados,50)), String(eu.enviados), Co.blue)+
+      gauge('Enviados', eu.enviados/Math.max(1,Math.max(eu.enviados,50)), String(eu.enviados), Co.blue)+
       gauge('% de elogios', eu.pct/100, eu.pct.toFixed(1)+'%', Co.green)+
-      gauge('Elogios concluídos', eu.concluidos/Math.max(1,metaVis), String(eu.concluidos), Co.orangeL)+
+      gauge('Verificados', eu.concluidos/Math.max(1,metaVis), String(eu.concluidos), Co.orangeL)+
       '<div style="flex:1 1 200px;min-width:200px;background:linear-gradient(160deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px;display:flex;flex-direction:column;justify-content:center;text-align:center"><div style="font-size:34px">🏆</div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;margin-top:4px">Minha premiação</div><div style="font-size:30px;font-weight:900;color:'+Co.orangeL+';margin-top:4px">'+moedaBR(eu.total)+'</div><div style="font-size:11px;color:'+Co.mut+';margin-top:3px">'+eu.concluidos+' x '+moedaBR(eu.valorUnit)+'</div></div></div>';
     var barra=prox?('<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:16px"><div style="display:flex;justify-content:space-between;font-size:13px;color:'+Co.sub+'"><b style="color:#fff">Próxima faixa</b><span>'+eu.concluidos+' / '+prox.de+' elogios</span></div><div style="height:14px;border-radius:8px;background:'+Co.card2+';overflow:hidden;margin:8px 0"><div style="height:100%;width:'+Math.min(100,eu.concluidos/Number(prox.de)*100)+'%;background:'+Co.gradO+'"></div></div><div style="font-size:13px;color:'+Co.orangeL+'">Faltam <b>'+faltam+'</b> elogio(s) concluído(s) para subir para <b>'+moedaBR(prox.valor)+'</b> por elogio.</div></div>'):('<div style="background:'+Co.card+';border:1px solid '+Co.green+';border-radius:16px;padding:16px;margin-bottom:16px;color:'+Co.green+';font-weight:700">🎉 Você está na faixa máxima da campanha!</div>');
-    var pend=eu.pendentes?('<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px;margin-bottom:16px;font-size:13px;color:'+Co.sub+'"><i class="fas fa-hourglass-half" style="color:'+Co.orangeL+'"></i> Você tem <b style="color:'+Co.orangeL+'">'+eu.pendentes+'</b> elogio(s) aguardando validação do administrador. Eles entram na premiação assim que forem validados.</div>'):'';
+    var pend=eu.pendentes?('<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px;margin-bottom:16px;font-size:13px;color:'+Co.sub+'"><i class="fas fa-hourglass-half" style="color:'+Co.orangeL+'"></i> Você tem <b style="color:'+Co.orangeL+'">'+eu.pendentes+'</b> elogio(s) aguardando verificacao do supervisor. Eles entram na premiacao assim que forem verificados.</div>'):'';
     return '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:12px">Período: <b style="color:'+Co.orange+'">'+perLabel(per)+'</b> · Consultor: <b style="color:#fff">'+esc(eu.consultor)+'</b></div>'+cards+barra+pend+tabelaFaixas(eu.faixa); }
 
   function cbEquipe(){ var per=perAtual(); var dados=resumoCashback(per,false);
@@ -11282,19 +11334,31 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       gauge('Elogios', totCon/Math.max(1,totEnv||1), String(totCon), Co.orangeL)+
       '<div style="flex:1 1 200px;min-width:200px;background:linear-gradient(160deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px;display:flex;flex-direction:column;justify-content:center;text-align:center"><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px">Total a pagar</div><div style="font-size:30px;font-weight:900;color:'+Co.orangeL+';margin-top:6px">'+moedaBR(totVal)+'</div><div style="font-size:11px;color:'+Co.mut+';margin-top:3px">'+dados.length+' consultor(es)</div></div></div>';
     var rows=dados.map(function(d){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:10px;color:#fff;font-weight:600">'+esc(d.consultor)+'</td><td style="padding:10px">'+d.enviados+'</td><td style="padding:10px;color:'+Co.green+';font-weight:700">'+d.concluidos+'</td><td style="padding:10px">'+(d.pendentes||0)+'</td><td style="padding:10px">'+d.pct.toFixed(1)+'%</td><td style="padding:10px">'+moedaBR(d.valorUnit)+'</td><td style="padding:10px;color:'+Co.orangeL+';font-weight:800">'+moedaBR(d.total)+'</td></tr>'; }).join('')||'<tr><td colspan="7" style="padding:22px;text-align:center;color:'+Co.mut+'">Sem elogios neste período.</td></tr>';
-    var tab='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden;margin-bottom:16px"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Consultor</th><th style="padding:10px">Solicitados</th><th style="padding:10px">Concluídos</th><th style="padding:10px">Aguardando</th><th style="padding:10px">% Elogio</th><th style="padding:10px">Valor unit.</th><th style="padding:10px">Premiação</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'"><td style="padding:10px;color:#fff;font-weight:800">TOTAL</td><td style="padding:10px;font-weight:700">'+totEnv+'</td><td style="padding:10px;font-weight:700;color:'+Co.green+'">'+totCon+'</td><td style="padding:10px"></td><td style="padding:10px;font-weight:700">'+pctG.toFixed(1)+'%</td><td style="padding:10px"></td><td style="padding:10px;color:'+Co.orangeL+';font-weight:900">'+moedaBR(totVal)+'</td></tr></tfoot></table></div></div>';
+    var tab='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden;margin-bottom:16px"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Consultor</th><th style="padding:10px">Enviados</th><th style="padding:10px">Verificados</th><th style="padding:10px">Aguardando</th><th style="padding:10px">% Elogio</th><th style="padding:10px">Valor unit.</th><th style="padding:10px">Premiação</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'"><td style="padding:10px;color:#fff;font-weight:800">TOTAL</td><td style="padding:10px;font-weight:700">'+totEnv+'</td><td style="padding:10px;font-weight:700;color:'+Co.green+'">'+totCon+'</td><td style="padding:10px"></td><td style="padding:10px;font-weight:700">'+pctG.toFixed(1)+'%</td><td style="padding:10px"></td><td style="padding:10px;color:'+Co.orangeL+';font-weight:900">'+moedaBR(totVal)+'</td></tr></tfoot></table></div></div>';
     var acoes='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"><button onclick="__gwaCbRelatorio()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:12px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-file-pdf"></i> Baixar relatório</button><button onclick="__gwaCbCsv()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.green+';border-radius:12px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-file-csv"></i> Exportar CSV</button><button onclick="__gwaCbSolicitar()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:11px 20px;font-weight:700;cursor:pointer"><i class="fas fa-paper-plane"></i> Solicitar pagamento ao financeiro</button></div>';
     return cards+acoes+tab+tabelaFaixas(null); }
 
-  function cbValidar(){ var per=perAtual(); var lista=regs('elogio').filter(function(r){ return mesRef(r)===per && r.validado===undefined ? !String(r.feitoEm||'').trim() : (mesRef(r)===per && r.validado===undefined); });
-    lista=regs('elogio').filter(function(r){ return mesRef(r)===per && r.validado===undefined && !String(r.feitoEm||'').trim(); });
+  function cbValidar(){ if(!(ehAdminDoc()||ehSupervisor())) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito.</div>';
+    var per=perAtual();
+    var lista=filtraEscopo(regs('elogio')).filter(function(r){ return mesRef(r)===per && elogioAguardando(r); });
     var rows=lista.slice(0,300).map(function(r){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:9px 10px;color:#fff">'+esc(r.nome||'')+'</td><td style="padding:9px 10px">'+esc(consultorDe(r))+'</td><td style="padding:9px 10px">'+esc(r.plataforma||'')+'</td><td style="padding:9px 10px">'+esc(r.status||'')+'</td><td style="padding:9px 10px">'+esc(r.data||'')+'</td><td style="padding:9px 10px;white-space:nowrap"><button onclick="__gwaCbValidar(&#39;'+r.id+'&#39;,true)" style="background:'+Co.green+';color:#fff;border:none;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;margin-right:4px"><i class="fas fa-check"></i> Validar</button><button onclick="__gwaCbValidar(&#39;'+r.id+'&#39;,false)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px">Recusar</button></td></tr>'; }).join('')||'<tr><td colspan="6" style="padding:22px;text-align:center;color:'+Co.mut+'">Nada aguardando validação neste período.</td></tr>';
-    return '<div style="background:'+Co.card2+';border:1px dashed '+Co.line+';border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:'+Co.mut+'">Elogios <b>validados</b> contam na premiação do consultor. Registros antigos que já têm <b>Feito em</b> preenchido entram automaticamente.</div>'+
+    var topo='<div style="background:'+Co.card2+';border:1px dashed '+Co.line+';border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:'+Co.mut+'">Aqui ficam os elogios que o consultor marcou como <b>ENVIADO</b> e ainda <b>nao foram verificados</b>. So depois da verificacao eles contam na premiacao. <b style="color:'+Co.orangeL+'">'+lista.length+'</b> aguardando em '+perLabel(per)+'.</div>'+
+      (lista.length?('<div style="margin-bottom:12px"><button onclick="__gwaCbValidarTodos()" style="background:'+Co.green+';color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer"><i class="fas fa-check-double"></i> Verificar todos os '+lista.length+' deste periodo</button></div>'):'');
+    return topo+
       '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Cliente</th><th style="padding:10px">Consultor</th><th style="padding:10px">Plataforma</th><th style="padding:10px">Status</th><th style="padding:10px">Data</th><th style="padding:10px">Ação</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'; }
-  window.__gwaCbValidar=async function(id,ok){ if(!ehAdminDoc()) return; var r=regs('elogio').filter(function(x){return x.id===id;})[0]; if(!r) return;
+  window.__gwaCbValidar=async function(id,ok){ if(!(ehAdminDoc()||ehSupervisor())) return; var r=regs('elogio').filter(function(x){return x.id===id;})[0]; if(!r) return;
     r.validado=!!ok; r.validadoPor=loginU(curU()); r.validadoEm=Date.now(); r.atualizadoEm=Date.now();
     try{ var res=await fetch(base()+'/api/doc_elogio/'+encodeURIComponent(r.id),{method:'PUT',headers:H(),body:JSON.stringify(r)}); if(res.ok){ gsUpsert('elogio',r); render(); } else alert('Falha ao salvar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
 
+  window.__gwaCbValidarTodos=async function(){ if(!(ehAdminDoc()||ehSupervisor())) return; var per=perAtual();
+    var lista=filtraEscopo(regs('elogio')).filter(function(r){ return mesRef(r)===per && elogioAguardando(r); });
+    if(!lista.length){ alert('Nada aguardando verificacao.'); return; }
+    if(!confirm('Verificar (aprovar) '+lista.length+' elogio(s) de '+perLabel(per)+'?\n\nEles passam a contar na premiacao dos consultores.')) return;
+    var ok=0, fail=0;
+    for(var i=0;i<lista.length;i+=8){ var lote=lista.slice(i,i+8);
+      await Promise.all(lote.map(async function(r){ r.validado=true; r.validadoPor=loginU(curU()); r.validadoEm=Date.now(); r.atualizadoEm=Date.now();
+        try{ var res=await fetch(base()+'/api/doc_elogio/'+encodeURIComponent(r.id),{method:'PUT',headers:H(),body:JSON.stringify(r)}); if(res.ok){ ok++; gsUpsert('elogio',r); } else fail++; }catch(e){ fail++; } })); }
+    alert('Verificados: '+ok+(fail?(' | falhas: '+fail):'')); render(); };
   function cbPagamentos(){ var lista=_cbSols||[]; if(!ehAdminDoc()){ var me=loginU(curU()); lista=lista.filter(function(s){ return String(s.solicitadoPor||'')===me; }); }
     var cor=function(s){ return s==='paga'?Co.green:(s==='confirmada'?Co.orangeL:Co.mut); };
     var lbl=function(s){ return s==='paga'?'Paga':(s==='confirmada'?'Confirmada':'Aguardando financeiro'); };
@@ -11312,7 +11376,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       totalElogios:totEl, valorTotal:tot, itens:dados.map(function(d){ return {consultor:d.consultor,enviados:d.enviados,concluidos:d.concluidos,valorUnit:d.valorUnit,total:d.total}; }) };
     try{ var r=await fetch(base()+'/api/doc_cashback',{method:'POST',headers:H(),body:JSON.stringify(s)}); if(r.ok){ _cbSols.unshift(s); _cbSolsOk=true; alert('Solicitação enviada ao financeiro!'); _cbView='pagamentos'; render(); } else alert('Falha ao solicitar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
   window.__gwaCbCsv=function(){ var per=perAtual(); var dados=resumoCashback(per,false);
-    var l=[['Consultor','Solicitados','Concluidos','% Elogio','Valor unitario','Premiacao'].join(';')];
+    var l=[['Consultor','Enviados','Verificados','% Elogio','Valor unitario','Premiacao'].join(';')];
     dados.forEach(function(d){ l.push([d.consultor,d.enviados,d.concluidos,d.pct.toFixed(1).replace('.',',')+'%',String(d.valorUnit.toFixed(2)).replace('.',','),String(d.total.toFixed(2)).replace('.',',')].join(';')); });
     var tot=dados.reduce(function(a,d){return a+d.total;},0); l.push(['TOTAL','','','','',String(tot.toFixed(2)).replace('.',',')].join(';'));
     var blob=new Blob(['﻿'+l.join('\r\n')],{type:'text/csv;charset=utf-8'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='premiacao_doc_'+per+'.csv'; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },1200); };
@@ -11324,8 +11388,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var fx=cbCfg().faixas.slice().sort(function(a,b){return a.de-b.de;}).map(function(f){ return '<tr><td style="text-align:center">'+f.de+'</td><td style="text-align:center">'+f.ate+'</td><td style="text-align:right">'+moedaBR(f.valor)+'</td></tr>'; }).join('');
     var html='<!doctype html><html><head><meta charset="utf-8"><title>Premiação DOC '+perLabel(per)+'</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:30px}h1{color:#c4661a;font-size:20px;margin:0 0 4px}.sub{color:#666;font-size:12px}.hd{display:flex;align-items:center;gap:14px;border-bottom:3px solid #c4661a;padding-bottom:12px}.box{border:1px solid #e0e0e0;border-radius:10px;padding:14px;margin-top:16px}.row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid #f0f0f0}table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}th,td{border-bottom:1px solid #eee;padding:7px}th{background:#f7f7f7;text-align:left}.tot{font-size:20px;font-weight:800;color:#c4661a}</style></head><body>'+
       '<div class="hd"><img src="'+GWA_LOGO+'" style="height:52px"><div><h1>RELATÓRIO DE PREMIAÇÃO DOC — '+esc(titulo)+'</h1><div class="sub">GWA Consultoria · Documentação · Período '+perLabel(per)+' · emitido em '+new Date().toLocaleDateString('pt-BR')+'</div></div></div>'+
-      '<div class="box"><div class="row"><span><b>Total de solicitações enviadas</b></span><span>'+totEn+'</span></div><div class="row"><span><b>Elogios concluídos</b></span><span>'+totEl+'</span></div><div class="row"><span><b>% de conversão</b></span><span>'+(totEn?(totEl/totEn*100).toFixed(1):'0.0')+'%</span></div>'+extra+'<div class="row"><span class="tot">TOTAL A PAGAR</span><span class="tot">'+moedaBR(tot)+'</span></div></div>'+
-      '<div class="box"><b>Detalhamento por consultor</b><table><thead><tr><th>Consultor</th><th style="text-align:center">Solicitados</th><th style="text-align:center">Concluídos</th><th style="text-align:center">% Elogio</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Premiação</th></tr></thead><tbody>'+linhas+'<tr><td colspan="5" style="text-align:right"><b>TOTAL</b></td><td style="text-align:right"><b>'+moedaBR(tot)+'</b></td></tr></tbody></table></div>'+
+      '<div class="box"><div class="row"><span><b>Total de elogios enviados</b></span><span>'+totEn+'</span></div><div class="row"><span><b>Elogios verificados</b></span><span>'+totEl+'</span></div><div class="row"><span><b>% de conversão</b></span><span>'+(totEn?(totEl/totEn*100).toFixed(1):'0.0')+'%</span></div>'+extra+'<div class="row"><span class="tot">TOTAL A PAGAR</span><span class="tot">'+moedaBR(tot)+'</span></div></div>'+
+      '<div class="box"><b>Detalhamento por consultor</b><table><thead><tr><th>Consultor</th><th style="text-align:center">Enviados</th><th style="text-align:center">Verificados</th><th style="text-align:center">% Elogio</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Premiação</th></tr></thead><tbody>'+linhas+'<tr><td colspan="5" style="text-align:right"><b>TOTAL</b></td><td style="text-align:right"><b>'+moedaBR(tot)+'</b></td></tr></tbody></table></div>'+
       '<div class="box"><b>Faixas da campanha</b><table><thead><tr><th style="text-align:center">De</th><th style="text-align:center">Até</th><th style="text-align:right">Valor por elogio</th></tr></thead><tbody>'+fx+'</tbody></table></div>'+
       '<p style="margin-top:26px;font-size:12px">Assinatura do responsável: ____________________________________</p>'+
       '<p style="text-align:center;color:#999;font-size:11px;margin-top:18px">Documento gerado pela Intranet GWA para solicitação de pagamento ao Financeiro.</p>'+
