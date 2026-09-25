@@ -10883,7 +10883,13 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function col(){ return T().col; }
   function extras(t){ var ce=_cfg&&_cfg.camposExtra; if(!ce) return []; if(Array.isArray(ce)) return (t||_tipo)==='defesa'?ce:[]; return ce[t||_tipo]||[]; }
   function campos(t){ return TIPOS[t||_tipo].campos.concat(extras(t||_tipo)); }
-  function regs(t){ return _regs[t||_tipo]||[]; }
+  function regs(t){ var a=_regs[t||_tipo]||[]; return a.filter(function(r){ return r.duplicado!==true; }); }
+  function regsBrutos(t){ return _regs[t||_tipo]||[]; }
+  /* chave de conteudo para detectar o mesmo registro vindo de 2 planilhas */
+  function chaveDup(t,r){
+    if(t==='defesa') return [norm(r.consultorNome||r.consultor),norm(r.nome),norm(r.cpf),norm(r.data),norm(r.tipoDefesa)].join('|');
+    if(t==='doc')    return [norm(r.consultorNome||r.consultor),norm(r.nome),norm(r.cpf),norm(r.dataContrato),norm(r.servicoContratado)].join('|');
+    return [norm(r.consultorNome||r.consultor),norm(r.nome),norm(r.data),norm(r.plataforma),norm(r.link)].join('|'); }
 
   /* ---------------- acessos / niveis ---------------- */
   function acessos(){ return (_cfg&&_cfg.acessos)||{}; }
@@ -11031,7 +11037,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       else if(_view==='relatorios'&&(ehAdminDoc()||ehSupervisor())) body.innerHTML=viewRelatorios();
       else if(_view==='orgaos'&&(ehAdminDoc()||ehSupervisor())) body.innerHTML=viewOrgaos();
       else if(_view==='cashback') body.innerHTML=viewCashback();
-      else if(_view==='lancar') body.innerHTML=(_tipo==='defesa')?viewLancarDefesa():viewLancar();
+      else if(_view==='lancar') body.innerHTML=(_tipo==='defesa')?viewLancarDefesa():((_tipo==='elogio')?viewLancarElogio():((_tipo==='doc')?viewLancarDoc():viewLancar()));
       else body.innerHTML=viewLista();
     }catch(e){ body.innerHTML='<div style="color:'+Co.red+';padding:20px">Erro: '+esc(e&&e.message||e)+'</div>'; }
     if(_view==='lancar'&&_tipo==='defesa'){ setTimeout(function(){ var ed=_editId?(regs('defesa').filter(function(x){return x.id===_editId;})[0]||null):null; if(ed&&ed.orgaoId){ __gwaDefOrgao(ed.orgaoId); } else { __gwaDefOrgao(''); } },40); }
@@ -11041,8 +11047,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(_view==='relatorios'&&!_relOk){ _relOk=true; loadRegs('defesa').then(function(){ if(_view==='relatorios') render(); }); }
     if(_view==='cashback'&&!_cbOk){ _cbOk=true; loadRegs('elogio').then(function(){ if(_view==='cashback') render(); }); }
   }
-  window.__gwaDocView=function(v){ if(v!=='lancar'){_editId=null; _defBlocos=null;} _view=v; render(); };
-  window.__gwaDocTipo=function(t){ if(!TIPOS[t]) return; _tipo=t; _editId=null; _busca=''; _fCons=''; _fEnvio=''; render(); loadRegs(t).then(function(){ render(); }); };
+  window.__gwaDocView=function(v){ if(v!=='lancar'){_editId=null; _defBlocos=null; _svcBlocos=null;} _view=v; render(); };
+  window.__gwaDocTipo=function(t){ if(!TIPOS[t]) return; _tipo=t; _editId=null; _defBlocos=null; _svcBlocos=null; _busca=''; _fCons=''; _fEnvio=''; render(); loadRegs(t).then(function(){ render(); }); };
   window.__gwaDocClose=close;
 
   /* ---------------- form ---------------- */
@@ -11237,8 +11243,9 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="margin-top:12px"><label style="font-size:12px;color:'+Co.sub+'">Link ou ID da planilha (cole aqui a planilha que voce ja criou)</label><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="dgSheet" value="'+esc(_cfg.sheetId||'')+'" placeholder="https://docs.google.com/spreadsheets/d/..." style="flex:1;min-width:240px;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"><button onclick="__gwaDocSalvarSheet()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:10px;padding:10px 16px;cursor:pointer;font-weight:600">Salvar link</button>'+(conectada?('<button onclick="__gwaDocAbrirSheet()" style="background:'+Co.green+';color:#fff;border:none;border-radius:10px;padding:10px 16px;cursor:pointer;font-weight:700"><i class="fas fa-up-right-from-square"></i> Abrir planilha no Drive</button>'):'')+'</div></div>'+
       (conectada?('<div style="margin-top:8px;font-size:12px;color:'+Co.green+'"><i class="fas fa-circle-check"></i> Planilha vinculada.</div>'):'')+
       '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button onclick="__gwaDocGsConectar()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:12px 18px;font-weight:700;cursor:pointer"><i class="fab fa-google"></i> '+(conectada?'Reconectar / recriar':'Conectar e gerar planilha')+'</button>'+(conectada?'<button onclick="__gwaDocGsSync()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:#fff;border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer"><i class="fas fa-rotate"></i> Exportar tudo agora</button>':'')+'</div></div>';
+    var dup='<div style="background:'+Co.card+';border:1px solid '+Co.red+';border-radius:16px;padding:18px;margin-bottom:16px"><h3 style="margin:0 0 6px;color:#fff;font-size:15px"><i class="fas fa-clone" style="color:'+Co.red+'"></i> Remover registros duplicados</h3><p style="font-size:12px;color:'+Co.mut+';margin:0 0 12px">A importacao trouxe a planilha de cada consultor <b>e</b> a consolidada do ADM, que tem os mesmos registros — por isso os numeros apareceram dobrados. Isto localiza o mesmo registro vindo das duas planilhas e mantem <b>uma copia so</b>.</p><button onclick="__gwaDocRemoverDuplicados()" style="background:'+Co.red+';color:#fff;border:none;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-broom"></i> Analisar e remover duplicados</button><div id="dupProg" style="margin-top:10px;font-size:12px;color:'+Co.orangeL+'"></div></div>';
     var norma='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:16px"><h3 style="margin:0 0 6px;color:#fff;font-size:15px"><i class="fas fa-broom" style="color:'+Co.orange+'"></i> Limpar tipos de defesa antigos</h3><p style="font-size:12px;color:'+Co.mut+';margin:0 0 12px">Os registros importados das planilhas tem o tipo escrito de varias formas (SUSPENSAO, SUSP, SUSPENSCAO, 2 CASSACOES...). Isso encaixa cada um nos <b>10 tipos oficiais</b> e preenche a lista de defesas do registro. Roda uma vez; pode repetir sem problema.</p><button onclick="__gwaDocNormalizarTipos()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-wand-magic-sparkles"></i> Normalizar tipos de defesa</button><div id="normProg" style="margin-top:10px;font-size:12px;color:'+Co.orangeL+'"></div></div>';
-    return '<div style="max-width:860px">'+norma+google+
+    return '<div style="max-width:860px">'+dup+norma+google+
       '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:10px">Campos de: <b style="color:'+Co.orange+'">'+esc(TIPOS[_tipo].plural.toUpperCase())+'</b> (troque no seletor do topo)</div>'+
       '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:16px"><h3 style="margin:0 0 8px;color:#fff;font-size:15px"><i class="fas fa-list" style="color:'+Co.orange+'"></i> Campos padrao</h3><div>'+baseList+'</div></div>'+
       '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px"><h3 style="margin:0 0 12px;color:#fff;font-size:15px"><i class="fas fa-plus" style="color:'+Co.orange+'"></i> Campos personalizados</h3>'+
@@ -11249,6 +11256,32 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var ok=await saveCfg(); if(ok){ render(); } else { alert('Falha ao salvar.'); _cfg.camposExtra[_tipo].pop(); } };
   window.__gwaDocCampoRemover=async function(key){ if(!confirm('Remover este campo? (os dados ja lancados nele nao sao apagados)')) return; _cfg.camposExtra[_tipo]=(extras(_tipo)).filter(function(c){return c.key!==key;}); var ok=await saveCfg(); if(ok) render(); else alert('Falha ao salvar.'); };
 
+  window.__gwaDocRemoverDuplicados=async function(){ if(!ehAdminDoc()) return;
+    var p=document.getElementById('dupProg'); if(p) p.textContent='Analisando...';
+    var achados=[], resumo=[];
+    for(var k=0;k<ORDEM.length;k++){ var t=ORDEM[k]; await loadRegs(t);
+      var vistos={}, dups=[];
+      regsBrutos(t).slice().sort(function(a,b){
+        var aa=/CONTROLE/i.test(String(a.planilha||''))?1:0, bb=/CONTROLE/i.test(String(b.planilha||''))?1:0;
+        if(aa!==bb) return aa-bb;            /* mantem o da planilha do consultor */
+        return (a.ts||0)-(b.ts||0); })
+      .forEach(function(r){ var c=chaveDup(t,r); if(!c.replace(/\|/g,'').trim()) return;
+        if(vistos[c]) dups.push({tipo:t,reg:r}); else vistos[c]=1; });
+      resumo.push(TIPOS[t].plural+': '+dups.length); achados=achados.concat(dups); }
+    if(!achados.length){ if(p)p.textContent='Nenhum duplicado encontrado.'; alert('Nenhum registro duplicado encontrado.'); return; }
+    if(!confirm('Foram encontrados '+achados.length+' registro(s) duplicado(s):\n\n'+resumo.join('\n')+'\n\nRemover? (fica mantida uma copia de cada)')){ if(p)p.textContent=''; return; }
+    var ok=0, fail=0;
+    for(var i=0;i<achados.length;i+=8){ var lote=achados.slice(i,i+8);
+      await Promise.all(lote.map(async function(x){ var r=x.reg, col=TIPOS[x.tipo].col;
+        r.duplicado=true; r.atualizadoEm=Date.now();
+        try{ await fetch(base()+'/api/'+col+'/'+encodeURIComponent(r.id),{method:'PUT',headers:H(),body:JSON.stringify(r)}); }catch(e){}
+        try{ var d=await fetch(base()+'/api/'+col+'/'+encodeURIComponent(r.id),{method:'DELETE',headers:H()});
+          if(d.ok){ _regs[x.tipo]=(_regs[x.tipo]||[]).filter(function(y){return y.id!==r.id;}); } }catch(e){}
+        ok++; }));
+      if(p) p.textContent='Removendo... '+Math.min(i+8,achados.length)+'/'+achados.length; }
+    if(p) p.textContent='Concluido: '+ok+' duplicado(s) removido(s).';
+    _dashOk=false; _cbOk=false; _relOk=false;
+    alert('Limpeza concluida: '+ok+' duplicado(s) removido(s).'); await loadTodos(); render(); };
   window.__gwaDocNormalizarTipos=async function(){ if(!ehAdminDoc()) return;
     await loadRegs('defesa'); var lista=regs('defesa');
     var alvo=lista.filter(function(r){ var novo=canonTipos(r.tipoDefesa).join(' + '); return novo && novo!==String(r.tipoDefesa||'').trim(); });
@@ -11323,7 +11356,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function cbCfg(){ var c=(_cfg&&_cfg.cashback)||{}; return {faixas:(c.faixas&&c.faixas.length)?c.faixas:FAIXAS_PADRAO, campanha:c.campanha||'Campanha documentos'}; }
   function faixaDe(q){ var fx=cbCfg().faixas.slice().sort(function(a,b){return a.de-b.de;}); for(var i=0;i<fx.length;i++){ if(q>=Number(fx[i].de)&&q<=Number(fx[i].ate)) return fx[i]; } return fx.length?fx[fx.length-1]:{de:0,ate:0,valor:0}; }
   function proxFaixa(q){ var fx=cbCfg().faixas.slice().sort(function(a,b){return a.de-b.de;}); for(var i=0;i<fx.length;i++){ if(Number(fx[i].de)>q) return fx[i]; } return null; }
-  function elogioEnviado(r){ var st=norm(r.status||''); return st.indexOf('ENVIAD')>=0; }
+  function elogioEnviado(r){ if(r.validado===false) return false; if(r.validado===true) return true;
+    var st=norm(r.status||''); return st.indexOf('ENVIAD')>=0 || st.indexOf('AGUARD')>=0; }
   function elogioConcluido(r){ return r.validado===true; }
   function elogioAguardando(r){ return elogioEnviado(r) && r.validado===undefined; }
   function mesRef(r){ var d=parseData(r.data)||parseData(r.feitoEm); if(!d) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
@@ -11673,6 +11707,127 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<p style="text-align:center;color:#999;font-size:10px;margin-top:14px">Documento gerado pela Intranet GWA para fechamento e pagamento.</p>'+
       '<scr'+'ipt>setTimeout(function(){window.print();},400);</scr'+'ipt></body></html>';
     try{ var w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); } else { var b=new Blob([html],{type:'text/html'}); window.open(URL.createObjectURL(b),'_blank'); } }catch(e){ alert('Nao foi possivel abrir: '+(e&&e.message||e)); } };
+
+  /* ================= FORMULARIOS: ELOGIO / DOCUMENTACAO + BUSCA DE CIDADE ================= */
+  var ELOGIO_STATUS='AGUARDANDO CONFIRMAÇÃO', ELOGIO_PLATAFORMA='GOOGLE';
+  var MESES_PT=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  var DOCS_PASTA=['DOCS OK','PASTA'];
+  var SERVICOS_DOC=['SUSPENSÃO','SUSPENSÃO POR ALCOOLEMIA','CASSAÇÃO','ALCOOLEMIA','PROVISÓRIA',
+    'BLOQUEIO ADMINISTRATIVO','RENOVAÇÃO','RECICLAGEM','ETILÔMETRO','RECURSO DE MULTA',
+    'RECURSO DE MULTA ALCOOLEMIA','REQUERIMENTO','NOTIFICAÇÃO EXTRAJUDICIAL'];
+  function hojeBR(){ var d=new Date(); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); }
+  function hojeISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function mesAtualNome(){ return MESES_PT[new Date().getMonth()]; }
+  function campoBloqueado(valor,dica){ return '<input value="'+esc(valor)+'" readonly title="'+esc(dica||'Preenchido automaticamente')+'" style="width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:'+Co.mut+';cursor:not-allowed">'; }
+  function selConsultor(ed){ if(!(ehAdminDoc()||ehSupervisor())) return '';
+    var permitidos=ehAdminDoc()?usuarios():equipeDe(loginU(curU())).map(function(l){ return usuarioPorLogin(l)||{login:l,nome:nomeDoLogin(l)}; });
+    var us=permitidos.slice().sort(function(a,b){return String(a.nome||a.login).localeCompare(String(b.nome||b.login));});
+    return '<div><label style="font-size:12px;color:'+Co.sub+'">Consultor</label><select id="dcf_consultor" style="'+inpStyle()+'"><option value="">- selecione -</option>'+us.map(function(u){ var nm=u.nome||u.login; return '<option value="'+esc(nm)+'"'+(ed&&mesmoConsultor(ed.consultorNome||ed.consultor,nm)?' selected':'')+'>'+esc(nm)+'</option>'; }).join('')+'</select></div>'; }
+  function baseSalvar(obj,ed){ if(ehAdminDoc()||ehSupervisor()){ var e=document.getElementById('dcf_consultor'); var cn=e?String(e.value||'').trim():'';
+      if(cn){ obj.consultorNome=cn; obj.consultor=norm(cn); } else if(!obj.consultor){ obj.consultorNome=(curU()||{}).nome||loginU(curU()); obj.consultor=norm(obj.consultorNome); } }
+    else { obj.consultorNome=(curU()||{}).nome||loginU(curU()); obj.consultor=norm(obj.consultorNome); }
+    obj.responsavel=loginU(curU()); obj.responsavelNome=(curU()||{}).nome||loginU(curU()); obj.atualizadoEm=Date.now(); return obj; }
+
+  /* ---------------- ELOGIO ---------------- */
+  function viewLancarElogio(){ var ed=_editId?(regs('elogio').filter(function(x){return x.id===_editId;})[0]||null):null;
+    var dataV=ed?(ed.data||''):hojeBR(); var mesV=ed?(ed.mes||mesAtualNome()):mesAtualNome();
+    var stV=ed?(ed.status||ELOGIO_STATUS):ELOGIO_STATUS;
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:20px;max-width:760px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span style="width:5px;height:20px;border-radius:3px;background:'+Co.gradO+'"></span><h3 style="margin:0;color:#fff;font-size:15px"><i class="fas fa-star" style="color:'+Co.orange+'"></i> '+(ed?'Editar elogio':'Lançar elogio')+'</h3></div>'+
+      '<p style="font-size:12px;color:'+Co.mut+';margin:0 0 14px">Plataforma, mês e status são preenchidos automaticamente. O elogio fica <b>aguardando confirmação</b> até o supervisor verificar.</p>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Nome do cliente *</label><input id="dcf_nome" value="'+esc(ed?ed.nome:'')+'" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Link do elogio (opcional)</label><input id="dcf_link" value="'+esc(ed?ed.link:'')+'" placeholder="cole aqui, se tiver" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Data</label><input id="dcf_data" value="'+esc(dataV)+'" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Plataforma</label>'+campoBloqueado(ELOGIO_PLATAFORMA)+'</div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Mês</label>'+campoBloqueado(mesV)+'</div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Status</label>'+campoBloqueado(stV,'O supervisor confirma na aba Premiação DOC')+'</div>'+
+      selConsultor(ed)+'</div>'+
+      '<div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap"><button onclick="__gwaSalvarElogio()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:12px 22px;font-weight:700;cursor:pointer"><i class="fas fa-check"></i> '+(ed?'Salvar alterações':'Lançar elogio')+'</button>'+(ed?'<button onclick="__gwaDocView(&#39;lista&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer">Cancelar</button>':'')+'</div></div>'; }
+  window.__gwaSalvarElogio=async function(){ try{ var g=function(i){ var e=document.getElementById(i); return e?String(e.value||'').trim():''; };
+    var nome=g('dcf_nome'); if(!nome){ alert('Informe o nome do cliente.'); return; }
+    var ed=_editId?(regs('elogio').filter(function(x){return x.id===_editId;})[0]||null):null;
+    if(ed && !podeEditar(ed)){ alert('Sem permissão.'); return; }
+    var obj=ed?ed:{ id:'elogio_'+loginU(curU())+'_'+Date.now().toString(36), ts:Date.now(), origem:'manual' };
+    obj.nome=nome; obj.link=g('dcf_link'); obj.data=g('dcf_data')||hojeBR();
+    obj.plataforma=ELOGIO_PLATAFORMA; obj.mes=ed?(ed.mes||mesAtualNome()):mesAtualNome();
+    if(!ed) obj.status=ELOGIO_STATUS;
+    baseSalvar(obj,ed);
+    var r=await fetch(base()+'/api/doc_elogio/'+encodeURIComponent(obj.id),{method:'PUT',headers:H(),body:JSON.stringify(obj)});
+    if(r.ok){ if(!ed){ _regs['elogio']=_regs['elogio']||[]; _regs['elogio'].push(obj); } _editId=null; gsUpsert('elogio',obj); _cbOk=false;
+      alert(ed?'Elogio atualizado.':'Elogio lançado! Aguardando confirmação do supervisor.'); _view='lista'; render(); } else alert('Falha ao salvar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
+
+  /* ---------------- DOCUMENTACAO ---------------- */
+  var _svcBlocos=null;
+  function svcPadrao(){ return ['']; }
+  function svcColeta(){ var out=[]; document.querySelectorAll('.svcItem').forEach(function(el){ out.push(String(el.value||'').trim()); });
+    if(out.length) _svcBlocos=out; return _svcBlocos; }
+  function svcHtml(){ var bl=_svcBlocos||svcPadrao();
+    return bl.map(function(v,i){ var opts=SERVICOS_DOC.map(function(x){ return '<option value="'+esc(x)+'"'+(norm(v)===norm(x)?' selected':'')+'>'+esc(x)+'</option>'; }).join('');
+      var fora=v&&SERVICOS_DOC.filter(function(x){return norm(x)===norm(v);}).length===0;
+      return '<div style="display:flex;gap:6px;margin-bottom:8px"><select class="svcItem" style="'+inpStyle()+'"><option value="">- selecione o serviço -</option>'+opts+(fora?('<option value="'+esc(v)+'" selected>'+esc(v)+'</option>'):'')+'</select>'+(bl.length>1?('<button onclick="__gwaSvcDel('+i+')" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:0 12px;cursor:pointer"><i class="fas fa-times"></i></button>'):'')+'</div>'; }).join('')+
+      '<button onclick="__gwaSvcAdd()" style="background:'+Co.card2+';border:1px dashed '+Co.orangeD+';color:'+Co.orangeL+';border-radius:10px;padding:8px 14px;cursor:pointer;font-size:12px;font-weight:600"><i class="fas fa-plus"></i> Adicionar outro serviço</button>'; }
+  window.__gwaSvcAdd=function(){ svcColeta(); (_svcBlocos=_svcBlocos||svcPadrao()).push(''); var el=document.getElementById('svcLista'); if(el) el.innerHTML=svcHtml(); };
+  window.__gwaSvcDel=function(i){ svcColeta(); _svcBlocos.splice(i,1); if(!_svcBlocos.length)_svcBlocos=svcPadrao(); var el=document.getElementById('svcLista'); if(el) el.innerHTML=svcHtml(); };
+  function viewLancarDoc(){ var ed=_editId?(regs('doc').filter(function(x){return x.id===_editId;})[0]||null):null;
+    if(!_svcBlocos){ _svcBlocos=(ed&&ed.servicos&&ed.servicos.length)?ed.servicos.slice():(ed&&ed.servicoContratado?String(ed.servicoContratado).split('+').map(function(s){return s.trim();}).filter(Boolean):svcPadrao()); if(!_svcBlocos.length)_svcBlocos=svcPadrao(); }
+    var pastaOpts=DOCS_PASTA.map(function(x){ return '<option value="'+esc(x)+'"'+((ed&&norm(ed.docsOkPasta)===norm(x))?' selected':'')+'>'+esc(x)+'</option>'; }).join('');
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:20px;max-width:880px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><span style="width:5px;height:20px;border-radius:3px;background:'+Co.gradO+'"></span><h3 style="margin:0;color:#fff;font-size:15px"><i class="fas fa-folder-open" style="color:'+Co.orange+'"></i> '+(ed?'Editar documentação':'Lançar documentação')+'</h3></div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Nome do cliente *</label><input id="dcf_nome" value="'+esc(ed?ed.nome:'')+'" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">CPF</label><input id="dcf_cpf" value="'+esc(ed?ed.cpf:'')+'" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Município da CNH</label><div style="display:flex;gap:6px"><input id="dcf_municipioCnh" value="'+esc(ed?ed.municipioCnh:'')+'" placeholder="clique em buscar" style="'+inpStyle()+'"><button onclick="__gwaCidadeAbrir(&#39;dcf_municipioCnh&#39;)" title="Buscar município" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:0 14px;cursor:pointer"><i class="fas fa-magnifying-glass"></i></button></div></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">DocsOK / Pasta</label><select id="dcf_docsOkPasta" style="'+inpStyle()+'"><option value="">- selecione -</option>'+pastaOpts+'</select></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Data do contrato</label><input id="dcf_dataContrato" type="date" value="'+esc(ed?ed.dataContrato:hojeISO())+'" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Concluído em</label><input id="dcf_concluidoEm" type="date" value="'+esc(ed?ed.concluidoEm:'')+'" style="'+inpStyle()+'"></div>'+
+      selConsultor(ed)+'</div>'+
+      '<div style="margin-top:16px;padding-top:14px;border-top:1px solid '+Co.line+'"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px"><i class="fas fa-list-check" style="color:'+Co.orange+'"></i> Serviços contratados</div><div id="svcLista">'+svcHtml()+'</div></div>'+
+      '<div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap"><button onclick="__gwaSalvarDoc()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:12px 22px;font-weight:700;cursor:pointer"><i class="fas fa-check"></i> '+(ed?'Salvar alterações':'Salvar')+'</button>'+(ed?'<button onclick="__gwaDocView(&#39;lista&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer">Cancelar</button>':'')+'</div></div>'; }
+  window.__gwaSalvarDoc=async function(){ try{ var g=function(i){ var e=document.getElementById(i); return e?String(e.value||'').trim():''; };
+    var nome=g('dcf_nome'); if(!nome){ alert('Informe o nome do cliente.'); return; }
+    svcColeta(); var svc=(_svcBlocos||[]).map(function(s){return String(s||'').trim();}).filter(Boolean);
+    var ed=_editId?(regs('doc').filter(function(x){return x.id===_editId;})[0]||null):null;
+    if(ed && !podeEditar(ed)){ alert('Sem permissão.'); return; }
+    var obj=ed?ed:{ id:'doc_'+loginU(curU())+'_'+Date.now().toString(36), ts:Date.now(), origem:'manual' };
+    obj.nome=nome; obj.cpf=g('dcf_cpf'); obj.municipioCnh=g('dcf_municipioCnh'); obj.docsOkPasta=g('dcf_docsOkPasta');
+    obj.dataContrato=g('dcf_dataContrato'); obj.concluidoEm=g('dcf_concluidoEm');
+    obj.servicos=svc; obj.servicoContratado=svc.join(' + ');
+    baseSalvar(obj,ed);
+    var r=await fetch(base()+'/api/doc_doc/'+encodeURIComponent(obj.id),{method:'PUT',headers:H(),body:JSON.stringify(obj)});
+    if(r.ok){ if(!ed){ _regs['doc']=_regs['doc']||[]; _regs['doc'].push(obj); } _editId=null; _svcBlocos=null; gsUpsert('doc',obj);
+      alert(ed?'Registro atualizado.':'Documentação lançada!'); _view='lista'; render(); } else alert('Falha ao salvar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
+
+  /* ---------------- BUSCA DE MUNICIPIO ---------------- */
+  var _cidCache={}, _cidAlvo='', _cidUf='SP', _cidQ='';
+  window.__gwaCidadeAbrir=function(alvo){ _cidAlvo=alvo; _cidQ='';
+    var atual=(document.getElementById(alvo)||{}).value||'';
+    var m=String(atual).match(/\b([A-Z]{2})\b\s*$/i); if(m&&UFS.indexOf(m[1].toUpperCase())>=0) _cidUf=m[1].toUpperCase();
+    cidModal(); cidCarrega(); };
+  function cidModal(){ var ov=document.getElementById('gwaCidOv'); if(!ov){ ov=document.createElement('div'); ov.id='gwaCidOv';
+      ov.style.cssText='position:fixed;inset:0;z-index:100020;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:18px'; document.body.appendChild(ov); }
+    var ufOpts=UFS.map(function(u){ return '<option value="'+u+'"'+(_cidUf===u?' selected':'')+'>'+u+'</option>'; }).join('');
+    ov.innerHTML='<div style="background:linear-gradient(160deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:18px;padding:20px;max-width:520px;width:100%;max-height:80vh;display:flex;flex-direction:column"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b style="color:#fff;font-size:15px"><i class="fas fa-city" style="color:'+Co.orange+'"></i> Buscar município da CNH</b><button onclick="__gwaCidadeFechar()" style="background:none;border:none;color:'+Co.sub+';font-size:18px;cursor:pointer"><i class="fas fa-times"></i></button></div>'+
+      '<div style="display:flex;gap:8px;margin-bottom:10px"><select onchange="__gwaCidadeUf(this.value)" style="padding:10px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;font-weight:700">'+ufOpts+'</select><input id="cidQ" value="'+esc(_cidQ)+'" oninput="__gwaCidadeBusca(this.value)" placeholder="digite o nome da cidade..." style="flex:1;padding:10px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"></div>'+
+      '<div id="cidLista" style="overflow-y:auto;flex:1;min-height:160px"></div>'+
+      '<div style="margin-top:10px;font-size:11px;color:'+Co.mut+'">Não achou? Você pode digitar o município direto no campo.</div></div>';
+    cidRender(); }
+  window.__gwaCidadeFechar=function(){ var o=document.getElementById('gwaCidOv'); if(o) o.remove(); };
+  window.__gwaCidadeUf=function(u){ _cidUf=u; _cidQ=''; cidModal(); cidCarrega(); };
+  window.__gwaCidadeBusca=function(v){ _cidQ=v; cidRender(); };
+  function cidCarrega(){ if(_cidCache[_cidUf]){ cidRender(); return; }
+    var box=document.getElementById('cidLista'); if(box) box.innerHTML='<div style="color:'+Co.mut+';padding:14px">Carregando municípios de '+esc(_cidUf)+'...</div>';
+    fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados/'+_cidUf+'/municipios')
+      .then(function(r){ return r.json(); })
+      .then(function(j){ _cidCache[_cidUf]=(j||[]).map(function(x){ return x.nome; }).sort(function(a,b){return a.localeCompare(b);}); cidRender(); })
+      .catch(function(){ _cidCache[_cidUf]=cidadesConhecidas(_cidUf); cidRender(true); }); }
+  function cidadesConhecidas(uf){ var s=[]; ORDEM.forEach(function(t){ regs(t).forEach(function(r){ var v=String(r.municipioCnh||r.municipio||'').trim();
+      if(!v) return; var m=v.match(/^(.*?)[\s\-\/,]+([A-Z]{2})$/i); var nome=m?m[1].trim():v; var u=m?m[2].toUpperCase():'';
+      if((!u||u===uf) && nome && s.indexOf(nome)<0) s.push(nome); }); }); return s.sort(); }
+  function cidRender(offline){ var box=document.getElementById('cidLista'); if(!box) return;
+    var lista=_cidCache[_cidUf]||[]; var q=norm(_cidQ);
+    var f=q?lista.filter(function(c){ return norm(c).indexOf(q)>=0; }):lista;
+    var av=offline?('<div style="background:rgba(229,83,60,.12);border:1px solid '+Co.red+';border-radius:8px;padding:8px 10px;color:#f6b3a6;font-size:11px;margin-bottom:8px">Não consegui consultar a lista oficial do IBGE. Mostrando os municípios já usados no sistema — se preferir, digite direto no campo.</div>'):'';
+    box.innerHTML=av+(f.length?f.slice(0,400).map(function(c){ return '<div onclick="__gwaCidadeEscolher(&#39;'+esc(c).replace(/'/g,'')+'&#39;)" style="padding:9px 12px;border-bottom:1px solid '+Co.line+';color:'+Co.sub+';cursor:pointer" onmouseover="this.style.background=&#39;'+Co.card2+'&#39;" onmouseout="this.style.background=&#39;transparent&#39;">'+esc(c)+' <span style="color:'+Co.mut+';font-size:11px">/ '+esc(_cidUf)+'</span></div>'; }).join(''):'<div style="color:'+Co.mut+';padding:14px">Nenhum município encontrado.</div>'); }
+  window.__gwaCidadeEscolher=function(nome){ var el=document.getElementById(_cidAlvo); if(el) el.value=nome+' / '+_cidUf; __gwaCidadeFechar(); };
 
   /* ---------------- NAV (so para quem tem acesso) ---------------- */
   function addNav(){ try{
