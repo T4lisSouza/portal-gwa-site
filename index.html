@@ -10043,8 +10043,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       if(document.getElementById('negProd')){ v.produtoInicial=produtoInicial; v.servicos=servicos; }
       v.taxaPct=c.pct; v.desconto=c.desconto; v.liquido=c.liquido; v.atualizadoEm=Date.now();
       var ok2=await saveVenda(v); if(ok2){ _editId=null; alert('Venda atualizada. Histórico registrado.'); _view=isAdmin()?'vendas':'minhas'; render(); } else alert('Falha ao salvar.'); return; }
-    var d=(!isAdmin())?userDept(u):((_dept==='consolidado')?userDept(u):_dept); var now=Date.now();
-    var nv={ id:'vnd_'+now.toString(36)+Math.random().toString(36).slice(2,6), dept:d, consultor:u.login, consultorNome:u.nome||u.name||u.login, dataVenda:dat, cliente:cli, cpf:cpf, produtoInicial:produtoInicial, servicos:servicos, valorProduto:0, valorPago:pago, forma:forma, parcelas:parc, taxaPct:c.pct, desconto:c.desconto, liquido:c.liquido, ts:now, horaReg:new Date(now).toLocaleTimeString('pt-BR'), atualizadoEm:now, hist:[{por:u.login,ts:now,acao:'criacao'}] };
+    var d=(!isAdmin())?userDept(u):((_dept==='consolidado')?userDept(u):_dept); var now=Date.now(); var tsReg=clampExpedienteTs(now);
+    var nv={ id:'vnd_'+now.toString(36)+Math.random().toString(36).slice(2,6), dept:d, consultor:u.login, consultorNome:u.nome||u.name||u.login, dataVenda:dat, cliente:cli, cpf:cpf, produtoInicial:produtoInicial, servicos:servicos, valorProduto:0, valorPago:pago, forma:forma, parcelas:parc, taxaPct:c.pct, desconto:c.desconto, liquido:c.liquido, ts:tsReg, horaReg:new Date(tsReg).toLocaleTimeString('pt-BR'), atualizadoEm:now, hist:[{por:u.login,ts:now,acao:'criacao'}] };
     var ok=await saveVenda(nv); if(ok){ _vendas=_vendas||[]; _vendas.push(nv); _vendasKnown[nv.id]=1; gwaCelebrar(c.liquido); _view=isAdmin()?'dash':'minhas'; render(); } else alert('Falha ao salvar. Verifique a conexão.');
   }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
 
@@ -10322,6 +10322,14 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return vend+zer; }
 
   /* ---- POR HORA ---- */
+  function clampExpedienteTs(ts){ var exp=(_cfg&&_cfg.expediente)||{ini:9,fim:18}; var ini=Number(exp.ini)||9, fim=Number(exp.fim)||18; var dt=new Date(ts); var h=dt.getHours()+dt.getMinutes()/60; if(h<ini){ dt.setHours(ini,0,0,0); } else if(h>fim){ dt.setHours(fim,0,0,0); } else { return ts; } return dt.getTime(); }
+  function tsDaVenda(v){ if(v&&v.ts) return Number(v.ts); var d=vDate(v); return d.getTime(); }
+  window.__gwaVendasCorrigirHorarios=async function(){ if(!isMaster()){ alert('Apenas o Master.'); return; } var exp=(_cfg&&_cfg.expediente)||{ini:9,fim:18}; var ini=Number(exp.ini)||9, fim=Number(exp.fim)||18;
+    var fora=(_vendas||[]).filter(function(v){ var dt=new Date(tsDaVenda(v)); var h=dt.getHours()+dt.getMinutes()/60; return h<ini||h>fim; });
+    if(!fora.length){ alert('Nenhuma venda fora do horário '+ini+'h–'+fim+'h. Tudo certo!'); return; }
+    if(!confirm('Corrigir '+fora.length+' venda(s) lançada(s) fora do horário para ficarem entre '+ini+'h e '+fim+'h?\n\n(Antes das '+ini+'h viram '+ini+':00; depois das '+fim+'h viram '+fim+':00. A data não muda.)')) return;
+    var okN=0,failN=0; for(var i=0;i<fora.length;i++){ var v=fora[i]; var novoTs=clampExpedienteTs(tsDaVenda(v)); v.ts=novoTs; v.horaReg=new Date(novoTs).toLocaleTimeString('pt-BR'); v.atualizadoEm=Date.now(); try{ var ok=await saveVenda(v); if(ok) okN++; else failN++; }catch(e){ failN++; } }
+    alert('Correção concluída: '+okN+' venda(s) ajustada(s).'+(failN?(' '+failN+' falharam.'):'')); render(); };
   function viewHora(dept){ var deptList=dept?[dept]:['comercial','negociacao']; var arr=filterHoje(deptList); var exp=(_cfg&&_cfg.expediente)||{ini:9,fim:18}; var metaDia=deptList.reduce(function(s,d){return s+(metaDe(d).dia||0);},0); var horas=Math.max(1,exp.fim-exp.ini); var metaHora=metaDia/horas;
     var buckets={}; for(var h=exp.ini;h<=exp.fim;h++) buckets[h]={n:0,liq:0}; arr.forEach(function(v){ var hh=new Date(v.ts||v.dataVenda).getHours(); if(hh<exp.ini)hh=exp.ini; if(hh>exp.fim)hh=exp.fim; if(buckets[hh]){ buckets[hh].n++; buckets[hh].liq+=Number(v.liquido)||0; } });
     var maxv=0; Object.keys(buckets).forEach(function(h){ if(buckets[h].liq>maxv)maxv=buckets[h].liq; });
@@ -10341,7 +10349,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       box('Taxas Link-Mercado (Mercado Pago)','fa-percent',mercadoRows)+
       googleBox(c)+
       '</div>'+premiacaoBoxTab(c)+premiacaoBoxTabNeg(c)+negociacaoBox(c)+deptVendasBox(c)+formasExtrasBox(c)+metasVendedorBox(c)+avisosBox()+permBox(c);
-    return grid+'<div style="margin-top:18px">'+btnPri('<i class="fas fa-save"></i> Salvar configurações','__gwaVendasSalvarCfg()')+'</div>'; }
+    return grid+'<div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+btnPri('<i class="fas fa-save"></i> Salvar configurações','__gwaVendasSalvarCfg()')+'<button onclick="__gwaVendasCorrigirHorarios()" style="background:'+Co.card2+';border:1px solid '+Co.orangeD+';color:'+Co.orangeL+';border-radius:12px;padding:12px 18px;font-weight:700;cursor:pointer"><i class="fas fa-clock-rotate-left"></i> Corrigir horários fora do expediente</button></div><div style="font-size:11px;color:'+Co.mut+';margin-top:6px">Ajusta vendas lançadas antes das '+((c.expediente&&c.expediente.ini)||9)+'h ou depois das '+((c.expediente&&c.expediente.fim)||18)+'h para ficarem dentro do horário (a data não muda).</div>'; }
   function premRowHtml(f){ f=f||{min:'',max:'',pct:'',valor:''}; return '<tr class="premRow" style="border-bottom:1px solid '+Co.line+'"><td style="padding:5px"><input type="number" step="0.01" class="pMin" value="'+esc(f.min)+'" style="width:110px;padding:7px;border-radius:8px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"></td><td style="padding:5px"><input type="number" step="0.01" class="pMax" value="'+esc(f.max)+'" style="width:110px;padding:7px;border-radius:8px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"></td><td style="padding:5px"><input type="number" step="0.1" class="pPct" value="'+esc(f.pct)+'" style="width:70px;padding:7px;border-radius:8px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"></td><td style="padding:5px"><input type="number" step="0.01" class="pVal" value="'+esc(f.valor)+'" style="width:110px;padding:7px;border-radius:8px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"></td><td style="padding:5px"><button onclick="this.closest(&#39;tr&#39;).remove()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-trash"></i></button></td></tr>'; }
   function premiacaoBoxTab(c){ var tab=((c.tabelaPremiacao)||[]).slice().sort(function(a,b){return a.min-b.min;}); var rows=tab.map(premRowHtml).join('');
     return '<div style="margin-top:16px">'+boxWrap('Tabela de premiação comercial','fa-gift','<p style="font-size:12px;color:'+Co.mut+';margin:0 0 10px">Faixas de faturamento do mês → % e valor da premiação. Usada na projeção de premiação de cada vendedor. Edite manualmente quando precisar.</p><div style="overflow-x:auto"><table style="border-collapse:collapse;color:'+Co.sub+';font-size:12px"><thead><tr style="color:'+Co.mut+';text-align:left"><th style="padding:6px">De (R$)</th><th style="padding:6px">Até (R$)</th><th style="padding:6px">%</th><th style="padding:6px">Valor (R$)</th><th></th></tr></thead><tbody id="premRows">'+rows+'</tbody></table></div><button onclick="__gwaVendasPremAdd()" style="margin-top:10px;background:'+Co.card2+';border:1px solid '+Co.line+';color:#fff;border-radius:10px;padding:8px 14px;cursor:pointer"><i class="fas fa-plus"></i> Adicionar faixa</button>')+'</div>'; }
@@ -10828,6 +10836,127 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function reveal(){ if(isAdmin()){ var mi=document.getElementById('menuAtalhos'); if(mi) mi.style.display=''; ensureSection(); } var slot=document.getElementById('umAtalhosSlot'); if(slot && slot.children.length===0 && _at.length) renderMenu(); }
   setInterval(reveal,3500); document.addEventListener('DOMContentLoaded',function(){ setTimeout(load,1500); }); load();
   var _ep=window.enterPortal; if(typeof _ep==='function'){ window.enterPortal=function(){ var r=_ep.apply(this,arguments); setTimeout(load,1600); return r; }; }
+})();
+</script>
+<script>
+/* ===== INTRANET GWA :: MODULO DOCUMENTACAO (Fase 1 - DEFESA) ===== */
+(function(){
+  if(window.__gwaDoc) return; window.__gwaDoc=true;
+  var Co={bgA:'#0d0d0d',bgB:'#161616',card:'#1c1c1c',card2:'#242424',line:'rgba(255,255,255,.07)',orange:'#e07820',orangeD:'#c4661a',orangeL:'#f0943a',sub:'#c8c8c8',mut:'#8a8a8a',green:'#3fae5a',red:'#e5533c',gradO:'linear-gradient(135deg,#f0943a,#c4661a)'};
+  var GWA_LOGO='https://drive.google.com/thumbnail?id=1zLVXzu-yEsS8dwlD1UzRYAEWrEyzPgrZ&sz=w240';
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function base(){ return (typeof API_URL!=='undefined')?API_URL:''; }
+  function H(){ return {'Content-Type':'application/json','X-MC-Token':(typeof API_TOKEN!=='undefined'?API_TOKEN:'')}; }
+  function curU(){ return window.currentUser||(typeof getSession==='function'?getSession():{})||{}; }
+  function loginU(u){ return String((u&&(u.login||u.user||u.email||u.nome))||'').toUpperCase(); }
+  function role(){ return String((curU()||{}).role||'').toLowerCase(); }
+  function isMaster(){ return loginU(curU())==='TALIS'||role()==='master'; }
+  function isAdmin(){ return isMaster()||role()==='admin'||role()==='gestor'||role()==='supervisor'; }
+  function norm(s){ return String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim(); }
+  function usuarios(){ try{ if(typeof getUsers==='function'){ var g=getUsers(); if(g&&g.length) return g; } }catch(e){} return window._usersCache||[]; }
+  var COL='doc_defesa';
+  var CAMPOS_BASE=[
+    {key:'nome',label:'Nome',tipo:'text',obrig:true},
+    {key:'cpf',label:'CPF',tipo:'text'},
+    {key:'tipoDefesa',label:'Tipo de defesa',tipo:'text'},
+    {key:'municipio',label:'Município / Órgão',tipo:'text'},
+    {key:'data',label:'Data',tipo:'date'},
+    {key:'tipoEnvio',label:'Tipo de envio',tipo:'select',opcoes:['CORREIOS','ONLINE']},
+    {key:'objeto',label:'Objeto (rastreio)',tipo:'text'}
+  ];
+  var _cfg={id:'atual',camposExtra:[]}, _regs=[], _view=null, _editId=null, _busca='', _fCons='', _fEnvio='';
+  function campos(){ return CAMPOS_BASE.concat((_cfg&&_cfg.camposExtra)||[]); }
+  async function loadCfg(){ try{ var r=await fetch(base()+'/api/doc_config/atual',{headers:H()}); if(r.ok){ var j=await r.json(); if(j&&j.data){ _cfg=Object.assign({id:'atual',camposExtra:[]},j.data); } } }catch(e){} if(!_cfg.camposExtra)_cfg.camposExtra=[]; return _cfg; }
+  async function saveCfg(){ try{ var r=await fetch(base()+'/api/doc_config/atual',{method:'PUT',headers:H(),body:JSON.stringify(Object.assign({id:'atual'},_cfg))}); return r.ok; }catch(e){ return false; } }
+  async function loadRegs(){ try{ var r=await fetch(base()+'/api/'+COL,{headers:H()}); if(r.ok){ var j=await r.json(); _regs=(j&&j.data)||[]; } }catch(e){ _regs=_regs||[]; } return _regs; }
+  async function saveReg(o){ try{ var r=await fetch(base()+'/api/'+COL+'/'+encodeURIComponent(o.id),{method:'PUT',headers:H(),body:JSON.stringify(o)}); return r.ok; }catch(e){ return false; } }
+  function matchMeu(v){ var me=norm(loginU(curU())), meN=norm((curU()||{}).nome||''); var a=norm(v.consultor), b=norm(v.consultorNome); return a===me||a===meN||b===me||b===meN; }
+  function visiveis(){ var arr=(_regs||[]).slice(); if(!isAdmin()) arr=arr.filter(matchMeu); return arr; }
+  function aplicaFiltros(arr){ var q=norm(_busca); return arr.filter(function(v){
+    if(_fEnvio && String(v.tipoEnvio||'')!==_fEnvio) return false;
+    if(_fCons && norm(v.consultorNome||v.consultor)!==norm(_fCons)) return false;
+    if(q){ if(norm(v.nome).indexOf(q)<0 && norm(v.cpf).indexOf(q)<0) return false; }
+    return true; }).sort(function(a,b){return (b.ts||0)-(a.ts||0);}); }
+
+  /* ---- overlay ---- */
+  function open(){ ensurePanel(); document.getElementById('gwaDocOverlay').style.display='flex'; loadCfg().then(loadRegs).then(function(){ if(!_view)_view=isAdmin()?'todas':'lancar'; render(); }); }
+  function close(){ var o=document.getElementById('gwaDocOverlay'); if(o)o.style.display='none'; }
+  window.gwaAbrirDocumentacao=open;
+  function ensurePanel(){ if(document.getElementById('gwaDocOverlay')) return; var o=document.createElement('div'); o.id='gwaDocOverlay'; o.style.cssText='position:fixed;inset:0;z-index:99991;background:linear-gradient(180deg,'+Co.bgA+','+Co.bgB+');display:none;flex-direction:column;overflow:auto;font-family:inherit'; o.innerHTML='<div id="gwaDocHead" style="position:sticky;top:0;background:'+Co.bgA+';border-bottom:3px solid '+Co.orangeD+';color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;z-index:3;box-shadow:0 4px 18px rgba(0,0,0,.4)"></div><div id="gwaDocBody" style="padding:22px;max-width:1240px;margin:0 auto;width:100%;box-sizing:border-box"></div>'; document.body.appendChild(o); }
+  function tabs(){ if(isAdmin()){ var t=[['todas','Defesas','fa-table-list'],['lancar','Lançar','fa-plus']]; if(isMaster()){ t.push(['config','Ajustes','fa-sliders']); t.push(['importar','Importar','fa-file-import']); } return t; } return [['lancar','Lançar defesa','fa-plus'],['minhas','Minhas defesas','fa-list']]; }
+  function render(){ ensurePanel(); var head=document.getElementById('gwaDocHead'), body=document.getElementById('gwaDocBody'); if(!head||!body) return; if(!_view)_view=isAdmin()?'todas':'lancar';
+    head.innerHTML='<div style="display:flex;align-items:center;gap:14px"><img src="'+GWA_LOGO+'" style="height:40px;width:auto;max-width:120px;object-fit:contain;background:#fff;padding:4px 6px;border-radius:8px"><div><div style="font-size:18px;font-weight:800">Documentação GWA</div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:1px">Defesas e envios</div></div></div>'+
+      '<div style="display:flex;gap:7px;flex-wrap:wrap">'+tabs().map(function(t){var on=_view===t[0]; return '<button onclick="__gwaDocView(&#39;'+t[0]+'&#39;)" style="padding:8px 14px;border-radius:10px;border:1px solid '+(on?'transparent':Co.line)+';background:'+(on?Co.gradO:Co.card2)+';color:#fff;font-size:13px;font-weight:600;cursor:pointer"><i class="fas '+t[2]+'"></i> '+t[1]+'</button>';}).join('')+'<button onclick="__gwaDocClose()" style="width:38px;height:38px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:'+Co.sub+';cursor:pointer"><i class="fas fa-times"></i></button></div>';
+    try{ body.innerHTML=(_view==='config'&&isMaster())?viewConfig():((_view==='importar'&&isMaster())?viewImportar():((_view==='lancar')?viewLancar():viewLista())); }catch(e){ body.innerHTML='<div style="color:'+Co.red+';padding:20px">Erro: '+esc(e&&e.message||e)+'</div>'; }
+  }
+  window.__gwaDocView=function(v){ if(v!=='lancar')_editId=null; _view=v; render(); };
+  window.__gwaDocClose=close;
+
+  function inpStyle(){ return 'width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff'; }
+  function campoInput(c,val){ val=val==null?'':val; if(c.tipo==='select'){ var o=(c.opcoes||[]).map(function(x){return '<option value="'+esc(x)+'"'+(String(val)===String(x)?' selected':'')+'>'+esc(x)+'</option>';}).join(''); return '<select id="dcf_'+c.key+'" style="'+inpStyle()+'"><option value="">—</option>'+o+'</select>'; } var t=c.tipo==='date'?'date':'text'; return '<input id="dcf_'+c.key+'" type="'+t+'" value="'+esc(val)+'" style="'+inpStyle()+'">'; }
+  function viewLancar(){ var ed=_editId?(_regs.filter(function(x){return x.id===_editId;})[0]||null):null;
+    var grid=campos().map(function(c){ return '<div><label style="font-size:12px;color:'+Co.sub+'">'+esc(c.label)+(c.obrig?' *':'')+'</label>'+campoInput(c, ed?ed[c.key]:'')+'</div>'; }).join('');
+    var consBox=''; if(isAdmin()){ var us=usuarios().slice().sort(function(a,b){return String(a.nome||a.login).localeCompare(String(b.nome||b.login));}); var opts=us.map(function(u){ var nm=u.nome||u.login; var sel=ed&&norm(ed.consultorNome||ed.consultor)===norm(nm)?' selected':''; return '<option value="'+esc(nm)+'"'+sel+'>'+esc(nm)+'</option>'; }).join(''); consBox='<div><label style="font-size:12px;color:'+Co.sub+'">Consultor</label><select id="dcf_consultor" style="'+inpStyle()+'"><option value="">— selecione —</option>'+opts+'</select></div>'; }
+    var titulo=ed?'Editar defesa':'Lançar defesa';
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:20px;max-width:820px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><span style="width:5px;height:20px;border-radius:3px;background:'+Co.gradO+'"></span><h3 style="margin:0;color:#fff;font-size:15px"><i class="fas fa-scale-balanced" style="color:'+Co.orange+'"></i> '+titulo+'</h3></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">'+grid+consBox+'</div><div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button onclick="__gwaDocSalvar()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:12px 22px;font-weight:700;cursor:pointer"><i class="fas fa-check"></i> '+(ed?'Salvar alterações':'Salvar defesa')+'</button>'+(ed?'<button onclick="__gwaDocView(&#39;'+(isAdmin()?'todas':'minhas')+'&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer">Cancelar</button>':'')+'</div></div>'; }
+  window.__gwaDocSalvar=async function(){ try{ var g=function(k){ var e=document.getElementById('dcf_'+k); return e?String(e.value||'').trim():''; };
+    var nome=g('nome'); if(!nome){ alert('Informe o nome.'); return; }
+    var ed=_editId?(_regs.filter(function(x){return x.id===_editId;})[0]||null):null;
+    if(ed && !isAdmin() && !matchMeu(ed)){ alert('Sem permissão.'); return; }
+    var obj=ed?ed:{ id:'def_'+loginU(curU())+'_'+Date.now().toString(36), ts:Date.now(), origem:'manual' };
+    campos().forEach(function(c){ obj[c.key]=g(c.key); });
+    if(isAdmin()){ var cn=g('consultor'); if(cn){ obj.consultorNome=cn; obj.consultor=norm(cn); } else if(!obj.consultor){ obj.consultorNome=(curU()||{}).nome||loginU(curU()); obj.consultor=loginU(curU()); } }
+    else { obj.consultor=loginU(curU()); obj.consultorNome=(curU()||{}).nome||loginU(curU()); }
+    obj.atualizadoEm=Date.now();
+    var ok=await saveReg(obj); if(ok){ if(!ed){ _regs.push(obj); } _editId=null; alert(ed?'Defesa atualizada.':'Defesa lançada!'); _view=isAdmin()?'todas':'minhas'; render(); } else alert('Falha ao salvar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
+  window.__gwaDocEditar=function(id){ var v=(_regs||[]).filter(function(x){return x.id===id;})[0]; if(!v) return; if(!isAdmin() && !matchMeu(v)){ alert('Sem permissão.'); return; } _editId=id; _view='lancar'; render(); };
+  window.__gwaDocExcluir=async function(id){ var v=(_regs||[]).filter(function(x){return x.id===id;})[0]; if(!v) return; if(!isAdmin() && !matchMeu(v)){ alert('Sem permissão.'); return; } if(!confirm('Excluir a defesa de '+(v.nome||'')+'?')) return; try{ var r=await fetch(base()+'/api/'+COL+'/'+encodeURIComponent(id),{method:'DELETE',headers:H()}); if(r.ok){ _regs=(_regs||[]).filter(function(x){return x.id!==id;}); render(); } else alert('Falha ao excluir.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
+
+  function viewLista(){ var arr=aplicaFiltros(visiveis());
+    var consList=[]; (isAdmin()?_regs:[]).forEach(function(v){ var n=v.consultorNome||v.consultor; if(n && consList.indexOf(n)<0) consList.push(n); }); consList.sort();
+    var filtros='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center"><input value="'+esc(_busca)+'" oninput="__gwaDocBusca(this.value)" placeholder="Buscar nome ou CPF..." style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;min-width:220px">'+
+      '<select onchange="__gwaDocFiltro(&#39;env&#39;,this.value)" style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"><option value="">Todos os envios</option><option value="CORREIOS"'+(_fEnvio==='CORREIOS'?' selected':'')+'>Correios</option><option value="ONLINE"'+(_fEnvio==='ONLINE'?' selected':'')+'>Online</option></select>'+
+      (isAdmin()?('<select onchange="__gwaDocFiltro(&#39;cons&#39;,this.value)" style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"><option value="">Todos os consultores</option>'+consList.map(function(n){return '<option value="'+esc(n)+'"'+(norm(_fCons)===norm(n)?' selected':'')+'>'+esc(n)+'</option>';}).join('')+'</select>'):'')+
+      '<span style="margin-left:auto;font-size:12px;color:'+Co.mut+'"><b style="color:#fff">'+arr.length+'</b> registro(s)</span></div>';
+    var cols=campos().concat(isAdmin()?[{key:'consultorNome',label:'Consultor'}]:[]);
+    var head=cols.map(function(c){return '<th style="padding:10px;font-size:11px;text-transform:uppercase;letter-spacing:.4px">'+esc(c.label)+'</th>';}).join('')+'<th></th>';
+    var rows=arr.map(function(v){ var tds=cols.map(function(c){ var val=v[c.key]; if(c.key==='objeto'&&val){ val='<span style="color:'+Co.orangeL+'">'+esc(val)+'</span>'; } else val=esc(val); return '<td style="padding:10px;color:'+(c.key==='nome'?'#fff':Co.sub)+'">'+(val||'<span style="color:'+Co.mut+'">—</span>')+'</td>'; }).join('');
+      var podeEd=isAdmin()||matchMeu(v); var acoes=podeEd?('<button onclick="__gwaDocEditar(&#39;'+v.id+'&#39;)" title="Editar" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:4px"><i class="fas fa-pen"></i></button><button onclick="__gwaDocExcluir(&#39;'+v.id+'&#39;)" title="Excluir" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-trash"></i></button>'):'';
+      return '<tr style="border-bottom:1px solid '+Co.line+'">'+tds+'<td style="padding:10px;white-space:nowrap">'+acoes+'</td></tr>'; }).join('')||'<tr><td colspan="'+(cols.length+1)+'" style="padding:26px;text-align:center;color:'+Co.mut+'"><i class="fas fa-inbox" style="font-size:22px;display:block;margin-bottom:8px;opacity:.5"></i>Nenhuma defesa.</td></tr>';
+    return filtros+'<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'">'+head+'</tr></thead><tbody>'+rows+'</tbody></table></div></div>'; }
+  window.__gwaDocBusca=function(v){ _busca=v; var b=document.getElementById('gwaDocBody'); if(b){ /* re-render list only to keep input focus */ } _renderListaSoft(); };
+  function _renderListaSoft(){ if(_view==='lancar'||_view==='config'||_view==='importar') { render(); return; } var body=document.getElementById('gwaDocBody'); if(body){ var active=document.activeElement; var sel=active&&active.selectionStart; body.innerHTML=viewLista(); var ni=document.querySelector('#gwaDocBody input'); if(ni&&active&&active.tagName==='INPUT'){ ni.focus(); try{ ni.selectionStart=ni.selectionEnd=sel; }catch(e){} } } }
+  window.__gwaDocFiltro=function(k,v){ if(k==='env')_fEnvio=v; if(k==='cons')_fCons=v; render(); };
+
+  /* ---- Ajustes (Master): campos personalizados ---- */
+  function viewConfig(){ if(!isMaster()) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito ao Master.</div>';
+    var extra=(_cfg.camposExtra||[]);
+    var baseList=CAMPOS_BASE.map(function(c){ return '<span style="display:inline-block;background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:20px;padding:5px 12px;font-size:12px;margin:3px">'+esc(c.label)+'</span>'; }).join('');
+    var extraRows=extra.map(function(c){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:9px 10px;color:#fff">'+esc(c.label)+'</td><td style="padding:9px 10px;color:'+Co.mut+'">'+esc(c.key)+'</td><td style="padding:9px 10px">'+esc(c.tipo)+(c.tipo==='select'?(' ('+esc((c.opcoes||[]).join(', '))+')'):'')+'</td><td style="padding:9px 10px"><button onclick="__gwaDocCampoRemover(&#39;'+c.key+'&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-trash"></i></button></td></tr>'; }).join('')||'<tr><td colspan="4" style="padding:14px;text-align:center;color:'+Co.mut+'">Nenhum campo personalizado ainda.</td></tr>';
+    return '<div style="max-width:780px"><div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:16px"><h3 style="margin:0 0 8px;color:#fff;font-size:15px"><i class="fas fa-list" style="color:'+Co.orange+'"></i> Campos padrão (planilha)</h3><div>'+baseList+'</div></div>'+
+      '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:16px"><h3 style="margin:0 0 12px;color:#fff;font-size:15px"><i class="fas fa-plus" style="color:'+Co.orange+'"></i> Campos personalizados</h3>'+
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+'"><th style="padding:9px 10px">Rótulo</th><th style="padding:9px 10px">Chave</th><th style="padding:9px 10px">Tipo</th><th></th></tr></thead><tbody>'+extraRows+'</tbody></table></div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:14px;align-items:end"><div><label style="font-size:12px;color:'+Co.sub+'">Rótulo do campo</label><input id="dcNovoLabel" placeholder="Ex.: Nº do protocolo" style="'+inpStyle()+'"></div><div><label style="font-size:12px;color:'+Co.sub+'">Tipo</label><select id="dcNovoTipo" style="'+inpStyle()+'"><option value="text">Texto</option><option value="date">Data</option><option value="select">Lista (opções)</option></select></div><div><label style="font-size:12px;color:'+Co.sub+'">Opções (se lista, separe por vírgula)</label><input id="dcNovoOpc" placeholder="Ex.: SIM, NÃO" style="'+inpStyle()+'"></div><div><button onclick="__gwaDocCampoAdd()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer"><i class="fas fa-plus"></i> Adicionar campo</button></div></div>'+
+      '<div style="font-size:11px;color:'+Co.mut+';margin-top:8px">Os campos personalizados aparecem no formulário de lançamento e na tabela, para todos os consultores.</div></div></div>'; }
+  window.__gwaDocCampoAdd=async function(){ var lbl=(document.getElementById('dcNovoLabel').value||'').trim(); if(!lbl){ alert('Informe o rótulo.'); return; } var tipo=document.getElementById('dcNovoTipo').value||'text'; var opc=(document.getElementById('dcNovoOpc').value||'').split(',').map(function(s){return s.trim();}).filter(Boolean); var key='x_'+norm(lbl).toLowerCase().replace(/\s+/g,'_').slice(0,24); var usados={}; campos().forEach(function(c){usados[c.key]=1;}); if(usados[key]){ key=key+'_'+Date.now().toString(36).slice(-3); } _cfg.camposExtra=_cfg.camposExtra||[]; _cfg.camposExtra.push({key:key,label:lbl,tipo:tipo,opcoes:opc}); var ok=await saveCfg(); if(ok){ render(); } else { alert('Falha ao salvar.'); _cfg.camposExtra.pop(); } };
+  window.__gwaDocCampoRemover=async function(key){ if(!confirm('Remover este campo? (os dados já lançados nele não são apagados)')) return; _cfg.camposExtra=(_cfg.camposExtra||[]).filter(function(c){return c.key!==key;}); var ok=await saveCfg(); if(ok) render(); else alert('Falha ao salvar.'); };
+
+  /* ---- Importar (Master) ---- */
+  function viewImportar(){ if(!isMaster()) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito ao Master.</div>';
+    return '<div style="max-width:680px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:20px"><h3 style="margin:0 0 10px;color:#fff;font-size:15px"><i class="fas fa-file-import" style="color:'+Co.orange+'"></i> Importar defesas das planilhas</h3><p style="font-size:13px;color:'+Co.sub+';margin:0 0 14px">Selecione o arquivo <b>doc_defesa_import.json</b> (gerado a partir das planilhas dos consultores). Cada registro é lançado uma vez; se rodar de novo, os que já existem são ignorados.</p><input type="file" id="dcImpFile" accept="application/json,.json" style="color:'+Co.sub+';margin-bottom:12px"><div><button onclick="__gwaDocImportar()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:12px 22px;font-weight:700;cursor:pointer"><i class="fas fa-upload"></i> Importar</button></div><div id="dcImpProg" style="margin-top:12px;font-size:13px;color:'+Co.orangeL+'"></div></div>'; }
+  window.__gwaDocImportar=async function(){ if(!isMaster())return; var f=document.getElementById('dcImpFile'); if(!f||!f.files||!f.files[0]){ alert('Escolha o arquivo .json'); return; } var txt=await f.files[0].text(); var arr; try{ arr=JSON.parse(txt); }catch(e){ alert('Arquivo inválido (não é JSON).'); return; } if(!Array.isArray(arr)){ alert('O arquivo deve ser uma lista de registros.'); return; }
+    await loadRegs(); var existe={}; _regs.forEach(function(r){ existe[r.id]=1; }); var novos=arr.filter(function(r){ return r&&r.id&&!existe[r.id]; });
+    if(!novos.length){ alert('Nada novo para importar (todos já estão no sistema).'); return; }
+    if(!confirm('Importar '+novos.length+' registro(s) de defesa?')) return;
+    var prog=document.getElementById('dcImpProg'); var ok=0, fail=0;
+    async function um(r){ try{ var res=await fetch(base()+'/api/'+COL,{method:'POST',headers:H(),body:JSON.stringify(r)}); if(res.ok){ ok++; _regs.push(r); } else fail++; }catch(e){ fail++; } }
+    for(var i=0;i<novos.length;i+=8){ var lote=novos.slice(i,i+8); await Promise.all(lote.map(um)); if(prog) prog.textContent='Importando... '+Math.min(i+8,novos.length)+'/'+novos.length+' (ok '+ok+', falhas '+fail+')'; }
+    if(prog) prog.textContent='Concluído: '+ok+' importados, '+fail+' falha(s).'; alert('Importação concluída: '+ok+' registros.'); _view='todas'; render(); };
+
+  /* ---- NAV (ao lado de Vendas) ---- */
+  function addNav(){ try{ if(document.getElementById('gwaDocNav')) return; var ref=document.getElementById('gwaVendasNav'); var nav=document.querySelector('.mc-nav')||document.querySelector('nav'); var a=document.createElement('a'); a.id='gwaDocNav'; a.className='mc-nav__item'; a.style.cursor='pointer'; a.innerHTML='<i class="fas fa-folder-open"></i> Documentação'; a.onclick=function(){ gwaAbrirDocumentacao(); }; if(ref&&ref.parentNode){ ref.parentNode.insertBefore(a, ref.nextSibling); } else if(nav){ nav.appendChild(a); } else { var b=document.createElement('button'); b.id='gwaDocNav'; b.innerHTML='<i class="fas fa-folder-open"></i> Documentação'; b.style.cssText='position:fixed;bottom:22px;right:180px;z-index:9990;background:linear-gradient(135deg,#f0943a,#c4661a);color:#fff;border:none;border-radius:30px;padding:12px 20px;font-weight:700;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35)'; b.onclick=function(){gwaAbrirDocumentacao();}; document.body.appendChild(b); } }catch(e){} }
+  setInterval(addNav,3000); document.addEventListener('DOMContentLoaded',function(){ setTimeout(addNav,3000); });
+  var _ep=window.enterPortal; if(typeof _ep==='function'){ window.enterPortal=function(){ var r=_ep.apply(this,arguments); setTimeout(addNav,1500); return r; }; }
 })();
 </script>
 </body>
