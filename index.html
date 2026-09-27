@@ -10883,8 +10883,22 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function col(){ return T().col; }
   function extras(t){ var ce=_cfg&&_cfg.camposExtra; if(!ce) return []; if(Array.isArray(ce)) return (t||_tipo)==='defesa'?ce:[]; return ce[t||_tipo]||[]; }
   function campos(t){ return TIPOS[t||_tipo].campos.concat(extras(t||_tipo)); }
-  function regs(t){ var a=_regs[t||_tipo]||[]; return a.filter(function(r){ return r.duplicado!==true; }); }
+  var _limpos={}, _limposN={};
+  function regs(t){ t=t||_tipo; var a=_regs[t]||[];
+    if(_limposN[t]!==a.length || !_limpos[t]){ _limpos[t]=dedupLista(t,a); _limposN[t]=a.length; }
+    return _limpos[t]; }
   function regsBrutos(t){ return _regs[t||_tipo]||[]; }
+  function invalidaCache(t){ if(t){ delete _limpos[t]; delete _limposN[t]; } else { _limpos={}; _limposN={}; } }
+  /* mantem UMA copia de cada registro; prefere a planilha do proprio consultor */
+  function dedupLista(t,a){ var vistos={}, out=[];
+    a.slice().sort(function(x,y){
+      var xx=/CONTROLE/i.test(String(x.planilha||''))?1:0, yy=/CONTROLE/i.test(String(y.planilha||''))?1:0;
+      if(xx!==yy) return xx-yy; return (x.ts||0)-(y.ts||0); })
+     .forEach(function(r){ if(r.duplicado===true) return;
+       var c=chaveDup(t,r);
+       if(!c.replace(/\|/g,'').trim()){ out.push(r); return; }
+       if(vistos[c]) return; vistos[c]=1; out.push(r); });
+    return out; }
   /* chave de conteudo para detectar o mesmo registro vindo de 2 planilhas */
   function chaveDup(t,r){
     if(t==='defesa') return [norm(r.consultorNome||r.consultor),norm(r.nome),norm(r.cpf),norm(r.data),norm(r.tipoDefesa)].join('|');
@@ -10928,7 +10942,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(!_cfg.googleClientId){ try{ var rv=await fetch(base()+'/api/vendas_config/atual',{headers:H()}); if(rv.ok){ var jv=await rv.json(); if(jv&&jv.data&&jv.data.googleClientId) _cfg.googleClientId=jv.data.googleClientId; } }catch(e){} }
     _cfgOk=true; return _cfg; }
   async function saveCfg(){ try{ var r=await fetch(base()+'/api/doc_config/atual',{method:'PUT',headers:H(),body:JSON.stringify(Object.assign({id:'atual'},_cfg))}); return r.ok; }catch(e){ return false; } }
-  async function loadRegs(t){ t=t||_tipo; try{ var r=await fetch(base()+'/api/'+TIPOS[t].col,{headers:H()}); if(r.ok){ var j=await r.json(); _regs[t]=(j&&j.data)||[]; } }catch(e){ _regs[t]=_regs[t]||[]; } return _regs[t]; }
+  async function loadRegs(t){ t=t||_tipo; try{ var r=await fetch(base()+'/api/'+TIPOS[t].col,{headers:H()}); if(r.ok){ var j=await r.json(); _regs[t]=(j&&j.data)||[]; } }catch(e){ _regs[t]=_regs[t]||[]; } invalidaCache(t); return _regs[t]; }
   async function loadTodos(){ for(var i=0;i<ORDEM.length;i++){ await loadRegs(ORDEM[i]); } return _regs; }
   async function saveReg(o){ try{ var r=await fetch(base()+'/api/'+col()+'/'+encodeURIComponent(o.id),{method:'PUT',headers:H(),body:JSON.stringify(o)}); return r.ok; }catch(e){ return false; } }
 
@@ -11041,7 +11055,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       else body.innerHTML=viewLista();
     }catch(e){ body.innerHTML='<div style="color:'+Co.red+';padding:20px">Erro: '+esc(e&&e.message||e)+'</div>'; }
     if(_view==='lancar'&&_tipo==='defesa'){ setTimeout(function(){ var ed=_editId?(regs('defesa').filter(function(x){return x.id===_editId;})[0]||null):null; if(ed&&ed.orgaoId){ __gwaDefOrgao(ed.orgaoId); } else { __gwaDefOrgao(''); } },40); }
-    if(_view==='correios'&&!_jobsCarregados){ _jobsCarregados=true; loadJobs().then(function(){ if(_view==='correios') render(); }); }
+    if(_view==='correios'&&!_jobsCarregados){ _jobsCarregados=true; Promise.all([loadJobs(),loadAr()]).then(function(){ if(_view==='correios') render(); }); }
     if(_view==='dash'&&!_dashOk){ _dashOk=true; loadTodos().then(function(){ if(_view==='dash') render(); }); }
     if((_view==='orgaos'||(_view==='lancar'&&_tipo==='defesa'))&&!_orgOk&&!_orgCarregando){ _orgCarregando=true; loadOrgaos().then(function(){ _orgCarregando=false; render(); }); }
     if(_view==='relatorios'&&!_relOk){ _relOk=true; loadRegs('defesa').then(function(){ if(_view==='relatorios') render(); }); }
@@ -11302,8 +11316,15 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var arq='doc_'+_tipo+'_import.json';
     return '<div style="max-width:700px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:20px"><h3 style="margin:0 0 10px;color:#fff;font-size:15px"><i class="fas fa-file-import" style="color:'+Co.orange+'"></i> Importar '+esc(TIPOS[_tipo].plural)+'</h3><p style="font-size:13px;color:'+Co.sub+';margin:0 0 6px">Tipo selecionado no topo: <b style="color:'+Co.orange+'">'+esc(TIPOS[_tipo].plural.toUpperCase())+'</b> (colecao <code style="color:'+Co.orangeL+'">'+esc(col())+'</code>).</p><p style="font-size:13px;color:'+Co.sub+';margin:0 0 14px">Arquivo esperado: <b>'+esc(arq)+'</b>. Registros ja existentes sao ignorados.</p><input type="file" id="dcImpFile" accept="application/json,.json" style="color:'+Co.sub+';margin-bottom:12px"><div><button onclick="__gwaDocImportar()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:12px 22px;font-weight:700;cursor:pointer"><i class="fas fa-upload"></i> Importar</button></div><div id="dcImpProg" style="margin-top:12px;font-size:13px;color:'+Co.orangeL+'"></div></div>'; }
   window.__gwaDocImportar=async function(){ if(!ehAdminDoc())return; var f=document.getElementById('dcImpFile'); if(!f||!f.files||!f.files[0]){ alert('Escolha o arquivo .json'); return; } var txt=await f.files[0].text(); var arr; try{ arr=JSON.parse(txt); }catch(e){ alert('Arquivo invalido.'); return; } if(!Array.isArray(arr)){ alert('O arquivo deve ser uma lista.'); return; }
-    await loadRegs(_tipo); var existe={}; regs().forEach(function(r){ existe[r.id]=1; }); var novos=arr.filter(function(r){ return r&&r.id&&!existe[r.id]; });
-    if(!novos.length){ alert('Nada novo para importar.'); return; }
+    await loadRegs(_tipo); var tipoImp=_tipo;
+    var porId={}, porConteudo={};
+    regsBrutos(tipoImp).forEach(function(r){ porId[r.id]=1; var c=chaveDup(tipoImp,r); if(c.replace(/\|/g,'').trim()) porConteudo[c]=1; });
+    var repetidos=0;
+    var novos=arr.filter(function(r){ if(!r||!r.id) return false; if(porId[r.id]) return false;
+      if(tipoImp!=='elogio'){ var c=chaveDup(tipoImp,r); if(c.replace(/\|/g,'').trim()&&porConteudo[c]){ repetidos++; return false; } porConteudo[c]=1; }
+      porId[r.id]=1; return true; });
+    if(!novos.length){ alert('Nada novo para importar.'+(repetidos?('\n\n'+repetidos+' registro(s) ja existiam e foram ignorados.'):'')); return; }
+    if(repetidos) alert(repetidos+' registro(s) ja existiam na base e serao ignorados. Serao importados '+novos.length+' novo(s).');
     if(!confirm('Importar '+novos.length+' registro(s) em '+TIPOS[_tipo].plural.toUpperCase()+'?')) return;
     var prog=document.getElementById('dcImpProg'); var ok=0, fail=0; var alvo=col();
     async function um(r){ try{ var res=await fetch(base()+'/api/'+alvo,{method:'POST',headers:H(),body:JSON.stringify(r)}); if(res.ok){ ok++; _regs[_tipo].push(r); } else fail++; }catch(e){ fail++; } }
@@ -11311,14 +11332,35 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(prog) prog.textContent='Concluido: '+ok+' importados, '+fail+' falha(s).'; alert('Importacao concluida: '+ok+' registros.'); _view='lista'; render(); };
 
   /* ---------------- CORREIOS (robo GWA-AR) ---------------- */
-  var _jobs=[], _jobsCarregados=false, _jobAberto='';
+  var _jobs=[], _jobsCarregados=false, _jobAberto='', _arCfg=null, _arStatus=null;
+  async function loadAr(){ try{ var r=await fetch(base()+'/api/ar_config',{headers:H()}); if(r.ok){ var j=await r.json(); _arCfg=((j&&j.data)||[]).filter(function(x){return x.id==='config';})[0]||{id:'config',ativo:true,intervaloSegundos:30,webhookUrl:'',webhookToken:''}; } }catch(e){ _arCfg=_arCfg||{id:'config',ativo:true}; }
+    try{ var r2=await fetch(base()+'/api/ar_status',{headers:H()}); if(r2.ok){ var j2=await r2.json(); _arStatus=((j2&&j2.data)||[]).filter(function(x){return x.id==='status';})[0]||null; } }catch(e){}
+    return _arCfg; }
+  async function salvarAr(){ var c=Object.assign({id:'config'},_arCfg||{});
+    try{ var r=await fetch(base()+'/api/ar_config/config',{method:'PUT',headers:H(),body:JSON.stringify(c)}); if(r.ok) return true; }catch(e){}
+    try{ var r2=await fetch(base()+'/api/ar_config',{method:'POST',headers:H(),body:JSON.stringify(c)}); return r2.ok; }catch(e){ return false; } }
+  window.__gwaArToggle=async function(){ if(!ehAdminDoc()) return; _arCfg=_arCfg||{id:'config'}; _arCfg.ativo=(_arCfg.ativo===false); _arCfg.atualizadoEm=Date.now(); _arCfg.atualizadoPor=loginU(curU());
+    var ok=await salvarAr(); if(ok) render(); else alert('Falha ao salvar.'); };
+  window.__gwaArSalvar=async function(){ if(!ehAdminDoc()) return; var g=function(i){ var e=document.getElementById(i); return e?String(e.value||'').trim():''; };
+    _arCfg=_arCfg||{id:'config'}; _arCfg.webhookUrl=g('arWh'); _arCfg.webhookToken=g('arWhT'); _arCfg.intervaloSegundos=Math.max(10,Number(g('arInt'))||30);
+    if(_arCfg.ativo===undefined) _arCfg.ativo=true; _arCfg.atualizadoEm=Date.now(); _arCfg.atualizadoPor=loginU(curU());
+    var ok=await salvarAr(); alert(ok?'Configuracao salva! O robo aplica no proximo ciclo.':'Falha ao salvar.'); render(); };
   async function loadJobs(){ try{ var r=await fetch(base()+'/api/doc_correios',{headers:H()}); if(r.ok){ var j=await r.json(); _jobs=((j&&j.data)||[]).sort(function(a,b){return (b.ts||0)-(a.ts||0);}); } }catch(e){ _jobs=_jobs||[]; } return _jobs; }
   function jobCor(s){ return s==='concluido'?Co.green:(s==='processando'?Co.orangeL:(s==='erro'?Co.red:Co.mut)); }
   function jobLbl(s){ return s==='concluido'?'Concluido':(s==='processando'?'Processando...':(s==='erro'?'Erro':'Na fila')); }
   function viewCorreios(){ if(!ehAdminDoc()) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito.</div>';
     var ajuda='<div style="background:'+Co.card2+';border:1px dashed '+Co.line+';border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:'+Co.mut+'"><i class="fas fa-robot" style="color:'+Co.orange+'"></i> Coloque o PDF do <b>Comprovante do Cliente</b> dos Correios na pasta <b>entrada</b> do runner. Ele extrai os objetos, cruza com as <b>Defesas com envio CORREIOS</b> e grava o rastreio. Confianca alta entra sozinho; o resto aparece aqui para aprovar.</div>';
+    var st=_arStatus||{}; var cfgAr=_arCfg||{}; var on=st.lastPing&&(Date.now()-st.lastPing<180000);
+    var estado=(cfgAr.ativo===false)?'PAUSADO':(on?String(st.estado||'ativo').toUpperCase():'OFFLINE');
+    var corE=(cfgAr.ativo===false)?Co.orangeL:(estado==='ATIVO'?Co.green:(estado==='OFFLINE'?Co.red:Co.orangeL));
+    var painel='<div style="background:'+Co.card+';border:1px solid '+corE+';border-radius:16px;padding:16px 18px;margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px"><div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px">Robo GWA-AR (leitura dos comprovantes)</div><div style="font-size:22px;font-weight:900;color:'+corE+';margin-top:2px">'+esc(estado)+'</div><div style="font-size:11px;color:'+Co.mut+';margin-top:3px">'+(st.lastPingBR?('Ultimo sinal: '+esc(st.lastPingBR)):'Ainda nao reportou. Verifique se o runner esta rodando na maquina.')+(st.pasta?(' &middot; pasta: '+esc(st.pasta)):'')+'</div>'+(st.arquivosNaPasta!=null?('<div style="font-size:11px;color:'+Co.mut+'">Arquivos na pasta: <b style="color:'+Co.sub+'">'+st.arquivosNaPasta+'</b> &middot; ja processados: <b style="color:'+Co.sub+'">'+(st.jaProcessados||0)+'</b></div>'):'')+'</div>'+
+      '<button onclick="__gwaArToggle()" style="background:'+((cfgAr.ativo===false)?Co.green:Co.red)+';color:#fff;border:none;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer">'+((cfgAr.ativo===false)?'&#9654; Ativar robo':'&#9208; Pausar robo')+'</button></div>'+
+      '<div style="margin-top:14px;padding-top:12px;border-top:1px solid '+Co.line+'"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px"><i class="fas fa-share-nodes" style="color:'+Co.orange+'"></i> Webhook (envia as defesas ao CRM depois de registrar os objetos)</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px"><div><label style="font-size:12px;color:'+Co.sub+'">URL do webhook</label><input id="arWh" value="'+esc(cfgAr.webhookUrl||'')+'" placeholder="https://seu-crm.com/webhook" style="'+inpStyle()+'"></div><div><label style="font-size:12px;color:'+Co.sub+'">Token (opcional)</label><input id="arWhT" value="'+esc(cfgAr.webhookToken||'')+'" placeholder="enviado como Bearer" style="'+inpStyle()+'"></div><div><label style="font-size:12px;color:'+Co.sub+'">Intervalo (segundos)</label><input id="arInt" type="number" min="10" value="'+esc(cfgAr.intervaloSegundos||30)+'" style="'+inpStyle()+'"></div></div>'+
+      '<div style="margin-top:10px"><button onclick="__gwaArSalvar()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer"><i class="fas fa-save"></i> Salvar configuracao do robo</button></div>'+
+      '<div style="font-size:11px;color:'+Co.mut+';margin-top:8px">O robo le esta configuracao a cada ciclo. Ao terminar um comprovante, ele envia ao webhook os dados das defesas que receberam objeto (cliente, CPF, consultor, tipo, orgao, objeto e link de rastreio).</div></div></div>';
     var btn='<div style="margin-bottom:14px"><button onclick="__gwaDocCorRecarregar()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:10px;padding:9px 14px;cursor:pointer"><i class="fas fa-rotate"></i> Atualizar</button></div>';
-    if(!_jobs.length) return ajuda+btn+'<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:26px;text-align:center;color:'+Co.mut+'">Nenhum comprovante processado ainda.</div>';
+    if(!_jobs.length) return painel+ajuda+btn+'<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:26px;text-align:center;color:'+Co.mut+'">Nenhum comprovante processado ainda.</div>';
     var lista=_jobs.map(function(j){ var aberto=_jobAberto===j.id; var c=jobCor(j.status);
       var cab='<div onclick="__gwaDocCorAbrir(&#39;'+j.id+'&#39;)" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><div style="color:#fff;font-weight:700"><i class="fas fa-file-pdf" style="color:'+Co.orangeL+'"></i> '+esc(j.arquivo||'(sem nome)')+'</div><div style="font-size:12px;color:'+Co.mut+';margin-top:3px">'+esc(j.mensagem||'')+'</div></div><div style="text-align:right"><span style="background:'+Co.card2+';border:1px solid '+c+';color:'+c+';border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap">'+jobLbl(j.status)+'</span><div style="font-size:11px;color:'+Co.mut+';margin-top:4px">'+(j.totalObjetos||0)+' objetos &middot; <b style="color:'+Co.green+'">'+(j.aplicados||0)+'</b> aplicados &middot; <b style="color:'+Co.orangeL+'">'+((j.pendentes||[]).length)+'</b> p/ aprovar &middot; '+(j.semMatch||0)+' sem match</div></div></div>';
       var det=''; if(aberto){
@@ -11330,8 +11372,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         det='<div style="margin-top:12px;padding-top:12px;border-top:1px solid '+Co.line+'">'+(pendBox||'<div style="font-size:12px;color:'+Co.mut+'">Nada aguardando aprovacao.</div>')+smBox+del+'</div>';
       }
       return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-left:4px solid '+c+';border-radius:14px;padding:14px 16px;margin-bottom:10px">'+cab+det+'</div>'; }).join('');
-    return ajuda+btn+lista; }
-  window.__gwaDocCorRecarregar=function(){ loadJobs().then(function(){ render(); }); };
+    return painel+ajuda+btn+lista; }
+  window.__gwaDocCorRecarregar=function(){ Promise.all([loadJobs(),loadAr()]).then(function(){ render(); }); };
   window.__gwaDocCorAbrir=function(id){ _jobAberto=(_jobAberto===id)?'':id; render(); };
   window.__gwaDocCorAprovar=async function(jobId,idx){ var j=_jobs.filter(function(x){return x.id===jobId;})[0]; if(!j) return; var p=(j.pendentes||[])[idx]; if(!p) return;
     try{ var r=await fetch(base()+'/api/doc_defesa',{headers:H()}); var j2=await r.json(); var reg=(((j2&&j2.data)||[]).filter(function(x){return x.id===p.defesaId;}))[0];
