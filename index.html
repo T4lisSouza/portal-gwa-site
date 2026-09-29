@@ -10904,7 +10904,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   var ORDEM=['defesa','doc','elogio'];
 
   var _cfg={id:'atual',camposExtra:{},acessos:{},googleClientId:'',sheetId:'',sheetName:'Documentacao GWA'};
-  var _cfgOk=false, _regs={}, _tipo='defesa', _view=null, _editId=null, _busca='', _fCons='', _fEnvio='', _fObj='';
+  var _cfgOk=false, _regs={}, _tipo='defesa', _view=null, _editId=null, _busca='', _fCons='', _fEnvio='', _fObj='', _fPer='mes', _fStatus='';
   var _dTipo='', _dCons='', _dSup='', _dCat='', _dStatus='', _dEnvio='', _dPer='mes', _dIni='', _dFim='', _dashOk=false;
   function T(){ return TIPOS[_tipo]||TIPOS.defesa; }
   function col(){ return T().col; }
@@ -11106,7 +11106,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   window.__gwaDocCancelar=function(){ if(_cliForm||_fichaVolta){ __gwaCliFecharForm(); return; }
     _preCliente=null; __gwaDocView('lista'); };
   window.__gwaDocView=function(v){ if(v!=='ficha'&&v!=='novos') _novoVinculo=''; if(v!=='lancar'){ _preCliente=null; _fichaVolta=''; _editId=null; _defBlocos=null; _svcBlocos=null; } if(v!=='ficha')_cliAberto=''; _view=v; render(); };
-  window.__gwaDocTipo=function(t){ if(!TIPOS[t]) return; _tipo=t; _editId=null; _defBlocos=null; _svcBlocos=null; _busca=''; _fCons=''; _fEnvio=''; render(); loadRegs(t).then(function(){ render(); }); };
+  window.__gwaDocTipo=function(t){ if(!TIPOS[t]) return; _tipo=t; _editId=null; _defBlocos=null; _svcBlocos=null; _busca=''; _fCons=''; _fEnvio=''; _fStatus=''; render(); loadRegs(t).then(function(){ render(); }); };
   window.__gwaDocClose=close;
 
   /* ---------------- form ---------------- */
@@ -11135,7 +11135,74 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   window.__gwaDocExcluir=async function(id){ var v=regs().filter(function(x){return x.id===id;})[0]; if(!v) return; if(!podeEditar(v)){ alert('Sem permissao.'); return; } if(!confirm('Excluir o registro de '+(v.nome||'')+'?')) return; try{ var r=await fetch(base()+'/api/'+col()+'/'+encodeURIComponent(id),{method:'DELETE',headers:H()}); if(r.ok){ _regs[_tipo]=regs().filter(function(x){return x.id!==id;}); render(); } else alert('Falha ao excluir.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
 
   /* ---------------- lista ---------------- */
+
+  /* ============ PERIODO + SITUACAO NA LISTA DE REGISTROS ============ */
+  function periodoLista(){
+    var h=new Date(), ini=null, fim=null, lbl='';
+    if(_fPer==='semana'){ var dw=h.getDay(); ini=new Date(h.getFullYear(),h.getMonth(),h.getDate()-dw,0,0,0); fim=new Date(ini.getFullYear(),ini.getMonth(),ini.getDate()+6,23,59,59); lbl='Semana atual'; }
+    else if(_fPer==='mes'){ ini=new Date(h.getFullYear(),h.getMonth(),1,0,0,0); fim=new Date(h.getFullYear(),h.getMonth()+1,0,23,59,59); lbl='Mes atual'; }
+    else if(_fPer==='mesant'){ ini=new Date(h.getFullYear(),h.getMonth()-1,1,0,0,0); fim=new Date(h.getFullYear(),h.getMonth(),0,23,59,59); lbl='Mes anterior'; }
+    else if(_fPer==='ano'){ ini=new Date(h.getFullYear(),0,1,0,0,0); fim=new Date(h.getFullYear(),11,31,23,59,59); lbl='Ano atual'; }
+    else lbl='Todo o periodo';
+    return {ini:ini,fim:fim,lbl:lbl}; }
+  function dentroDoPeriodoLista(t,r){ var p=periodoLista(); if(!p.ini) return true;
+    var d=parseData(dataDe(t,r)); if(!d) return _fPer==='tudo';
+    return d.getTime()>=p.ini.getTime() && d.getTime()<=p.fim.getTime(); }
+
+  /* situacao de cada registro, por area */
+  function situacao(t,r){
+    if(t==='elogio'){
+      if(r.validado===false) return {txt:'Recusado',cor:Co.red,pend:false};
+      if(r.validado===true)  return {txt:'Verificado',cor:Co.green,pend:false};
+      if(!elogioTemData(r))  return {txt:'Aguardando data do elogio',cor:Co.orangeL,pend:true};
+      return {txt:'Em verificacao',cor:Co.blue,pend:true}; }
+    if(t==='doc'){
+      return String(r.concluidoEm||'').trim()
+        ? {txt:'Concluido',cor:Co.green,pend:false}
+        : {txt:'Em andamento',cor:Co.orangeL,pend:true}; }
+    /* defesa */
+    var env=String(r.tipoEnvio||'').toUpperCase(), obj=String(r.objeto||'').trim();
+    if(obj) return {txt:'Rastreado',cor:Co.green,pend:false};
+    if(env==='ONLINE') return {txt:'Enviado online',cor:Co.blue,pend:false};
+    if(env==='CORREIOS') return {txt:'Aguardando rastreio',cor:Co.orangeL,pend:true};
+    return {txt:'Sem tipo de envio',cor:Co.mut,pend:true}; }
+
+  function opcoesStatus(t){
+    if(t==='elogio') return [['pend','Pendentes (tudo que falta)'],['semdata','Aguardando data do elogio'],['verif','Em verificacao'],['ok','Verificado'],['rec','Recusado']];
+    if(t==='doc')    return [['pend','Pendentes (em andamento)'],['ok','Concluido']];
+    return [['pend','Pendentes (aguardando rastreio)'],['ok','Rastreado'],['online','Enviado online'],['semenv','Sem tipo de envio']]; }
+  function casaStatus(t,r){ if(!_fStatus) return true; var s=situacao(t,r);
+    if(_fStatus==='pend') return s.pend;
+    if(t==='elogio'){ if(_fStatus==='semdata') return s.txt.indexOf('Aguardando')===0;
+      if(_fStatus==='verif') return s.txt==='Em verificacao'; if(_fStatus==='ok') return s.txt==='Verificado';
+      if(_fStatus==='rec') return s.txt==='Recusado'; }
+    if(t==='doc'){ if(_fStatus==='ok') return s.txt==='Concluido'; }
+    if(t==='defesa'){ if(_fStatus==='ok') return s.txt==='Rastreado'; if(_fStatus==='online') return s.txt==='Enviado online';
+      if(_fStatus==='semenv') return s.txt==='Sem tipo de envio'; }
+    return true; }
+
+  /* resumo de pendencias das 3 areas, clicavel */
+  function faixaPendencias(){
+    var p=periodoLista(); var out=[];
+    ORDEM.forEach(function(t){
+      var n=filtraEscopo(regs(t)).filter(function(r){ return dentroDoPeriodoLista(t,r) && situacao(t,r).pend; }).length;
+      out.push({t:t,n:n}); });
+    var total=out.reduce(function(a,x){ return a+x.n; },0);
+    var cor={defesa:Co.green,doc:Co.blue,elogio:Co.orangeL};
+    var rot={defesa:'defesas aguardando rastreio',doc:'documentacoes em andamento',elogio:'elogios pendentes'};
+    return '<div style="background:'+Co.card+';border:1px solid '+(total?Co.orangeD:Co.line)+';border-radius:14px;padding:12px 15px;margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
+      '<div style="font-size:12px;color:'+Co.mut+';font-weight:700;text-transform:uppercase;letter-spacing:.6px"><i class="fas fa-triangle-exclamation" style="color:'+(total?Co.orangeL:Co.mut)+'"></i> Pendencias &middot; '+esc(p.lbl)+'</div>'+
+      out.map(function(x){ var on=(_tipo===x.t&&_fStatus==='pend');
+        return '<button onclick="__gwaDocPend(&#39;'+x.t+'&#39;)" style="background:'+(on?cor[x.t]:Co.card2)+';border:1px solid '+(on?'transparent':(x.n?cor[x.t]:Co.line))+';color:'+(on?'#0d0d0d':(x.n?cor[x.t]:Co.mut))+';border-radius:20px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer"><b style="font-size:14px">'+x.n+'</b> '+rot[x.t]+'</button>'; }).join('')+
+      (total?'':'<span style="font-size:12px;color:'+Co.green+'"><i class="fas fa-circle-check"></i> nada pendente neste periodo</span>')+'</div>'; }
+
+  window.__gwaDocPend=function(t){ if(_tipo===t && _fStatus==='pend'){ _fStatus=''; }
+    else { _tipo=t; _fStatus='pend'; }
+    _view='lista'; _editId=null; _busca=''; render(); if(!(_regs[t]||[]).length) loadRegs(t).then(function(){ render(); }); };
+
   function aplicaFiltros(arr){ var q=norm(_busca); return arr.filter(function(v){
+    if(!dentroDoPeriodoLista(_tipo,v)) return false;
+    if(!casaStatus(_tipo,v)) return false;
     if(_tipo==='defesa' && _fEnvio && String(v.tipoEnvio||'')!==_fEnvio) return false;
     if(_tipo==='defesa' && _fObj){ var temObj=!!String(v.objeto||'').trim();
       if(_fObj==='com' && !temObj) return false;
@@ -11148,21 +11215,28 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function viewLista(){ var vis=visiveis(); var arr=aplicaFiltros(vis);
     var consList=[]; vis.forEach(function(v){ var n=consultorDe(v); if(n && consList.indexOf(n)<0) consList.push(n); }); consList.sort();
     var podeFiltrarCons=(ehAdminDoc()||ehSupervisor());
-    var filtros='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center"><input value="'+esc(_busca)+'" oninput="__gwaDocBusca(this.value)" placeholder="Buscar nome, CPF, protocolo, tipo de defesa..." style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;min-width:220px">'+
+    var perSel='<select onchange="__gwaDocFiltro(&#39;per&#39;,this.value)" style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.orangeD+';background:'+Co.card2+';color:#fff;font-weight:700">'+
+      [['semana','Semana atual'],['mes','Mes atual'],['mesant','Mes anterior'],['ano','Ano atual'],['tudo','Todo o periodo']].map(function(o){
+        return '<option value="'+o[0]+'"'+(_fPer===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('')+'</select>';
+    var stSel='<select onchange="__gwaDocFiltro(&#39;st&#39;,this.value)" style="padding:9px 12px;border-radius:10px;border:1px solid '+(_fStatus?Co.orangeD:Co.line)+';background:'+Co.card2+';color:#fff'+(_fStatus?';font-weight:700':'')+'"><option value="">Todas as situacoes</option>'+
+      opcoesStatus(_tipo).map(function(o){ return '<option value="'+o[0]+'"'+(_fStatus===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('')+'</select>';
+    var filtros=faixaPendencias()+'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">'+perSel+stSel+'<input value="'+esc(_busca)+'" oninput="__gwaDocBusca(this.value)" placeholder="Buscar nome, CPF, protocolo, tipo de defesa..." style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;min-width:220px">'+
       (_tipo==='defesa'?('<select onchange="__gwaDocFiltro(&#39;env&#39;,this.value)" style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"><option value="">Todos os envios</option><option value="CORREIOS"'+(_fEnvio==='CORREIOS'?' selected':'')+'>Correios</option><option value="ONLINE"'+(_fEnvio==='ONLINE'?' selected':'')+'>Online</option></select>'+
        '<select onchange="__gwaDocFiltro(&#39;obj&#39;,this.value)" style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"><option value="">Rastreio: todos</option><option value="novos"'+(_fObj==='novos'?' selected':'')+'>Objetos novos (7 dias)</option><option value="com"'+(_fObj==='com'?' selected':'')+'>Com rastreio</option><option value="sem"'+(_fObj==='sem'?' selected':'')+'>Sem rastreio</option></select>'):'')+
       (podeFiltrarCons?('<select onchange="__gwaDocFiltro(&#39;cons&#39;,this.value)" style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"><option value="">Todos os consultores</option>'+consList.map(function(n){return '<option value="'+esc(n)+'"'+(norm(_fCons)===norm(n)?' selected':'')+'>'+esc(n)+'</option>';}).join('')+'</select>'):'')+
       '<span style="margin-left:auto;font-size:12px;color:'+Co.mut+'"><b style="color:#fff">'+arr.length+'</b> registro(s)</span></div>';
     var cols=campos().concat(podeFiltrarCons?[{key:'consultorNome',label:'Consultor'}]:[]);
-    var head=cols.map(function(c){return '<th style="padding:10px;font-size:11px;text-transform:uppercase;letter-spacing:.4px">'+esc(c.label)+'</th>';}).join('')+'<th></th>';
+    var head='<th style="padding:10px;font-size:11px;text-transform:uppercase;letter-spacing:.4px">Situacao</th>'+cols.map(function(c){return '<th style="padding:10px;font-size:11px;text-transform:uppercase;letter-spacing:.4px">'+esc(c.label)+'</th>';}).join('')+'<th></th>';
     var rows=arr.map(function(v){ var tds=cols.map(function(c){ var raw=v[c.key]; var val; if(c.key==='objeto'&&raw){ val='<a href="https://rastreamento.correios.com.br/app/index.php?objetos='+encodeURIComponent(String(raw).trim())+'" target="_blank" rel="noopener" title="Rastrear nos Correios" style="color:'+Co.orangeL+';text-decoration:none;font-weight:600"><i class="fas fa-truck-fast"></i> '+esc(raw)+'</a>'; } else if(c.key==='link'&&raw){ val='<a href="'+esc(raw)+'" target="_blank" rel="noopener" style="color:'+Co.orangeL+'">'+esc(raw)+'</a>'; } else val=esc(raw);
         return '<td style="padding:10px;color:'+(c.key==='nome'?'#fff':Co.sub)+'">'+(val||'<span style="color:'+Co.mut+'">-</span>')+'</td>'; }).join('');
       var acoes='<button onclick="__gwaCliPerfil(&#39;'+_tipo+'&#39;,&#39;'+v.id+'&#39;)" title="Abrir perfil do cliente" style="background:'+Co.card2+';border:1px solid '+Co.orangeD+';color:'+Co.orangeL+';border-radius:8px;padding:6px 10px;cursor:pointer;margin-right:4px;font-size:12px"><i class="fas fa-address-card"></i> Perfil</button>';
       acoes+=podeEditar(v)?('<button onclick="__gwaDocEditar(&#39;'+v.id+'&#39;)" title="Editar" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:4px"><i class="fas fa-pen"></i></button><button onclick="__gwaDocExcluir(&#39;'+v.id+'&#39;)" title="Excluir" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-trash"></i></button>'):'';
-      return '<tr style="border-bottom:1px solid '+Co.line+'">'+tds+'<td style="padding:10px;white-space:nowrap">'+acoes+'</td></tr>'; }).join('')||'<tr><td colspan="'+(cols.length+1)+'" style="padding:26px;text-align:center;color:'+Co.mut+'"><i class="fas fa-inbox" style="font-size:22px;display:block;margin-bottom:8px;opacity:.5"></i>Nenhum registro.</td></tr>';
+      var sit=situacao(_tipo,v);
+      var chip='<td style="padding:10px;white-space:nowrap"><span style="display:inline-block;background:'+(sit.pend?'rgba(224,120,32,.14)':'rgba(255,255,255,.05)')+';border:1px solid '+sit.cor+';color:'+sit.cor+';border-radius:20px;padding:4px 11px;font-size:11px;font-weight:700">'+(sit.pend?'<i class="fas fa-hourglass-half"></i> ':'<i class="fas fa-circle-check"></i> ')+esc(sit.txt)+'</span></td>';
+      return '<tr style="border-bottom:1px solid '+Co.line+'">'+chip+tds+'<td style="padding:10px;white-space:nowrap">'+acoes+'</td></tr>'; }).join('')||'<tr><td colspan="'+(cols.length+2)+'" style="padding:26px;text-align:center;color:'+Co.mut+'"><i class="fas fa-inbox" style="font-size:22px;display:block;margin-bottom:8px;opacity:.5"></i>Nenhum registro.</td></tr>';
     return filtros+'<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'">'+head+'</tr></thead><tbody>'+rows+'</tbody></table></div></div>'; }
   window.__gwaDocBusca=function(v){ _busca=v; var body=document.getElementById('gwaDocBody'); if(!body) return; var a=document.activeElement; var pos=a&&a.selectionStart; body.innerHTML=viewLista(); var ni=document.querySelector('#gwaDocBody input'); if(ni){ ni.focus(); try{ ni.selectionStart=ni.selectionEnd=pos; }catch(e){} } };
-  window.__gwaDocFiltro=function(k,v){ if(k==='env')_fEnvio=v; if(k==='cons')_fCons=v; if(k==='obj')_fObj=v; render(); };
+  window.__gwaDocFiltro=function(k,v){ if(k==='env')_fEnvio=v; if(k==='cons')_fCons=v; if(k==='obj')_fObj=v; if(k==='per')_fPer=v; if(k==='st')_fStatus=v; render(); };
 
   /* ---------------- DASHBOARD ---------------- */
   function card(lbl,val,sub,cor){ return '<div style="flex:1 1 150px;min-width:150px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px"><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px">'+esc(lbl)+'</div><div style="font-size:24px;font-weight:800;color:'+(cor||'#fff')+';margin-top:6px">'+val+'</div>'+(sub?'<div style="font-size:11px;color:'+Co.mut+';margin-top:3px">'+esc(sub)+'</div>':'')+'</div>'; }
