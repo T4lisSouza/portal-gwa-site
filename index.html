@@ -11543,17 +11543,29 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function cbCfg(){ var c=(_cfg&&_cfg.cashback)||{}; return {faixas:(c.faixas&&c.faixas.length)?c.faixas:FAIXAS_PADRAO, campanha:c.campanha||'Campanha documentos'}; }
   function faixaDe(q){ var fx=cbCfg().faixas.slice().sort(function(a,b){return a.de-b.de;}); for(var i=0;i<fx.length;i++){ if(q>=Number(fx[i].de)&&q<=Number(fx[i].ate)) return fx[i]; } return fx.length?fx[fx.length-1]:{de:0,ate:0,valor:0}; }
   function proxFaixa(q){ var fx=cbCfg().faixas.slice().sort(function(a,b){return a.de-b.de;}); for(var i=0;i<fx.length;i++){ if(Number(fx[i].de)>q) return fx[i]; } return null; }
-  function elogioEnviado(r){ if(r.validado===false) return false; if(r.validado===true) return true;
-    var st=norm(r.status||''); return st.indexOf('ENVIAD')>=0 || st.indexOf('AGUARD')>=0; }
+  /* 1a data = solicitacao (r.data) | 2a data = data do elogio (r.dataElogio)
+     Registros antigos/importados nao tem a 2a data: valem pela data original. */
+  function elogioLegado(r){ return !!(r.validado!==undefined || (r.origem && r.origem!=='manual') || r.planilha); }
+  function dataElogioDe(r){ if(r.dataElogio) return r.dataElogio; return elogioLegado(r)?(r.data||r.feitoEm||''):''; }
+  function elogioTemData(r){ return !!parseData(dataElogioDe(r)); }
+  function elogioAguardandoData(r){ return r.validado===undefined && !elogioTemData(r); }
+  function elogioEmVerificacao(r){ return r.validado===undefined && elogioTemData(r); }
+  function elogioEnviado(r){ if(r.validado===false) return false; if(r.validado===true) return true; return elogioTemData(r); }
   function elogioConcluido(r){ return r.validado===true; }
-  function elogioAguardando(r){ return elogioEnviado(r) && r.validado===undefined; }
-  function mesRef(r){ var d=parseData(r.data)||parseData(r.feitoEm); if(!d) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+  function elogioAguardando(r){ return elogioEmVerificacao(r); }
+  function mesRef(r){ var d=parseData(dataElogioDe(r))||parseData(r.data)||parseData(r.feitoEm); if(!d) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+  /* periodo em que a SOLICITACAO foi feita (para a fila de 2a data) */
+  function mesSolic(r){ var d=parseData(r.data)||parseData(r.feitoEm); if(!d) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+  function aguardandoDataLista(){ return filtraEscopo(regs('elogio')).filter(elogioAguardandoData)
+    .sort(function(a,b){ return (b.ts||0)-(a.ts||0); }); }
   function perAtual(){ if(_cbPer) return _cbPer; var h=new Date(); return h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0'); }
   function perLabel(p){ var M=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']; var a=p.split('-'); return (M[(+a[1])-1]||'')+'/'+a[0]; }
   function resumoCashback(per,todos){ var lista=todos?regs('elogio'):filtraEscopo(regs('elogio')); var m={};
     lista.forEach(function(r){ if(mesRef(r)!==per) return; var c=consultorDe(r); if(!m[c]) m[c]={consultor:c,enviados:0,concluidos:0,pendentes:0};
       if(!elogioEnviado(r)) return;
       m[c].enviados++; if(elogioConcluido(r)) m[c].concluidos++; else if(r.validado===undefined) m[c].pendentes++; });
+    lista.forEach(function(r){ if(!elogioAguardandoData(r)) return; if(mesSolic(r)!==per) return;
+      var c=consultorDe(r); if(!m[c]) m[c]={consultor:c,enviados:0,concluidos:0,pendentes:0,semData:0}; m[c].semData=(m[c].semData||0)+1; });
     return Object.keys(m).map(function(k){ var o=m[k]; var f=faixaDe(o.concluidos); o.valorUnit=Number(f.valor)||0; o.total=o.concluidos*o.valorUnit; o.faixa=f;
       o.pct=o.enviados?(o.concluidos/o.enviados*100):0; return o; }).sort(function(a,b){return b.total-a.total;}); }
   function moedaBR(n){ n=Number(n)||0; try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }catch(e){ return 'R$ '+n.toFixed(2); } }
@@ -11569,6 +11581,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   async function loadSols(){ try{ var r=await fetch(base()+'/api/doc_cashback',{headers:H()}); if(r.ok){ var j=await r.json(); _cbSols=((j&&j.data)||[]).sort(function(a,b){return (b.ts||0)-(a.ts||0);}); } }catch(e){ _cbSols=_cbSols||[]; } return _cbSols; }
 
   function viewCashback(){ var subs=[['meu','Minha premiação','fa-wallet']];
+    subs.push(['data','Data do elogio'+(function(){ var q=aguardandoDataLista().length; return q?('<span style="background:#e5533c;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:5px;font-weight:800">'+q+'</span>'):''; })(),'fa-calendar-plus']);
     if(ehAdminDoc()||ehSupervisor()) subs.push(['equipe','Equipe','fa-users']);
     if(ehAdminDoc()||ehSupervisor()) subs.push(['validar','Verificar elogios','fa-circle-check']);
     if(ehAdminDoc()||ehSupervisor()) subs.push(['pagamentos','Pagamentos','fa-file-invoice-dollar']);
@@ -11576,7 +11589,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(!subs.filter(function(s){return s[0]===_cbView;}).length) _cbView='meu';
     var nav='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">'+subs.map(function(s){ var on=_cbView===s[0]; return '<button onclick="__gwaCbView(&#39;'+s[0]+'&#39;)" style="padding:8px 14px;border-radius:10px;border:1px solid '+(on?'transparent':Co.line)+';background:'+(on?Co.gradO:Co.card2)+';color:#fff;font-size:13px;font-weight:600;cursor:pointer"><i class="fas '+s[2]+'"></i> '+s[1]+'</button>'; }).join('')+'<span style="margin-left:auto">'+seletorPeriodo()+'</span></div>';
     var corpo='';
-    if(_cbView==='meu') corpo=cbMeu(); else if(_cbView==='equipe') corpo=cbEquipe(); else if(_cbView==='validar') corpo=cbValidar(); else if(_cbView==='pagamentos') corpo=cbPagamentos(); else corpo=cbRegras();
+    if(_cbView==='meu') corpo=cbMeu(); else if(_cbView==='data') corpo=cbDataElogio(); else if(_cbView==='equipe') corpo=cbEquipe(); else if(_cbView==='validar') corpo=cbValidar(); else if(_cbView==='pagamentos') corpo=cbPagamentos(); else corpo=cbRegras();
     return nav+corpo; }
 
   function cbMeu(){ var per=perAtual(); var meuNome=canonConsultor((curU()||{}).nome||loginU(curU()));
@@ -11589,8 +11602,43 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       gauge('Verificados', eu.concluidos/Math.max(1,metaVis), String(eu.concluidos), Co.orangeL)+
       '<div style="flex:1 1 200px;min-width:200px;background:linear-gradient(160deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px;display:flex;flex-direction:column;justify-content:center;text-align:center"><div style="font-size:34px">🏆</div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;margin-top:4px">Minha premiação</div><div style="font-size:30px;font-weight:900;color:'+Co.orangeL+';margin-top:4px">'+moedaBR(eu.total)+'</div><div style="font-size:11px;color:'+Co.mut+';margin-top:3px">'+eu.concluidos+' x '+moedaBR(eu.valorUnit)+'</div></div></div>';
     var barra=prox?('<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:16px"><div style="display:flex;justify-content:space-between;font-size:13px;color:'+Co.sub+'"><b style="color:#fff">Próxima faixa</b><span>'+eu.concluidos+' / '+prox.de+' elogios</span></div><div style="height:14px;border-radius:8px;background:'+Co.card2+';overflow:hidden;margin:8px 0"><div style="height:100%;width:'+Math.min(100,eu.concluidos/Number(prox.de)*100)+'%;background:'+Co.gradO+'"></div></div><div style="font-size:13px;color:'+Co.orangeL+'">Faltam <b>'+faltam+'</b> elogio(s) concluído(s) para subir para <b>'+moedaBR(prox.valor)+'</b> por elogio.</div></div>'):('<div style="background:'+Co.card+';border:1px solid '+Co.green+';border-radius:16px;padding:16px;margin-bottom:16px;color:'+Co.green+';font-weight:700">🎉 Você está na faixa máxima da campanha!</div>');
+    var semD=aguardandoDataLista().length;
+    var avisoD=semD?('<div style="background:'+Co.card+';border:1px solid '+Co.orangeD+';border-radius:16px;padding:16px;margin-bottom:16px;font-size:13px;color:'+Co.sub+';display:flex;gap:12px;flex-wrap:wrap;align-items:center"><div style="flex:1;min-width:220px"><i class="fas fa-calendar-plus" style="color:'+Co.orangeL+'"></i> Voce tem <b style="color:'+Co.orangeL+'">'+semD+'</b> solicitacao(oes) esperando a <b>data do elogio</b>. Sem essa data o elogio nao vai para verificacao e nao conta na premiacao.</div><button onclick="__gwaCbView(&#39;data&#39;)" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:11px;padding:10px 17px;font-weight:700;cursor:pointer">Informar agora</button></div>'):'';
     var pend=eu.pendentes?('<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px;margin-bottom:16px;font-size:13px;color:'+Co.sub+'"><i class="fas fa-hourglass-half" style="color:'+Co.orangeL+'"></i> Você tem <b style="color:'+Co.orangeL+'">'+eu.pendentes+'</b> elogio(s) aguardando verificacao do supervisor. Eles entram na premiacao assim que forem verificados.</div>'):'';
-    return '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:12px">Período: <b style="color:'+Co.orange+'">'+perLabel(per)+'</b> · Consultor: <b style="color:#fff">'+esc(eu.consultor)+'</b></div>'+cards+barra+pend+tabelaFaixas(eu.faixa); }
+    return '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:12px">Período: <b style="color:'+Co.orange+'">'+perLabel(per)+'</b> · Consultor: <b style="color:#fff">'+esc(eu.consultor)+'</b></div>'+cards+avisoD+barra+pend+tabelaFaixas(eu.faixa); }
+
+  /* ---- o operador informa a DATA DO ELOGIO (2a data) ---- */
+  function cbDataElogio(){ var lista=aguardandoDataLista();
+    var hojeIso=(function(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
+    var topo='<div style="background:linear-gradient(135deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:18px;padding:18px 20px;margin-bottom:14px">'+
+      '<div style="font-size:11px;color:'+Co.orange+';text-transform:uppercase;letter-spacing:1px;font-weight:700">Aguardando a data do elogio</div>'+
+      '<div style="font-size:18px;font-weight:800;color:#fff;margin:4px 0 6px">'+lista.length+' solicitacao(oes) sem a 2a data</div>'+
+      '<div style="font-size:12px;color:'+Co.mut+';line-height:1.6">Ao cadastrar, fica gravada a <b style="color:'+Co.sub+'">data da solicitacao</b>. Quando o cliente publicar o elogio, o operador informa aqui a <b style="color:'+Co.orangeL+'">data do elogio</b> — e so nesse momento o registro vai para a verificacao do supervisor e passa a valer para a premiacao.</div></div>';
+    if(!lista.length) return topo+'<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:34px;text-align:center;color:'+Co.mut+'"><i class="fas fa-circle-check" style="font-size:28px;display:block;margin-bottom:12px;opacity:.5"></i>Nenhuma solicitacao esperando a data do elogio.</div>';
+    var cards=lista.slice(0,300).map(function(r){
+      var dias=(function(){ var d=parseData(r.data); if(!d) return ''; var n=Math.floor((Date.now()-d.getTime())/86400000); return n>=0?(n+' dia(s) desde a solicitacao'):''; })();
+      return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-left:4px solid '+Co.orange+';border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">'+
+        '<div style="flex:1;min-width:210px"><div style="color:#fff;font-weight:700">'+esc(r.nome||'(sem nome)')+'</div>'+
+        '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px"><i class="fas fa-paper-plane"></i> solicitado em <b style="color:'+Co.sub+'">'+esc(r.data||'-')+'</b>'+(dias?(' &middot; '+dias):'')+'</div>'+
+        '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px"><i class="fas fa-user"></i> '+esc(consultorDe(r))+(r.link?(' &middot; <a href="'+esc(r.link)+'" target="_blank" rel="noopener" style="color:'+Co.blue+'">ver link</a>'):'')+'</div></div>'+
+        '<div><label style="font-size:11px;color:'+Co.orangeL+';display:block;margin-bottom:4px;font-weight:700">Data do elogio</label>'+
+        '<input type="date" id="de_'+esc(r.id)+'" max="'+hojeIso+'" style="padding:9px 11px;border-radius:10px;border:1px solid '+Co.orangeD+';background:'+Co.card2+';color:#fff"></div>'+
+        '<button onclick="__gwaCbPorData(&#39;'+esc(r.id)+'&#39;)" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:11px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-arrow-right"></i> Enviar para verificacao</button>'+
+        '</div>'; }).join('');
+    return topo+cards; }
+  window.__gwaCbPorData=async function(id){ var r=regs('elogio').filter(function(x){return x.id===id;})[0]; if(!r) return;
+    if(!podeEditar(r)){ alert('Sem permissao para editar este registro.'); return; }
+    var e=document.getElementById('de_'+id); var v=e?String(e.value||'').trim():'';
+    if(!v){ alert('Informe a data em que o cliente publicou o elogio.'); return; }
+    var d=parseData(v); if(!d){ alert('Data invalida.'); return; }
+    var sol=parseData(r.data);
+    if(sol && d.getTime() < sol.getTime()-86400000){ if(!confirm('A data do elogio e anterior a data da solicitacao ('+r.data+'). Confirmar assim mesmo?')) return; }
+    r.dataElogio=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+    r.mes=MESES_PT[d.getMonth()]; r.status='ELOGIO ENVIADO - AGUARDANDO VERIFICAÇÃO';
+    r.dataElogioPor=loginU(curU()); r.dataElogioEm=Date.now(); r.atualizadoEm=Date.now();
+    try{ var res=await fetch(base()+'/api/doc_elogio/'+encodeURIComponent(r.id),{method:'PUT',headers:H(),body:JSON.stringify(r)});
+      if(res.ok){ gsUpsert('elogio',r); invalidaCache('elogio'); alert('Data registrada. O elogio foi para a verificacao do supervisor.'); render(); }
+      else alert('Falha ao salvar.'); }catch(err){ alert('Erro: '+(err&&err.message||err)); } };
 
   function cbEquipe(){ var per=perAtual(); var dados=resumoCashback(per,false);
     var totEnv=0,totCon=0,totVal=0; dados.forEach(function(d){ totEnv+=d.enviados; totCon+=d.concluidos; totVal+=d.total; });
@@ -11607,18 +11655,18 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   function cbValidar(){ if(!(ehAdminDoc()||ehSupervisor())) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito.</div>';
     var per=perAtual();
-    var lista=filtraEscopo(regs('elogio')).filter(function(r){ return mesRef(r)===per && elogioAguardando(r); });
-    var rows=lista.slice(0,300).map(function(r){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:9px 10px;color:#fff">'+esc(r.nome||'')+'</td><td style="padding:9px 10px">'+esc(consultorDe(r))+'</td><td style="padding:9px 10px">'+esc(r.plataforma||'')+'</td><td style="padding:9px 10px">'+esc(r.status||'')+'</td><td style="padding:9px 10px">'+esc(r.data||'')+'</td><td style="padding:9px 10px;white-space:nowrap"><button onclick="__gwaCbValidar(&#39;'+r.id+'&#39;,true)" style="background:'+Co.green+';color:#fff;border:none;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;margin-right:4px"><i class="fas fa-check"></i> Validar</button><button onclick="__gwaCbValidar(&#39;'+r.id+'&#39;,false)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px">Recusar</button></td></tr>'; }).join('')||'<tr><td colspan="6" style="padding:22px;text-align:center;color:'+Co.mut+'">Nada aguardando validação neste período.</td></tr>';
-    var topo='<div style="background:'+Co.card2+';border:1px dashed '+Co.line+';border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:'+Co.mut+'">Aqui ficam os elogios que o consultor marcou como <b>ENVIADO</b> e ainda <b>nao foram verificados</b>. So depois da verificacao eles contam na premiacao. <b style="color:'+Co.orangeL+'">'+lista.length+'</b> aguardando em '+perLabel(per)+'.</div>'+
+    var lista=filtraEscopo(regs('elogio')).filter(function(r){ return mesRef(r)===per && elogioEmVerificacao(r); });
+    var rows=lista.slice(0,300).map(function(r){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:9px 10px;color:#fff">'+esc(r.nome||'')+(r.link?(' <a href="'+esc(r.link)+'" target="_blank" rel="noopener" style="color:'+Co.blue+';font-size:11px">link</a>'):'')+'</td><td style="padding:9px 10px">'+esc(consultorDe(r))+'</td><td style="padding:9px 10px">'+esc(r.plataforma||'')+'</td><td style="padding:9px 10px">'+esc(r.status||'')+'</td><td style="padding:9px 10px">'+esc(r.data||'')+'</td><td style="padding:9px 10px;color:'+Co.orangeL+';font-weight:700">'+esc(dataElogioDe(r)||'-')+'</td><td style="padding:9px 10px;white-space:nowrap"><button onclick="__gwaCbValidar(&#39;'+r.id+'&#39;,true)" style="background:'+Co.green+';color:#fff;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;margin-right:4px;font-weight:700"><i class="fas fa-circle-check"></i> Verificar</button><button onclick="__gwaCbValidar(&#39;'+r.id+'&#39;,false)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px">Recusar</button></td></tr>'; }).join('')||'<tr><td colspan="7" style="padding:22px;text-align:center;color:'+Co.mut+'">Nada aguardando verificação neste período. Os elogios só chegam aqui depois que o operador informa a <b>data do elogio</b>.</td></tr>';
+    var topo='<div style="background:'+Co.card2+';border:1px dashed '+Co.line+';border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:'+Co.mut+'">Aqui ficam somente os elogios que <b>ja tem a data do elogio</b> informada pelo operador e ainda <b>nao foram verificados</b>. So depois da verificacao eles contam na premiacao. <b style="color:'+Co.orangeL+'">'+lista.length+'</b> aguardando em '+perLabel(per)+'.</div>'+
       (lista.length?('<div style="margin-bottom:12px"><button onclick="__gwaCbValidarTodos()" style="background:'+Co.green+';color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer"><i class="fas fa-check-double"></i> Verificar todos os '+lista.length+' deste periodo</button></div>'):'');
     return topo+
-      '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Cliente</th><th style="padding:10px">Consultor</th><th style="padding:10px">Plataforma</th><th style="padding:10px">Status</th><th style="padding:10px">Data</th><th style="padding:10px">Ação</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'; }
+      '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Cliente</th><th style="padding:10px">Consultor</th><th style="padding:10px">Plataforma</th><th style="padding:10px">Status</th><th style="padding:10px">Solicitado em</th><th style="padding:10px">Data do elogio</th><th style="padding:10px">Ação</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'; }
   window.__gwaCbValidar=async function(id,ok){ if(!(ehAdminDoc()||ehSupervisor())) return; var r=regs('elogio').filter(function(x){return x.id===id;})[0]; if(!r) return;
     r.validado=!!ok; r.validadoPor=loginU(curU()); r.validadoEm=Date.now(); r.atualizadoEm=Date.now();
     try{ var res=await fetch(base()+'/api/doc_elogio/'+encodeURIComponent(r.id),{method:'PUT',headers:H(),body:JSON.stringify(r)}); if(res.ok){ gsUpsert('elogio',r); render(); } else alert('Falha ao salvar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
 
   window.__gwaCbValidarTodos=async function(){ if(!(ehAdminDoc()||ehSupervisor())) return; var per=perAtual();
-    var lista=filtraEscopo(regs('elogio')).filter(function(r){ return mesRef(r)===per && elogioAguardando(r); });
+    var lista=filtraEscopo(regs('elogio')).filter(function(r){ return mesRef(r)===per && elogioEmVerificacao(r); });
     if(!lista.length){ alert('Nada aguardando verificacao.'); return; }
     if(!confirm('Verificar (aprovar) '+lista.length+' elogio(s) de '+perLabel(per)+'?\n\nEles passam a contar na premiacao dos consultores.')) return;
     var ok=0, fail=0;
@@ -11920,13 +11968,15 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function viewLancarElogio(){ var ed=_editId?(regs('elogio').filter(function(x){return x.id===_editId;})[0]||null):null;
     if(!ed&&_preCliente){ ed={nome:_preCliente.nome,cpf:_preCliente.cpf,_pre:1}; }
     var dataV=ed?(ed.data||''):hojeBR(); var mesV=ed?(ed.mes||mesAtualNome()):mesAtualNome();
+    var deV=''; if(ed&&ed.dataElogio){ var _d=parseData(ed.dataElogio); if(_d) deV=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0'); }
     var stV=ed?(ed.status||ELOGIO_STATUS):ELOGIO_STATUS;
     return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:20px;max-width:760px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span style="width:5px;height:20px;border-radius:3px;background:'+Co.gradO+'"></span><h3 style="margin:0;color:#fff;font-size:15px"><i class="fas fa-star" style="color:'+Co.orange+'"></i> '+(_editId?'Editar elogio':'Lançar elogio')+'</h3></div>'+
-      '<p style="font-size:12px;color:'+Co.mut+';margin:0 0 14px">Plataforma, mês e status são preenchidos automaticamente. O elogio fica <b>aguardando confirmação</b> até o supervisor verificar.</p>'+
+      '<p style="font-size:12px;color:'+Co.mut+';margin:0 0 14px;line-height:1.6">A <b>data da solicitação</b> é gravada agora. Quando o cliente publicar, informe a <b style="color:'+Co.orangeL+'">data do elogio</b> — é ela que manda o registro para a verificação do supervisor e faz valer na premiação. Se ainda não tem, deixe em branco: fica pendente em <b>Premiação DOC &rarr; Data do elogio</b>.</p>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Nome do cliente *</label><input id="dcf_nome" value="'+esc(ed?ed.nome:'')+'" style="'+inpStyle()+'"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Link do elogio (opcional)</label><input id="dcf_link" value="'+esc(ed?ed.link:'')+'" placeholder="cole aqui, se tiver" style="'+inpStyle()+'"></div>'+
-      '<div><label style="font-size:12px;color:'+Co.sub+'">Data</label><input id="dcf_data" value="'+esc(dataV)+'" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Data da solicitação</label><input id="dcf_data" value="'+esc(dataV)+'" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.orangeL+';font-weight:700">Data do elogio (2ª data)</label><input type="date" id="dcf_dataelogio" value="'+esc(deV)+'" style="'+inpStyle()+'"><div style="font-size:11px;color:'+Co.mut+';margin-top:3px">deixe em branco se o cliente ainda não publicou</div></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Plataforma</label>'+campoBloqueado(ELOGIO_PLATAFORMA)+'</div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Mês</label>'+campoBloqueado(mesV)+'</div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Status</label>'+campoBloqueado(stV,'O supervisor confirma na aba Premiação DOC')+'</div>'+
@@ -11939,11 +11989,15 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var obj=ed?ed:{ id:'elogio_'+loginU(curU())+'_'+Date.now().toString(36), ts:Date.now(), origem:'manual' };
     obj.nome=nome; obj.link=g('dcf_link'); obj.data=g('dcf_data')||hojeBR();
     obj.plataforma=ELOGIO_PLATAFORMA; obj.mes=ed?(ed.mes||mesAtualNome()):mesAtualNome();
-    if(!ed) obj.status=ELOGIO_STATUS;
+    var deRaw=g('dcf_dataelogio'), deD=deRaw?parseData(deRaw):null;
+    if(deD){ obj.dataElogio=String(deD.getDate()).padStart(2,'0')+'/'+String(deD.getMonth()+1).padStart(2,'0')+'/'+deD.getFullYear();
+      obj.mes=MESES_PT[deD.getMonth()]; if(obj.validado===undefined) obj.status='ELOGIO ENVIADO - AGUARDANDO VERIFICAÇÃO';
+      if(!obj.dataElogioEm){ obj.dataElogioPor=loginU(curU()); obj.dataElogioEm=Date.now(); } }
+    else { obj.dataElogio=''; if(obj.validado===undefined) obj.status='AGUARDANDO DATA DO ELOGIO'; }
     baseSalvar(obj,ed);
     var r=await fetch(base()+'/api/doc_elogio/'+encodeURIComponent(obj.id),{method:'PUT',headers:H(),body:JSON.stringify(obj)});
     if(r.ok){ if(!ed){ _regs['elogio']=_regs['elogio']||[]; _regs['elogio'].push(obj); } _editId=null; gsUpsert('elogio',obj); _cbOk=false;
-      alert('Elogio salvo! Aguardando confirmacao do supervisor.'); __gwaDocPosSalvar(); } else alert('Falha ao salvar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
+      alert(obj.dataElogio?'Elogio salvo! Foi para a verificacao do supervisor.':'Solicitacao registrada! Assim que o cliente publicar, informe a data do elogio em Premiacao DOC > Data do elogio.'); __gwaDocPosSalvar(); } else alert('Falha ao salvar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
 
   /* ---------------- DOCUMENTACAO ---------------- */
   var _svcBlocos=null;
@@ -12021,7 +12075,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   /* ================= PERFIL DO CLIENTE (prontuario) ================= */
   var _cliAberto='', _cliLogs=[], _cliLogsOk=false, _cliTodosOk=false, _cliDados={}, _cliDadosOk=false;
-  var _preCliente=null, _fichaVolta='', _cliForm='', _cliBusca='', _fichaOrigem='lista';
+  var _preCliente=null, _fichaVolta='', _cliForm='', _cliBusca='', _fichaOrigem='lista', _cliBase=null;
   function soDigitos(s){ return String(s||'').replace(/\D+/g,''); }
   function chaveCliente(r){ var c=soDigitos(r&&r.cpf); if(c.length>=8) return 'cpf:'+c; var n=norm(r&&r.nome); return n?('nome:'+n):''; }
   function cpfBonito(c){ c=soDigitos(c); if(c.length===11) return c.slice(0,3)+'.'+c.slice(3,6)+'.'+c.slice(6,9)+'-'+c.slice(9); return c||'—'; }
@@ -12074,10 +12128,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   window.__gwaCliBusca=function(v){ _cliBusca=v; var b=document.getElementById('gwaDocBody'); if(!b) return;
     b.innerHTML=viewBuscarCliente(); var ni=document.getElementById('cliBuscaInp'); if(ni){ ni.focus(); try{ ni.selectionStart=ni.selectionEnd=ni.value.length; }catch(e){} } };
   window.__gwaCliAbrirChave=function(ch){ _cliAberto=ch; _cliForm=''; _fichaVolta=''; _fichaOrigem='buscar'; _view='ficha'; render(); };
-  window.__gwaCliVoltar=function(){ _cliAberto=''; _cliForm=''; _preCliente=null; _fichaVolta=''; _editId=null; _view=(_fichaOrigem==='buscar')?'buscar':((_fichaOrigem==='novos')?'novos':'lista'); _novoVinculo=''; render(); };
+  window.__gwaCliVoltar=function(){ _cliAberto=''; _cliForm=''; _preCliente=null; _fichaVolta=''; _editId=null; _view=(_fichaOrigem==='buscar')?'buscar':((_fichaOrigem==='novos')?'novos':'lista'); _novoVinculo=''; _cliBase=null; render(); };
 
   /* --- criar registros direto do perfil --- */
-  window.__gwaCliNovo=function(t){ var idx=indiceClientes(); var c=idx[_cliAberto]||{}; var d=dadosCli(_cliAberto);
+  window.__gwaCliNovo=function(t){ var idx=indiceClientes(); var c=idx[_cliAberto]||_cliBase||{}; var d=dadosCli(_cliAberto);
     _preCliente={nome:c.nome||d.nome||'', cpf:c.cpf||d.cpf||''}; _fichaVolta=_cliAberto;
     _tipo=t; _editId=null; _defBlocos=null; _svcBlocos=null; _cliForm=t; _view='ficha';
     loadRegs(t).then(function(){ if(_view==='ficha') render(); }); render(); };
@@ -12134,11 +12188,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     Promise.all([loadNovos(),loadTodos()]).then(function(){ _cliTodosOk=true; _novosCarregando=false; autoFechar(); render(); }); render(); };
   window.__gwaNovoPerfil=function(id){ var n=(_novos||[]).filter(function(x){return x.id===id;})[0]; if(!n) return;
     var ch=chaveDoNovo(n); if(!ch){ alert('Este card nao tem nome nem CPF.'); return; }
-    _novoVinculo=id; _preCliente={nome:nomeNovo(n),cpf:n.cpf||''};
+    _novoVinculo=id; _preCliente={nome:nomeNovo(n),cpf:n.cpf||''}; _cliBase={nome:nomeNovo(n),cpf:n.cpf||'',telefone:n.telefone||''};
     _cliAberto=ch; _cliForm=''; _fichaVolta=''; _fichaOrigem='novos'; _editId=null; _view='ficha'; render(); };
   window.__gwaNovoSeguir=function(id,t){ var n=(_novos||[]).filter(function(x){return x.id===id;})[0]; if(!n) return;
     var ch=chaveDoNovo(n); if(!ch){ alert('Este card nao tem nome nem CPF.'); return; }
-    _novoVinculo=id; _preCliente={nome:nomeNovo(n),cpf:n.cpf||''};
+    _novoVinculo=id; _preCliente={nome:nomeNovo(n),cpf:n.cpf||''}; _cliBase={nome:nomeNovo(n),cpf:n.cpf||'',telefone:n.telefone||''};
     _cliAberto=ch; _fichaVolta=''; _fichaOrigem='novos'; _cliForm=t; _editId=null; _defBlocos=null; _svcBlocos=null; _view='ficha'; render(); };
   window.__gwaNovoAtendido=function(id){ var n=(_novos||[]).filter(function(x){return x.id===id;})[0]; if(!n) return;
     if(!confirm('Marcar "'+nomeNovo(n)+'" como ja movimentado e tirar da fila?')) return;
@@ -12270,6 +12324,9 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function bloco(titulo,sub,inner,icone){ return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:14px"><div style="margin-bottom:12px"><div style="color:#fff;font-weight:700;font-size:14px"><i class="fas '+(icone||'fa-circle')+'" style="color:'+Co.orange+';margin-right:7px"></i>'+esc(titulo)+'</div>'+(sub?('<div style="font-size:11px;color:'+Co.mut+';margin-top:2px">'+esc(sub)+'</div>'):'')+'</div>'+inner+'</div>'; }
 
   function viewFicha(){ var ch=_cliAberto; var idx=indiceClientes(); var c=idx[ch]; var d=dadosCli(ch);
+    /* cliente que ainda nao tem nenhum registro (veio da fila de novos clientes) */
+    if(!c && !d.id && _cliBase && (_cliBase.nome||_cliBase.cpf))
+      c={nome:_cliBase.nome||'',cpf:_cliBase.cpf||'',consultores:[],itens:[],n:{defesa:0,doc:0,elogio:0},rastreios:0,ultima:0,novo:true};
     if(!c && !d.id) return '<div style="padding:20px;color:'+Co.mut+'">Cliente nao encontrado. <button onclick="__gwaCliVoltar()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:8px;padding:6px 12px;cursor:pointer;margin-left:8px">Voltar</button></div>';
     c=c||{nome:d.nome,cpf:d.cpf,consultores:[],itens:[],n:{},rastreios:0,ultima:0};
     var nome=d.nome||c.nome||'(sem nome)', cpf=d.cpf||c.cpf||'';
