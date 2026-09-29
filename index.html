@@ -11171,6 +11171,49 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function colunas(titulo,dados){ if(!dados.length) return ''; var max=Math.max.apply(null,dados.map(function(d){return d.v;}))||1;
     var cols=dados.map(function(d){ var h=Math.max(3,d.v/max*130); return '<div style="flex:1;min-width:26px;text-align:center"><div style="font-size:10px;color:'+Co.sub+';margin-bottom:3px">'+d.v+'</div><div style="height:'+h+'px;background:'+Co.gradO+';border-radius:5px 5px 0 0"></div><div style="font-size:10px;color:'+Co.mut+';margin-top:5px">'+esc(d.k)+'</div></div>'; }).join('');
     return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:16px"><h4 style="margin:0 0 14px;color:#fff;font-size:14px">'+esc(titulo)+'</h4><div style="display:flex;gap:6px;align-items:flex-end;min-height:160px">'+cols+'</div></div>'; }
+  var CAT_COR={defesa:'#3fae5a',doc:'#4a9fd5',elogio:'#f0943a'};
+  var CAT_LBL={defesa:'Defesas',doc:'Documentacao',elogio:'Elogios'};
+  /* colunas empilhadas separando DEFESA / DOC / ELOGIO */
+  function colunasCat(titulo,dados,sub){ if(!dados.length) return '';
+    var tot=function(d){ return (d.v.defesa||0)+(d.v.doc||0)+(d.v.elogio||0); };
+    var max=Math.max.apply(null,dados.map(tot))||1;
+    var cols=dados.map(function(d){ var t=tot(d); var h=Math.max(2,t/max*140);
+      var segs=ORDEM.filter(function(k){ return d.v[k]; }).map(function(k){
+        return '<div title="'+CAT_LBL[k]+': '+d.v[k]+'" style="height:'+(d.v[k]/t*100)+'%;background:'+CAT_COR[k]+'"></div>'; }).join('');
+      return '<div style="flex:1;min-width:22px;text-align:center"><div style="font-size:10px;color:'+(t?Co.sub:Co.line)+';margin-bottom:3px">'+(t||'0')+'</div>'+
+        '<div style="height:'+h+'px;border-radius:5px 5px 0 0;overflow:hidden;display:flex;flex-direction:column-reverse;background:'+Co.card2+'">'+segs+'</div>'+
+        '<div style="font-size:10px;color:'+Co.mut+';margin-top:5px">'+esc(d.k)+'</div></div>'; }).join('');
+    var somas={}; ORDEM.forEach(function(k){ somas[k]=dados.reduce(function(a,d){ return a+(d.v[k]||0); },0); });
+    var geral=ORDEM.reduce(function(a,k){ return a+somas[k]; },0);
+    var leg='<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'+ORDEM.map(function(k){
+      return '<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:'+Co.sub+'"><span style="width:11px;height:11px;border-radius:3px;background:'+CAT_COR[k]+'"></span>'+CAT_LBL[k]+' <b style="color:#fff">'+somas[k]+'</b></span>'; }).join('')+
+      '<span style="font-size:12px;color:'+Co.mut+';margin-left:auto">total <b style="color:'+Co.orangeL+'">'+geral+'</b></span></div>';
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:16px">'+
+      '<h4 style="margin:0 0 3px;color:#fff;font-size:14px">'+esc(titulo)+'</h4>'+
+      (sub?('<div style="font-size:11px;color:'+Co.mut+';margin-bottom:10px">'+esc(sub)+'</div>'):'<div style="height:8px"></div>')+
+      leg+'<div style="display:flex;gap:5px;align-items:flex-end;min-height:170px">'+cols+'</div></div>'; }
+  /* agrupa por dia (quando o periodo e um mes) ou por mes */
+  function serieCat(itens){
+    var porDia=(_dPer==='mes'||_dPer==='mesant'), hj=new Date();
+    var mapa={}, vazio=function(){ return {defesa:0,doc:0,elogio:0}; };
+    if(porDia){
+      var ref=new Date(hj.getFullYear(), hj.getMonth()-(_dPer==='mesant'?1:0), 1);
+      var ult=new Date(ref.getFullYear(), ref.getMonth()+1, 0).getDate();
+      var lim=(_dPer==='mes')?hj.getDate():ult;
+      for(var dd=1; dd<=lim; dd++) mapa[String(dd).padStart(2,'0')]=vazio();
+    }
+    itens.forEach(function(i){ if(!i.d) return;
+      var k=porDia?String(i.d.getDate()).padStart(2,'0')
+                  :(String(i.d.getMonth()+1).padStart(2,'0')+'/'+String(i.d.getFullYear()).slice(2));
+      mapa[k]=mapa[k]||vazio(); mapa[k][i.tipo]=(mapa[k][i.tipo]||0)+1; });
+    var chaves=Object.keys(mapa).sort(porDia?function(a,b){ return (+a)-(+b); }
+      :function(a,b){ var pa=a.split('/'),pb=b.split('/'); return (pa[1]-pb[1])||(pa[0]-pb[0]); });
+    var arr=chaves.map(function(k){ return {k:k,v:mapa[k]}; });
+    var MZ=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    if(porDia){ var r2=new Date(hj.getFullYear(), hj.getMonth()-(_dPer==='mesant'?1:0), 1);
+      return {dados:arr, titulo:'Registros por dia — '+MZ[r2.getMonth()]+'/'+r2.getFullYear(), sub:'cada coluna é um dia, separado por categoria'}; }
+    return {dados:arr.slice(-12), titulo:'Registros por mês', sub:'separado por categoria'}; }
+
   function contarPor(itens,fn){ var m={}; itens.forEach(function(x){ var k=fn(x)||'(vazio)'; m[k]=(m[k]||0)+1; }); return Object.keys(m).map(function(k){return {k:k,v:m[k]};}).sort(function(a,b){return b.v-a.v;}); }
   function dadosDash(){ var out=[]; ORDEM.forEach(function(t){ if(_dTipo&&_dTipo!==t) return;
       filtraEscopo(regs(t)).forEach(function(r){ var d=parseData(dataDe(t,r)); if(!dentroPeriodo(d)) return;
@@ -11208,9 +11251,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       card('Defesas',porTipo.defesa||0,null,Co.green)+card('Documentacao',porTipo.doc||0,null,Co.blue)+card('Elogios',porTipo.elogio||0,null,Co.orangeL)+
       card('Consultores ativos',consAtivos.length,'com registros')+
       card('Rastreio Correios',pctRast+'%',comRastreio+' de '+defesasCorreios,pctRast>=80?Co.green:Co.orangeL)+'</div>';
-    var meses={}; itens.forEach(function(i){ if(!i.d) return; var k=String(i.d.getMonth()+1).padStart(2,'0')+'/'+String(i.d.getFullYear()).slice(2); meses[k]=(meses[k]||0)+1; });
-    var ordMeses=Object.keys(meses).sort(function(a,b){ var pa=a.split('/'),pb=b.split('/'); return (pa[1]-pb[1])||(pa[0]-pb[0]); }).map(function(k){return {k:k,v:meses[k]};});
-    var grafMes=colunas('Registros por mes',ordMeses.slice(-12));
+    var _sc=serieCat(itens);
+    var grafMes=colunasCat(_sc.titulo,_sc.dados,_sc.sub);
     var graficos='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
       barras('Desempenho por consultor',consAtivos.slice(0,12))+
       barras('Desempenho por categoria',contarPor(itens,function(i){return i.cat;}).slice(0,12),'linear-gradient(135deg,#4a9fd5,#2d6fa0)')+
@@ -11265,9 +11307,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       (prox?('<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;font-size:12px;color:'+Co.sub+'"><span>Proxima faixa</span><span>'+eu.concluidos+' / '+prox.de+'</span></div><div style="height:12px;border-radius:8px;background:'+Co.card2+';overflow:hidden;margin:6px 0"><div style="height:100%;width:'+Math.min(100,eu.concluidos/Number(prox.de)*100)+'%;background:'+Co.gradO+'"></div></div><div style="font-size:12px;color:'+Co.orangeL+'">Faltam <b>'+faltam+'</b> elogio(s) verificado(s) para '+moedaBR(prox.valor)+' por elogio.</div></div>'):'')+
       (eu.pendentes?('<div style="margin-top:10px;font-size:12px;color:'+Co.mut+'"><i class="fas fa-hourglass-half" style="color:'+Co.orangeL+'"></i> '+eu.pendentes+' elogio(s) aguardando verificacao do supervisor.</div>'):'')+'</div>';
 
-    var meses={}; itens.forEach(function(i){ if(!i.d) return; var k=String(i.d.getMonth()+1).padStart(2,'0')+'/'+String(i.d.getFullYear()).slice(2); meses[k]=(meses[k]||0)+1; });
-    var ordM=Object.keys(meses).sort(function(a,b){ var pa=a.split('/'),pb=b.split('/'); return (pa[1]-pb[1])||(pa[0]-pb[0]); }).map(function(k){return {k:k,v:meses[k]};});
-    var grafMes=colunas('Meus registros por mes',ordM.slice(-12));
+    var _sc=serieCat(itens);
+    var grafMes=colunasCat('Meus '+_sc.titulo.charAt(0).toLowerCase()+_sc.titulo.slice(1),_sc.dados,_sc.sub);
     var defItens=itens.filter(function(i){return i.tipo==='defesa';});
     var graficos='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
       barras('Minhas defesas por tipo',contarPor(defItens,function(i){return i.cat;}).slice(0,10))+
@@ -11842,7 +11883,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var box=g('defOrgInfo'); if(!o){ if(box) box.innerHTML='<span style="color:'+Co.mut+';font-size:12px">Selecione a UF e o orgao para preencher endereco e CEP.</span>'; if(g('defMun'))g('defMun').value=''; return; }
     if(g('defMun')) g('defMun').value=o.municipio||'';
     var env=[]; if(o.correio) env.push('Correio'); if(o.online) env.push('Online');
-    var envSel=g('defEnvio'); if(envSel){ var atual=envSel.value; envSel.innerHTML='<option value="">-</option>'+(o.correio?'<option value="CORREIOS">CORREIOS</option>':'')+(o.online?'<option value="ONLINE">ONLINE</option>':''); if(atual) envSel.value=atual; else if(o.correio&&!o.online) envSel.value='CORREIOS'; else if(o.online&&!o.correio) envSel.value='ONLINE'; }
+    /* CORREIOS e ONLINE ficam SEMPRE disponiveis; o orgao so define a sugestao inicial */
+    var envSel=g('defEnvio'); if(envSel){ var atual=envSel.value;
+      envSel.innerHTML='<option value="">-</option><option value="CORREIOS">CORREIOS</option><option value="ONLINE">ONLINE</option>';
+      if(atual) envSel.value=atual; else if(o.correio&&!o.online) envSel.value='CORREIOS'; else if(o.online&&!o.correio) envSel.value='ONLINE'; }
     if(box) box.innerHTML=(o.incompleto?('<div style="background:rgba(229,83,60,.14);border:1px solid '+Co.red+';border-radius:10px;padding:10px 12px;color:#f6b3a6;font-size:12px"><i class="fas fa-triangle-exclamation"></i> <b>Cadastro incompleto.</b> Este orgao ainda nao tem endereco confirmado — peca ao supervisor para revisar antes de enviar.</div>'):
       ('<div style="background:'+Co.bgA+';border:1px solid '+Co.line+';border-radius:10px;padding:10px 12px;font-size:12px;color:'+Co.sub+'"><div><b style="color:#fff">'+esc(o.orgao)+'</b> &middot; '+esc(o.uf)+(o.municipio?(' &middot; '+esc(o.municipio)):'')+'</div><div style="margin-top:4px"><i class="fas fa-location-dot" style="color:'+Co.orange+'"></i> '+esc(o.endereco||'(sem endereco)')+'</div><div style="margin-top:3px"><i class="fas fa-envelope" style="color:'+Co.orange+'"></i> CEP: <b>'+esc(o.cep||'-')+'</b> &middot; Envio: <b>'+esc(env.join(' / ')||'-')+'</b></div>'+(o.linkOnline?('<div style="margin-top:3px"><i class="fas fa-link" style="color:'+Co.orange+'"></i> <a href="'+esc(o.linkOnline)+'" target="_blank" style="color:'+Co.orangeL+'">Abrir defesa online</a></div>'):'')+(o.obsOnline?('<div style="margin-top:3px;color:'+Co.blue+'">'+esc(o.obsOnline)+'</div>'):'')+'</div>')); };
   function viewLancarDefesa(){ var ed=_editId?(regs('defesa').filter(function(x){return x.id===_editId;})[0]||null):null;
