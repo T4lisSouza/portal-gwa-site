@@ -12179,13 +12179,15 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(r.ok){ if(!ed){ _regs['defesa']=_regs['defesa']||[]; _regs['defesa'].push(obj); } _editId=null; _defBlocos=null; gsUpsert('defesa',obj); alert('Defesa salva!'); __gwaDocPosSalvar(); } else alert('Falha ao salvar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
 
   /* ---------- RELATORIOS / FECHAMENTO ---------- */
-  var _rCons='',_rEquipe='',_rTipo='',_rEnvio='',_rOrgao='',_rMun='',_rUf='',_rStatus='',_rPer='mes',_rIni='',_rFim='';
+  var _rCons='',_rEquipe='',_rTipos=[],_rEnvio='',_rOrgao='',_rMun='',_rUf='',_rStatus='',_rPer='mes',_rIni='',_rFim='';
   function relFiltra(){ var arr=filtraEscopo(regs('defesa'));
     return arr.filter(function(r){ var d=parseData(r.data);
       if(_rPer!=='tudo'){ var sav=_dPer,si=_dIni,sf=_dFim; _dPer=_rPer;_dIni=_rIni;_dFim=_rFim; var ok=dentroPeriodo(d); _dPer=sav;_dIni=si;_dFim=sf; if(!ok) return false; }
       if(_rCons && !mesmoConsultor(consultorDe(r),_rCons)) return false;
       if(_rEquipe){ var sup=supervisorDoRegistro(r); if(!mesmoConsultor(sup,_rEquipe)) return false; }
-      if(_rTipo && tiposDoRegistro(r).indexOf(_rTipo)<0) return false;
+      if(_rTipos.length){ var _tp=tiposDoRegistro(r), _ok=false;
+        for(var _i=0;_i<_rTipos.length;_i++){ if(_tp.indexOf(_rTipos[_i])>=0){ _ok=true; break; } }
+        if(!_ok) return false; }
       if(_rEnvio && String(r.tipoEnvio||'')!==_rEnvio) return false;
       if(_rOrgao && norm(r.orgao||r.municipio)!==norm(_rOrgao)) return false;
       if(_rMun && norm(r.municipio)!==norm(_rMun)) return false;
@@ -12344,7 +12346,14 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var filtros='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:14px 16px;margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">'+per+
       sel('cons','Consultor',uniq(function(r){return consultorDe(r);}),_rCons,150)+
       sel('equipe','Equipe (supervisor)',uniq(function(r){return supervisorDoRegistro(r);}),_rEquipe,150)+
-      sel('tipo','Tipo de defesa',TIPOS_DEFESA,_rTipo,170)+
+      '<div style="flex:1 1 100%;min-width:260px"><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:5px">Tipo de defesa '+
+        (_rTipos.length?('<span style="color:'+Co.orangeL+';font-weight:700">('+_rTipos.length+' selecionado'+(_rTipos.length>1?'s':'')+')</span>')
+                       :'<span style="color:'+Co.mut+'">(clique para marcar um ou mais)</span>')+'</label>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        '<button onclick="__gwaRel(&#39;tipos&#39;,&#39;__todos&#39;)" style="background:'+(_rTipos.length?Co.card2:Co.gradO)+';border:1px solid '+(_rTipos.length?Co.line:'transparent')+';color:#fff;border-radius:20px;padding:6px 13px;font-size:12px;font-weight:700;cursor:pointer">Todos</button>'+
+        TIPOS_DEFESA.map(function(t){ var on=_rTipos.indexOf(t)>=0;
+          return '<button onclick="__gwaRel(&#39;tipos&#39;,&#39;'+esc(t).replace(/'/g,'')+'&#39;)" style="background:'+(on?Co.gradO:Co.card2)+';border:1px solid '+(on?'transparent':Co.line)+';color:'+(on?'#fff':Co.sub)+';border-radius:20px;padding:6px 13px;font-size:12px;font-weight:'+(on?'700':'500')+';cursor:pointer">'+(on?'<i class="fas fa-check" style="font-size:10px"></i> ':'')+esc(t)+'</button>'; }).join('')+
+        '</div></div>'+
       '<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">Tipo de envio</label><select onchange="__gwaRel(&#39;envio&#39;,this.value)" style="padding:8px 10px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"><option value="">Todos</option><option value="CORREIOS"'+(_rEnvio==='CORREIOS'?' selected':'')+'>Correio</option><option value="ONLINE"'+(_rEnvio==='ONLINE'?' selected':'')+'>Online</option></select></div>'+
       sel('uf','UF',uniq(function(r){return r.uf;}),_rUf,80)+
       sel('orgao','Orgao',uniq(function(r){return r.orgao||r.municipio;}),_rOrgao,160)+
@@ -12362,8 +12371,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:10px;color:#fff;font-weight:600">'+esc(o.consultor)+'</td><td style="padding:10px;color:'+Co.mut+'">'+esc(o.sup)+'</td><td style="padding:10px;color:'+Co.orangeL+';font-weight:800">'+o.total+'</td><td style="padding:10px">'+o.correio+'</td><td style="padding:10px">'+o.online+'</td><td style="padding:10px;font-size:12px">'+esc(tp||'-')+'</td></tr>'; }).join('')||'<tr><td colspan="6" style="padding:22px;text-align:center;color:'+Co.mut+'">Nenhuma defesa no filtro.</td></tr>';
     var tab='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Consultor</th><th style="padding:10px">Equipe</th><th style="padding:10px">Defesas</th><th style="padding:10px">Correio</th><th style="padding:10px">Online</th><th style="padding:10px">Tipos</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'"><td style="padding:10px;color:#fff;font-weight:800">TOTAL GERAL</td><td></td><td style="padding:10px;color:'+Co.orangeL+';font-weight:900">'+arr.length+'</td><td style="padding:10px;font-weight:700">'+totCor+'</td><td style="padding:10px;font-weight:700">'+totOn+'</td><td></td></tr></tfoot></table></div></div>';
     return filtros+blocoRelGeral()+cards+acoes+tab; }
-  window.__gwaRel=function(k,v){ if(k==='cons')_rCons=v; else if(k==='equipe')_rEquipe=v; else if(k==='tipo')_rTipo=v; else if(k==='envio')_rEnvio=v; else if(k==='orgao')_rOrgao=v; else if(k==='mun')_rMun=v; else if(k==='uf')_rUf=v; else if(k==='status')_rStatus=v; else if(k==='per')_rPer=v; else if(k==='ini')_rIni=v; else if(k==='fim')_rFim=v;
-    else if(k==='limpar'){ _rCons='';_rEquipe='';_rTipo='';_rEnvio='';_rOrgao='';_rMun='';_rUf='';_rStatus='';_rPer='mes';_rIni='';_rFim=''; } render(); };
+  window.__gwaRel=function(k,v){ if(k==='cons')_rCons=v; else if(k==='equipe')_rEquipe=v; else if(k==='tipos'){ if(v==='__todos') _rTipos=[]; else { var _p=_rTipos.indexOf(v); if(_p>=0) _rTipos.splice(_p,1); else _rTipos.push(v); } } else if(k==='envio')_rEnvio=v; else if(k==='orgao')_rOrgao=v; else if(k==='mun')_rMun=v; else if(k==='uf')_rUf=v; else if(k==='status')_rStatus=v; else if(k==='per')_rPer=v; else if(k==='ini')_rIni=v; else if(k==='fim')_rFim=v;
+    else if(k==='limpar'){ _rCons='';_rEquipe='';_rTipos=[];_rEnvio='';_rOrgao='';_rMun='';_rUf='';_rStatus='';_rPer='mes';_rIni='';_rFim=''; } render(); };
   window.__gwaRelCsv=function(){ var arr=relFiltra(); var q=function(v){ v=String(v==null?'':v); return /[";\n]/.test(v)?('"'+v.replace(/"/g,'""')+'"'):v; };
     var l=[['Data','Consultor','Equipe','Cliente','CPF','Tipos de defesa','Protocolos','UF','Municipio','Orgao','Envio','Objeto','Status'].join(';')];
     arr.forEach(function(r){ l.push([q(r.data),q(consultorDe(r)),q(supervisorDoRegistro(r)),q(r.nome),q(r.cpf),q(r.tipoDefesa),q(r.protocolosTxt||r.protocolo||''),q(r.uf),q(r.municipio),q(r.orgao||''),q(r.tipoEnvio),q(r.objeto),q(statusDe('defesa',r))].join(';')); });
@@ -12379,7 +12388,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var totCor=arr.filter(function(r){return String(r.tipoEnvio||'').toUpperCase()==='CORREIOS';}).length;
     var html='<!doctype html><html><head><meta charset="utf-8"><title>Fechamento de defesas</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:28px}h1{color:#c4661a;font-size:19px;margin:0 0 3px}.sub{color:#666;font-size:12px}.hd{display:flex;align-items:center;gap:14px;border-bottom:3px solid #c4661a;padding-bottom:12px;margin-bottom:14px}.bloco{margin-top:20px;page-break-inside:avoid}.bloco h3{background:#f5f5f5;border-left:5px solid #c4661a;padding:7px 10px;margin:0;font-size:14px}.qtd{float:right;color:#c4661a}.res{font-size:11px;color:#666;padding:4px 10px}table{width:100%;border-collapse:collapse;font-size:11px;margin-top:5px}th,td{border:1px solid #e5e5e5;padding:5px}th{background:#fafafa;text-align:left}.tot{text-align:right;font-size:12px;padding:5px 2px}.geral{margin-top:22px;border:2px solid #c4661a;border-radius:8px;padding:12px;font-size:14px;display:flex;justify-content:space-between}</style></head><body>'+
       '<div class="hd"><img src="'+GWA_LOGO_PDF+'" style="height:50px"><div><h1>RELATORIO DE FECHAMENTO — DEFESAS</h1><div class="sub">GWA Consultoria &middot; Documentacao &middot; emitido em '+new Date().toLocaleString('pt-BR')+' por '+esc((curU()||{}).nome||loginU(curU()))+'</div></div></div>'+
-      '<div class="sub">Filtros: '+esc([_rPer==='custom'?(_rIni+' a '+_rFim):_rPer,_rCons,_rEquipe,_rTipo,_rEnvio,_rUf,_rOrgao,_rMun,_rStatus].filter(Boolean).join(' | '))+'</div>'+
+      '<div class="sub">Filtros: '+esc([_rPer==='custom'?(_rIni+' a '+_rFim):_rPer,_rCons,_rEquipe,_rTipos.join(' + '),_rEnvio,_rUf,_rOrgao,_rMun,_rStatus].filter(Boolean).join(' | '))+'</div>'+
       blocos+
       '<div class="geral"><span><b>TOTAL GERAL DO PERIODO</b><br><span style="font-size:11px;color:#666">'+nomes.length+' consultor(es) &middot; '+totCor+' por correio &middot; '+(arr.length-totCor)+' online/outros</span></span><span style="font-size:26px;font-weight:800;color:#c4661a">'+arr.length+'</span></div>'+
       '<p style="margin-top:26px;font-size:12px">Conferido por: ____________________________   Data: ____/____/______</p>'+
