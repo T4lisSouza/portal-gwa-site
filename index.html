@@ -11090,7 +11090,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(_view==='correios'&&!_jobsCarregados){ _jobsCarregados=true; Promise.all([loadJobs(),loadAr()]).then(function(){ if(_view==='correios') render(); }); }
     if(_view==='dash'&&!_dashOk){ _dashOk=true; loadTodos().then(function(){ if(_view==='dash') render(); }); }
     if((_view==='orgaos'||(_view==='lancar'&&_tipo==='defesa')||(_view==='ficha'&&_cliForm==='defesa'))&&!_orgOk&&!_orgCarregando){ _orgCarregando=true; loadOrgaos().then(function(){ _orgCarregando=false; render(); }); }
-    if(_view==='relatorios'&&!_relOk){ _relOk=true; loadRegs('defesa').then(function(){ if(_view==='relatorios') render(); }); }
+    if(_view==='relatorios'&&!_relOk){ _relOk=true; Promise.all([loadTodos(),_novosOk?Promise.resolve(null):loadNovos()]).then(function(){ _cliTodosOk=true; _novosOk=true; if(_view==='relatorios') render(); }); }
     if(!_novosOk&&!_novosCarregando){ _novosCarregando=true;
       Promise.all([loadNovos(), _cliTodosOk?Promise.resolve(null):loadTodos()]).then(function(){ _cliTodosOk=true; _novosCarregando=false; autoFechar(); render(); }); }
     if((_view==='buscar'||_view==='ficha')&&!_cliTodosOk){ _cliTodosOk=true;
@@ -12192,6 +12192,149 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       if(_rUf && String(r.uf||'')!==_rUf) return false;
       if(_rStatus && statusDe('defesa',r)!==_rStatus) return false;
       return true; }); }
+
+  /* ============ RELATORIO GERAL: CONTRATOS NOVOS + DEPARTAMENTO + ELOGIOS ============ */
+  function dBR(d){ return d?(String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()):''; }
+  function relPeriodo(){ var h=new Date(), ini=null, fim=new Date(h.getFullYear(),h.getMonth(),h.getDate(),23,59,59);
+    if(_rPer==='tudo') return {ini:null,fim:null,label:'todo o periodo',curto:'todo o periodo'};
+    if(_rPer==='mes') ini=new Date(h.getFullYear(),h.getMonth(),1);
+    else if(_rPer==='mesant'){ ini=new Date(h.getFullYear(),h.getMonth()-1,1); fim=new Date(h.getFullYear(),h.getMonth(),0,23,59,59); }
+    else if(_rPer==='d30') ini=new Date(h.getTime()-30*864e5);
+    else if(_rPer==='d90') ini=new Date(h.getTime()-90*864e5);
+    else if(_rPer==='ano') ini=new Date(h.getFullYear(),0,1);
+    else if(_rPer==='custom'){ ini=_rIni?parseData(_rIni):null; if(_rFim){ var pf=parseData(_rFim); if(pf) fim=new Date(pf.getFullYear(),pf.getMonth(),pf.getDate(),23,59,59); } }
+    else ini=new Date(h.getFullYear(),h.getMonth(),1);
+    var lbl=ini?('de '+dBR(ini)+' a '+dBR(fim)):('ate '+dBR(fim));
+    var curto=ini?(String(ini.getDate()).padStart(2,'0')+' a '+String(fim.getDate()).padStart(2,'0')+'/'+String(fim.getMonth()+1).padStart(2,'0')):lbl;
+    return {ini:ini,fim:fim,label:lbl,curto:curto}; }
+  function noPeriodoRel(d){ var p=relPeriodo(); if(!d) return false;
+    if(p.ini && d.getTime()<p.ini.getTime()) return false;
+    if(p.fim && d.getTime()>p.fim.getTime()) return false; return true; }
+
+  function deptDoNovo(n){ var s=norm(n&&n.setor||'');
+    if(s.indexOf('NEGOCIA')>=0) return 'Negociacao';
+    if(s.indexOf('COMERCIAL')>=0) return 'Comercial';
+    var l=opDoNovo(n); if(l){ var u=usuarioPorLogin(l);
+      var d=(u&&(u.depts||u.departamentos||u.departamento))||[]; if(!Array.isArray(d)) d=[d];
+      var j=norm(d.join(' ')); if(j.indexOf('NEGOCIA')>=0) return 'Negociacao'; if(j.indexOf('COMERCIAL')>=0) return 'Comercial'; }
+    return 'Outros'; }
+
+  function contratosNovos(){ var e=escopoLogins();
+    return (_novos||[]).filter(function(n){ if(!n||n.removido===true) return false;
+      var y=ymdNovo(n); if(!y || !noPeriodoRel(parseData(y))) return false;
+      if(e){ var o=opDoNovo(n); if(!o || e.indexOf(o)<0) return false; }
+      if(_rCons && !mesmoConsultor(n.responsavel,_rCons)) return false;
+      return true; }); }
+
+  function relPorTipo(t){ return filtraEscopo(regs(t)).filter(function(r){
+      if(!noPeriodoRel(parseData(dataDe(t,r)))) return false;
+      if(_rCons && !mesmoConsultor(consultorDe(r),_rCons)) return false;
+      if(_rEquipe && !mesmoConsultor(supervisorDoRegistro(r),_rEquipe)) return false;
+      return true; }); }
+
+  /* numeros consolidados do periodo */
+  function relGeralDados(){
+    var novos=contratosNovos(), defs=relPorTipo('defesa'), docs=relPorTipo('doc'), elos=relPorTipo('elogio');
+    var dept={Comercial:0,Negociacao:0,Outros:0};
+    novos.forEach(function(n){ dept[deptDoNovo(n)]=(dept[deptDoNovo(n)]||0)+1; });
+    var porOp={};
+    function linha(k){ if(!porOp[k]) porOp[k]={quem:k,novos:0,defesas:0,docs:0,eloEnv:0,eloVer:0,comercial:0,negociacao:0}; return porOp[k]; }
+    novos.forEach(function(n){ var l=opDoNovo(n); var k=l?nomeDoLogin(l):(n.responsavel||'(sem operador)');
+      var o=linha(canonConsultor(k)); o.novos++; var d=deptDoNovo(n); if(d==='Comercial') o.comercial++; else if(d==='Negociacao') o.negociacao++; });
+    defs.forEach(function(r){ linha(consultorDe(r)).defesas++; });
+    docs.forEach(function(r){ linha(consultorDe(r)).docs++; });
+    elos.forEach(function(r){ var o=linha(consultorDe(r)); if(elogioEnviado(r)) o.eloEnv++; if(elogioConcluido(r)) o.eloVer++; });
+    var lista=Object.keys(porOp).map(function(k){ return porOp[k]; }).sort(function(a,b){ return (b.novos+b.defesas+b.docs)-(a.novos+a.defesas+a.docs); });
+    return {periodo:relPeriodo(), novos:novos, dept:dept, defesas:defs, docs:docs, elogios:elos,
+      eloEnv:elos.filter(elogioEnviado).length, eloVer:elos.filter(elogioConcluido).length,
+      eloPend:elos.filter(function(r){ return elogioAguardandoData(r)||elogioEmVerificacao(r); }).length, lista:lista}; }
+
+  function blocoRelGeral(){ var g=relGeralDados();
+    var mini=function(l,v,sub,c){ return '<div style="flex:1 1 150px;min-width:140px;background:'+Co.card2+';border:1px solid '+Co.line+';border-radius:13px;padding:13px 15px"><div style="font-size:10px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px">'+l+'</div><div style="font-size:25px;font-weight:900;color:'+(c||Co.orangeL)+';line-height:1.15">'+v+'</div>'+(sub?('<div style="font-size:11px;color:'+Co.mut+'">'+sub+'</div>'):'')+'</div>'; };
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px;margin-bottom:16px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
+      '<div><div style="color:#fff;font-weight:800;font-size:15px"><i class="fas fa-file-contract" style="color:'+Co.orange+'"></i> Contratos novos recebidos</div>'+
+      '<div style="font-size:11px;color:'+Co.mut+';margin-top:2px">Periodo '+esc(g.periodo.label)+' &middot; vindos da planilha rotativa</div></div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button onclick="__gwaRelGeral(&#39;pdf&#39;)" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:11px;padding:10px 17px;font-weight:700;cursor:pointer"><i class="fas fa-file-pdf"></i> Relatorio PDF</button>'+
+      '<button onclick="__gwaRelGeral(&#39;doc&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.blue+';color:'+Co.blue+';border-radius:11px;padding:10px 17px;font-weight:700;cursor:pointer"><i class="fas fa-file-word"></i> Baixar Word</button></div></div>'+
+      '<div style="display:flex;gap:11px;flex-wrap:wrap">'+
+        mini('Contratos novos',g.novos.length,'no periodo',Co.orangeL)+
+        mini('Comercial',g.dept.Comercial||0,null,Co.green)+
+        mini('Negociacao',g.dept.Negociacao||0,null,Co.blue)+
+        ((g.dept.Outros||0)?mini('Outros / sem setor',g.dept.Outros,null,Co.mut):'')+
+        mini('Defesas',g.defesas.length,null,Co.green)+
+        mini('Documentacoes',g.docs.length,null,Co.blue)+
+        mini('Elogios',g.eloEnv,g.eloVer+' verificado(s)',Co.orangeL)+
+      '</div></div>'; }
+
+  function relGeralHtml(){ var g=relGeralDados();
+    var rows=g.lista.map(function(o){ return '<tr><td>'+esc(o.quem)+'</td>'+
+      '<td style="text-align:center">'+o.novos+'</td><td style="text-align:center">'+o.comercial+'</td><td style="text-align:center">'+o.negociacao+'</td>'+
+      '<td style="text-align:center">'+o.defesas+'</td><td style="text-align:center">'+o.docs+'</td>'+
+      '<td style="text-align:center">'+o.eloEnv+'</td><td style="text-align:center">'+o.eloVer+'</td></tr>'; }).join('')
+      ||'<tr><td colspan="8" style="text-align:center;color:#888">Sem movimento no periodo.</td></tr>';
+    var tot=g.lista.reduce(function(a,o){ return {novos:a.novos+o.novos,comercial:a.comercial+o.comercial,negociacao:a.negociacao+o.negociacao,defesas:a.defesas+o.defesas,docs:a.docs+o.docs,eloEnv:a.eloEnv+o.eloEnv,eloVer:a.eloVer+o.eloVer}; },
+      {novos:0,comercial:0,negociacao:0,defesas:0,docs:0,eloEnv:0,eloVer:0});
+    return '<!doctype html><html><head><meta charset="utf-8"><title>Relatorio Documentacao GWA</title>'+
+      '<style>body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:30px}'+
+      'h1{color:#c4661a;font-size:19px;margin:0 0 4px}.sub{color:#666;font-size:12px}'+
+      '.hd{display:flex;align-items:center;gap:16px;border-bottom:3px solid #e07820;padding-bottom:12px;margin-bottom:18px}'+
+      '.box{border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:16px}'+
+      '.box b{color:#c4661a}.row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;font-size:13px}'+
+      'table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}'+
+      'th{background:#f4f4f4;color:#333;text-align:left;padding:7px 8px;border-bottom:2px solid #e07820}'+
+      'td{padding:6px 8px;border-bottom:1px solid #eee}'+
+      'tfoot td{font-weight:bold;background:#faf3ec;border-top:2px solid #e07820}'+
+      '.kpis{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}'+
+      '.kpi{flex:1 1 120px;border:1px solid #ddd;border-radius:8px;padding:10px 12px}'+
+      '.kpi .l{font-size:10px;color:#777;text-transform:uppercase}.kpi .v{font-size:22px;font-weight:bold;color:#c4661a}'+
+      '@media print{.kpi{break-inside:avoid}}</style></head><body>'+
+      '<div class="hd"><img src="'+GWA_LOGO_PDF+'" style="height:52px"><div><h1>RELATORIO DE DOCUMENTACAO — GWA CONSULTORIA</h1>'+
+      '<div class="sub">Periodo '+esc(g.periodo.label)+' &middot; emitido em '+new Date().toLocaleDateString('pt-BR')+' por '+esc((curU()||{}).nome||loginU(curU()))+'</div></div></div>'+
+      '<div class="kpis">'+
+      '<div class="kpi"><div class="l">Contratos novos</div><div class="v">'+g.novos.length+'</div></div>'+
+      '<div class="kpi"><div class="l">Comercial</div><div class="v">'+(g.dept.Comercial||0)+'</div></div>'+
+      '<div class="kpi"><div class="l">Negociacao</div><div class="v">'+(g.dept.Negociacao||0)+'</div></div>'+
+      '<div class="kpi"><div class="l">Defesas</div><div class="v">'+g.defesas.length+'</div></div>'+
+      '<div class="kpi"><div class="l">Documentacoes</div><div class="v">'+g.docs.length+'</div></div>'+
+      '<div class="kpi"><div class="l">Elogios</div><div class="v">'+g.eloEnv+'</div></div>'+
+      '</div>'+
+      '<div class="box"><b>Resumo do periodo ('+esc(g.periodo.label)+')</b>'+
+      '<div class="row"><span>Contratos novos recebidos</span><span><b>'+g.novos.length+'</b></span></div>'+
+      '<div class="row"><span>&nbsp;&nbsp;&bull; Comercial</span><span>'+(g.dept.Comercial||0)+'</span></div>'+
+      '<div class="row"><span>&nbsp;&nbsp;&bull; Negociacao</span><span>'+(g.dept.Negociacao||0)+'</span></div>'+
+      ((g.dept.Outros||0)?('<div class="row"><span>&nbsp;&nbsp;&bull; Outros / sem setor</span><span>'+g.dept.Outros+'</span></div>'):'')+
+      '<div class="row"><span>Defesas lancadas</span><span><b>'+g.defesas.length+'</b></span></div>'+
+      '<div class="row"><span>Documentacoes lancadas</span><span><b>'+g.docs.length+'</b></span></div>'+
+      '<div class="row"><span>Elogios recebidos</span><span><b>'+g.eloEnv+'</b></span></div>'+
+      '<div class="row"><span>&nbsp;&nbsp;&bull; verificados pelo supervisor</span><span>'+g.eloVer+'</span></div>'+
+      '<div class="row"><span>&nbsp;&nbsp;&bull; ainda pendentes</span><span>'+g.eloPend+'</span></div>'+
+      '</div>'+
+      '<div class="box"><b>Detalhamento por operador</b>'+
+      '<table><thead><tr><th>Operador</th><th style="text-align:center">Contratos novos</th><th style="text-align:center">Comercial</th><th style="text-align:center">Negociacao</th><th style="text-align:center">Defesas</th><th style="text-align:center">Documentacao</th><th style="text-align:center">Elogios</th><th style="text-align:center">Verificados</th></tr></thead>'+
+      '<tbody>'+rows+'</tbody>'+
+      '<tfoot><tr><td>TOTAL</td><td style="text-align:center">'+tot.novos+'</td><td style="text-align:center">'+tot.comercial+'</td><td style="text-align:center">'+tot.negociacao+'</td><td style="text-align:center">'+tot.defesas+'</td><td style="text-align:center">'+tot.docs+'</td><td style="text-align:center">'+tot.eloEnv+'</td><td style="text-align:center">'+tot.eloVer+'</td></tr></tfoot></table></div>'+
+      '<p style="margin-top:24px;font-size:12px">Assinatura do responsavel: ____________________________________</p>'+
+      '<p style="text-align:center;color:#999;font-size:11px;margin-top:16px">Documento gerado pela Intranet GWA &middot; Documentacao GWA.</p>'+
+      '</body></html>'; }
+
+  window.__gwaRelGeral=function(modo){
+    var html=relGeralHtml(), p=relPeriodo();
+    if(modo==='doc'){
+      try{ var nome='Relatorio-Documentacao-GWA-'+(p.ini?dBR(p.ini).replace(/\//g,'-'):'inicio')+'_a_'+(p.fim?dBR(p.fim).replace(/\//g,'-'):'hoje')+'.doc';
+        var cab='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">';
+        var blob=new Blob(['﻿'+html.replace('<!doctype html><html>',cab)],{type:'application/msword'});
+        var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nome;
+        document.body.appendChild(a); a.click(); setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(a.href); },1200);
+      }catch(e){ alert('Nao foi possivel gerar o Word: '+(e&&e.message||e)); }
+      return; }
+    try{ var w=window.open('','_blank');
+      var comPrint=html.replace('</body>','<scr'+'ipt>setTimeout(function(){window.print();},400);</scr'+'ipt></body>');
+      if(w){ w.document.write(comPrint); w.document.close(); }
+      else { var b=new Blob([comPrint],{type:'text/html'}); window.open(URL.createObjectURL(b),'_blank'); }
+    }catch(e){ alert('Nao foi possivel abrir o relatorio: '+(e&&e.message||e)); } };
+
   function viewRelatorios(){ if(!(ehAdminDoc()||ehSupervisor())) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito.</div>';
     var base_=filtraEscopo(regs('defesa'));
     var uniq=function(fn){ var s=[]; base_.forEach(function(r){ var v=fn(r); if(v&&s.indexOf(v)<0)s.push(v); }); return s.sort(); };
@@ -12218,7 +12361,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var rows=linhas.map(function(o){ var tp=Object.keys(o.tipos).map(function(t){return t+' ('+o.tipos[t]+')';}).join(', ');
       return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:10px;color:#fff;font-weight:600">'+esc(o.consultor)+'</td><td style="padding:10px;color:'+Co.mut+'">'+esc(o.sup)+'</td><td style="padding:10px;color:'+Co.orangeL+';font-weight:800">'+o.total+'</td><td style="padding:10px">'+o.correio+'</td><td style="padding:10px">'+o.online+'</td><td style="padding:10px;font-size:12px">'+esc(tp||'-')+'</td></tr>'; }).join('')||'<tr><td colspan="6" style="padding:22px;text-align:center;color:'+Co.mut+'">Nenhuma defesa no filtro.</td></tr>';
     var tab='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Consultor</th><th style="padding:10px">Equipe</th><th style="padding:10px">Defesas</th><th style="padding:10px">Correio</th><th style="padding:10px">Online</th><th style="padding:10px">Tipos</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'"><td style="padding:10px;color:#fff;font-weight:800">TOTAL GERAL</td><td></td><td style="padding:10px;color:'+Co.orangeL+';font-weight:900">'+arr.length+'</td><td style="padding:10px;font-weight:700">'+totCor+'</td><td style="padding:10px;font-weight:700">'+totOn+'</td><td></td></tr></tfoot></table></div></div>';
-    return filtros+cards+acoes+tab; }
+    return filtros+blocoRelGeral()+cards+acoes+tab; }
   window.__gwaRel=function(k,v){ if(k==='cons')_rCons=v; else if(k==='equipe')_rEquipe=v; else if(k==='tipo')_rTipo=v; else if(k==='envio')_rEnvio=v; else if(k==='orgao')_rOrgao=v; else if(k==='mun')_rMun=v; else if(k==='uf')_rUf=v; else if(k==='status')_rStatus=v; else if(k==='per')_rPer=v; else if(k==='ini')_rIni=v; else if(k==='fim')_rFim=v;
     else if(k==='limpar'){ _rCons='';_rEquipe='';_rTipo='';_rEnvio='';_rOrgao='';_rMun='';_rUf='';_rStatus='';_rPer='mes';_rIni='';_rFim=''; } render(); };
   window.__gwaRelCsv=function(){ var arr=relFiltra(); var q=function(v){ v=String(v==null?'':v); return /[";\n]/.test(v)?('"'+v.replace(/"/g,'""')+'"'):v; };
