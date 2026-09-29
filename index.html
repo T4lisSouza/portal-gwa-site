@@ -11613,7 +11613,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var topo='<div style="background:linear-gradient(135deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:18px;padding:18px 20px;margin-bottom:14px">'+
       '<div style="font-size:11px;color:'+Co.orange+';text-transform:uppercase;letter-spacing:1px;font-weight:700">Aguardando a data do elogio</div>'+
       '<div style="font-size:18px;font-weight:800;color:#fff;margin:4px 0 6px">'+lista.length+' solicitacao(oes) sem a 2a data</div>'+
-      '<div style="font-size:12px;color:'+Co.mut+';line-height:1.6">Ao cadastrar, fica gravada a <b style="color:'+Co.sub+'">data da solicitacao</b>. Quando o cliente publicar o elogio, o operador informa aqui a <b style="color:'+Co.orangeL+'">data do elogio</b> — e so nesse momento o registro vai para a verificacao do supervisor e passa a valer para a premiacao.</div></div>';
+      '<div style="font-size:12px;color:'+Co.mut+';line-height:1.6">Ao cadastrar, fica gravada a <b style="color:'+Co.sub+'">data da solicitacao</b>. Quando o cliente publicar o elogio, o operador informa aqui a <b style="color:'+Co.orangeL+'">data do elogio</b> — e so nesse momento o registro vai para a verificacao do supervisor e passa a valer para a premiacao. O <b>link</b> tambem pode ser colado depois: use "Salvar so o link" para guardar sem sair da fila.</div></div>';
     if(!lista.length) return topo+'<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:34px;text-align:center;color:'+Co.mut+'"><i class="fas fa-circle-check" style="font-size:28px;display:block;margin-bottom:12px;opacity:.5"></i>Nenhuma solicitacao esperando a data do elogio.</div>';
     var cards=lista.slice(0,300).map(function(r){
       var dias=(function(){ var d=parseData(r.data); if(!d) return ''; var n=Math.floor((Date.now()-d.getTime())/86400000); return n>=0?(n+' dia(s) desde a solicitacao'):''; })();
@@ -11633,11 +11633,21 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var d=parseData(v); if(!d){ alert('Data invalida.'); return; }
     var sol=parseData(r.data);
     if(sol && d.getTime() < sol.getTime()-86400000){ if(!confirm('A data do elogio e anterior a data da solicitacao ('+r.data+'). Confirmar assim mesmo?')) return; }
+    var el=document.getElementById('dl_'+id); if(el){ var lv=String(el.value||'').trim(); if(lv) r.link=lv; }
     r.dataElogio=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
     r.mes=MESES_PT[d.getMonth()]; r.status='ELOGIO ENVIADO - AGUARDANDO VERIFICAÇÃO';
     r.dataElogioPor=loginU(curU()); r.dataElogioEm=Date.now(); r.atualizadoEm=Date.now();
     try{ var res=await fetch(base()+'/api/doc_elogio/'+encodeURIComponent(r.id),{method:'PUT',headers:H(),body:JSON.stringify(r)});
       if(res.ok){ gsUpsert('elogio',r); invalidaCache('elogio'); alert('Data registrada. O elogio foi para a verificacao do supervisor.'); render(); }
+      else alert('Falha ao salvar.'); }catch(err){ alert('Erro: '+(err&&err.message||err)); } };
+
+  window.__gwaCbSalvarLink=async function(id){ var r=regs('elogio').filter(function(x){return x.id===id;})[0]; if(!r) return;
+    if(!podeEditar(r)){ alert('Sem permissao para editar este registro.'); return; }
+    var e=document.getElementById('dl_'+id); var v=e?String(e.value||'').trim():'';
+    if(!v){ alert('Cole o link do elogio.'); return; }
+    r.link=v; r.linkPor=loginU(curU()); r.linkEm=Date.now(); r.atualizadoEm=Date.now();
+    try{ var res=await fetch(base()+'/api/doc_elogio/'+encodeURIComponent(r.id),{method:'PUT',headers:H(),body:JSON.stringify(r)});
+      if(res.ok){ gsUpsert('elogio',r); invalidaCache('elogio'); alert('Link salvo. O registro continua aqui ate voce informar a data do elogio.'); render(); }
       else alert('Falha ao salvar.'); }catch(err){ alert('Erro: '+(err&&err.message||err)); } };
 
   function cbEquipe(){ var per=perAtual(); var dados=resumoCashback(per,false);
