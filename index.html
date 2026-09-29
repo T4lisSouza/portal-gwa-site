@@ -11544,11 +11544,21 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         var reler='<button onclick="__gwaDocCorReler(&#39;'+j.id+'&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.blue+';border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px"><i class="fas fa-rotate"></i> Refazer leitura</button>'+(j.reprocessar?'<span style="font-size:11px;color:'+Co.orangeL+';margin-left:8px">na fila para reler...</span>':'');
         var wh=''; if(j.status==='concluido'){ var nWh=(j.webhookItens||[]).length;
           wh='<div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button onclick="__gwaDocCorReenviar(&#39;'+j.id+'&#39;)"'+(nWh?'':' disabled')+' style="background:'+(nWh?Co.card2:Co.bgA)+';border:1px solid '+(nWh?Co.orangeD:Co.line)+';color:'+(nWh?Co.orangeL:Co.mut)+';border-radius:8px;padding:7px 12px;cursor:'+(nWh?'pointer':'not-allowed')+';font-size:12px"><i class="fas fa-paper-plane"></i> Reenviar webhook'+(nWh?(' ('+nWh+')'):'')+'</button><span style="font-size:11px;color:'+Co.mut+'">'+(j.reenviarWebhook?('<b style="color:'+Co.orangeL+'">na fila de reenvio...</b>'):esc(j.webhookStatus||'ainda nao enviado'))+(j.webhookReenviadoEm?(' &middot; reenviado em '+new Date(j.webhookReenviadoEm).toLocaleString('pt-BR')):'')+'</span></div>'; }
+        var reap=''; if(j.status==='concluido'){ var nRe=((j.webhookItens)||[]).length;
+          reap='<div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button id="reap_'+j.id+'" onclick="__gwaDocCorReaplicar(&#39;'+j.id+'&#39;)"'+(nRe?'':' disabled')+' style="background:'+(nRe?'linear-gradient(135deg,#3fae5a,#2b7a3f)':Co.bgA)+';border:1px solid '+(nRe?'transparent':Co.line)+';color:'+(nRe?'#fff':Co.mut)+';border-radius:8px;padding:7px 13px;cursor:'+(nRe?'pointer':'not-allowed')+';font-size:12px;font-weight:700"><i class="fas fa-arrows-rotate"></i> Reaplicar nas defesas'+(nRe?(' ('+nRe+')'):'')+'</button>'+
+            '<span style="font-size:11px;color:'+Co.mut+'">'+(nRe?'grava de novo os objetos deste arquivo nas defesas do sistema':'sem objetos guardados — use Refazer leitura')+'</span></div>'; }
         var del=isMaster()?('<div style="margin-top:12px"><button onclick="__gwaDocCorExcluir(&#39;'+j.id+'&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px"><i class="fas fa-trash"></i> Excluir este registro</button></div>'):'';
-        det='<div style="margin-top:12px;padding-top:12px;border-top:1px solid '+Co.line+'">'+(pendBox||'<div style="font-size:12px;color:'+Co.mut+'">Nada aguardando aprovacao.</div>')+smBox+wh+'<div style="margin-top:12px">'+reler+'</div>'+del+'</div>';
+        det='<div style="margin-top:12px;padding-top:12px;border-top:1px solid '+Co.line+'">'+(pendBox||'<div style="font-size:12px;color:'+Co.mut+'">Nada aguardando aprovacao.</div>')+smBox+reap+wh+'<div style="margin-top:12px">'+reler+'</div>'+del+'</div>';
       }
       return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-left:4px solid '+c+';border-radius:14px;padding:14px 16px;margin-bottom:10px">'+cab+det+'</div>'; }).join('');
-    return painel+consumo+ajuda+btn+lista; }
+    /* reaplicar em lote: util depois de reconstruir a base de defesas */
+    var comIt=(_jobs||[]).filter(function(x){ return ((x.webhookItens)||[]).length; });
+    var totIt=comIt.reduce(function(a,x){ return a+x.webhookItens.length; },0);
+    var lote=comIt.length?('<div style="background:'+Co.card+';border:1px solid '+Co.green+';border-radius:14px;padding:14px 16px;margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">'+
+      '<div style="flex:1;min-width:240px"><div style="color:#fff;font-weight:700;font-size:13px"><i class="fas fa-arrows-rotate" style="color:'+Co.green+'"></i> Reaplicar os rastreios nas defesas</div>'+
+      '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px;line-height:1.55">'+totIt+' objeto(s) guardados em '+comIt.length+' comprovante(s). Use depois de reconstruir a base, quando as defesas ficaram sem o objeto. So grava onde esta vazio ou diferente — nada e apagado.</div></div>'+
+      '<button id="reapTudo" onclick="__gwaDocCorReaplicarTudo()" style="background:linear-gradient(135deg,#3fae5a,#2b7a3f);color:#fff;border:none;border-radius:11px;padding:11px 18px;font-weight:800;cursor:pointer">Reaplicar todos</button></div>'):'';
+    return painel+consumo+ajuda+btn+lote+lista; }
   window.__gwaDocCorRecarregar=function(){ Promise.all([loadJobs(),loadAr()]).then(function(){ render(); }); };
   window.__gwaDocCorAbrir=function(id){ _jobAberto=(_jobAberto===id)?'':id; render(); };
   window.__gwaDocCorAprovar=async function(jobId,idx){ var j=_jobs.filter(function(x){return x.id===jobId;})[0]; if(!j) return; var p=(j.pendentes||[])[idx]; if(!p) return;
@@ -11577,6 +11587,79 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     j.reenviarWebhook=true; j.atualizadoEm=Date.now();
     try{ var r=await fetch(base()+'/api/doc_correios/'+encodeURIComponent(j.id),{method:'PUT',headers:H(),body:JSON.stringify(j)});
       if(r.ok){ alert('Marcado para reenvio. O robo envia no proximo ciclo.'); render(); } else alert('Falha ao marcar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
+
+  /* ====== REAPLICAR OS OBJETOS JA LIDOS NAS DEFESAS DO SISTEMA ======
+     Usado quando a base de defesas foi reconstruida e os rastreios se perderam:
+     pega o que o robo ja extraiu (j.webhookItens) e grava de novo nas defesas.
+     Casa pelo id original; se o id mudou, casa por CPF e, por ultimo, pelo nome. */
+  function _chaveCpf(v){ var c=String(v||'').replace(/\D+/g,''); return c.length>=8?c:''; }
+  function acharDefesaDoItem(it, lista, usados){
+    var i, r;
+    if(it.defesaId){ for(i=0;i<lista.length;i++){ if(lista[i].id===it.defesaId && !usados[lista[i].id]) return lista[i]; } }
+    var cpf=_chaveCpf(it.cpf);
+    if(cpf){ var porCpf=lista.filter(function(x){ return _chaveCpf(x.cpf)===cpf && !usados[x.id]; });
+      if(porCpf.length){ r=porCpf.filter(function(x){ return !String(x.objeto||'').trim(); })[0]; return r||porCpf[0]; } }
+    var nm=norm(it.cliente);
+    if(nm){ var porNome=lista.filter(function(x){ return norm(x.nome)===nm && !usados[x.id]; });
+      if(porNome.length){ r=porNome.filter(function(x){ return !String(x.objeto||'').trim(); })[0]; return r||porNome[0]; } }
+    return null; }
+
+  async function reaplicarJob(j, lista, usados, quem){
+    var itens=(j&&j.webhookItens)||[]; var res={aplicados:0, iguais:0, semDefesa:0, falhas:0, semObjeto:0};
+    for(var i=0;i<itens.length;i++){ var it=itens[i];
+      if(!it || !String(it.objeto||'').trim()){ res.semObjeto++; continue; }
+      var reg=acharDefesaDoItem(it, lista, usados);
+      if(!reg){ res.semDefesa++; continue; }
+      usados[reg.id]=true;
+      if(String(reg.objeto||'').trim()===String(it.objeto).trim()){ res.iguais++; continue; }
+      reg.objeto=String(it.objeto).trim();
+      reg.objetoDataPostagem=it.dataPostagem||reg.objetoDataPostagem||'';
+      reg.objetoConfianca=(it.confianca!==undefined?it.confianca:(reg.objetoConfianca||0));
+      reg.objetoOrigem='reaplicado-'+quem;
+      reg.objetoArquivo=j.arquivo||reg.objetoArquivo||'';
+      reg.objetoEm=Date.now(); reg.atualizadoEm=Date.now();
+      try{ var ok=await fetch(base()+'/api/doc_defesa/'+encodeURIComponent(reg.id),{method:'PUT',headers:H(),body:JSON.stringify(reg)});
+        if(ok.ok){ res.aplicados++; try{ gsUpsert('defesa',reg); }catch(e){} } else res.falhas++; }
+      catch(e){ res.falhas++; } }
+    return res; }
+
+  window.__gwaDocCorReaplicar=async function(id){ if(!(ehAdminDoc()||ehSupervisor())) return;
+    var j=_jobs.filter(function(x){return x.id===id;})[0]; if(!j) return;
+    var n=((j.webhookItens)||[]).length;
+    if(!n){ alert('Este comprovante nao tem os objetos guardados.\n\nUse "Refazer leitura" para o robo ler o PDF de novo.'); return; }
+    if(!confirm('Reaplicar nas defesas os '+n+' objeto(s) lidos de '+(j.arquivo||'')+'?\n\nSo grava onde o rastreio esta diferente ou vazio. Nenhum registro e apagado.')) return;
+    var b=document.getElementById('reap_'+id); if(b){ b.disabled=true; b.innerHTML='<i class="fas fa-spinner fa-spin"></i> reaplicando...'; }
+    await loadRegs('defesa');
+    var lista=regsBrutos('defesa').slice(), usados={};
+    var r=await reaplicarJob(j, lista, usados, loginU(curU()));
+    invalidaCache('defesa'); _dashOk=false;
+    alert('Reaplicado em '+(j.arquivo||'')+':\n\n'+
+      r.aplicados+' defesa(s) receberam o objeto\n'+
+      r.iguais+' ja estavam com o mesmo objeto\n'+
+      r.semDefesa+' sem defesa correspondente\n'+
+      (r.falhas?(r.falhas+' falha(s) ao gravar\n'):'')+
+      (r.semObjeto?(r.semObjeto+' item(ns) sem objeto\n'):''));
+    render(); };
+
+  window.__gwaDocCorReaplicarTudo=async function(){ if(!ehAdminDoc()) return;
+    var alvo=(_jobs||[]).filter(function(x){ return ((x.webhookItens)||[]).length; });
+    if(!alvo.length){ alert('Nenhum comprovante com objetos guardados.'); return; }
+    var tot=alvo.reduce(function(a,x){ return a+x.webhookItens.length; },0);
+    if(!confirm('Reaplicar nas defesas os objetos de TODOS os '+alvo.length+' comprovantes concluidos?\n\n'+tot+' objeto(s) no total. So grava onde o rastreio esta vazio ou diferente; nada e apagado.')) return;
+    var b=document.getElementById('reapTudo'); if(b){ b.disabled=true; b.innerHTML='<i class="fas fa-spinner fa-spin"></i> reaplicando...'; }
+    await loadRegs('defesa');
+    var lista=regsBrutos('defesa').slice(), usados={};
+    var T={aplicados:0,iguais:0,semDefesa:0,falhas:0,semObjeto:0};
+    /* dos mais antigos para os mais novos, para o objeto mais recente prevalecer */
+    alvo.slice().sort(function(a,c){ return (a.ts||0)-(c.ts||0); });
+    for(var i=0;i<alvo.length;i++){ if(b) b.innerHTML='<i class="fas fa-spinner fa-spin"></i> '+(i+1)+'/'+alvo.length+'...';
+      var r=await reaplicarJob(alvo[i], lista, usados, loginU(curU()));
+      Object.keys(T).forEach(function(k){ T[k]+=r[k]; }); }
+    invalidaCache('defesa'); _dashOk=false;
+    alert('Reaplicacao concluida:\n\n'+T.aplicados+' defesa(s) receberam o objeto\n'+T.iguais+' ja estavam corretas\n'+
+      T.semDefesa+' sem defesa correspondente\n'+(T.falhas?(T.falhas+' falha(s) ao gravar\n'):''));
+    render(); };
+
   window.__gwaDocCorExcluir=async function(id){ if(!isMaster()) return; if(!confirm('Excluir este registro de processamento?')) return; try{ var r=await fetch(base()+'/api/doc_correios/'+encodeURIComponent(id),{method:'DELETE',headers:H()}); if(r.ok){ _jobs=_jobs.filter(function(x){return x.id!==id;}); render(); } else alert('Falha ao excluir.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
 
   /* ================= CASHBACK (elogios) ================= */
@@ -11661,11 +11744,14 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       var dias=(function(){ var d=parseData(r.data); if(!d) return ''; var n=Math.floor((Date.now()-d.getTime())/86400000); return n>=0?(n+' dia(s) desde a solicitacao'):''; })();
       return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-left:4px solid '+Co.orange+';border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">'+
         '<div style="flex:1;min-width:210px"><div style="color:#fff;font-weight:700">'+esc(r.nome||'(sem nome)')+'</div>'+
-        '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px"><i class="fas fa-paper-plane"></i> solicitado em <b style="color:'+Co.sub+'">'+esc(r.data||'-')+'</b>'+(dias?(' &middot; '+dias):'')+'</div>'+
-        '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px"><i class="fas fa-user"></i> '+esc(consultorDe(r))+(r.link?(' &middot; <a href="'+esc(r.link)+'" target="_blank" rel="noopener" style="color:'+Co.blue+'">ver link</a>'):'')+'</div></div>'+
+        '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px"><i class="fas fa-paper-plane"></i> solicitado em <b style="color:'+Co.sub+'">'+esc(r.data||(r.ts?(function(){ var _q=new Date(r.ts); return String(_q.getDate()).padStart(2,'0')+'/'+String(_q.getMonth()+1).padStart(2,'0')+'/'+_q.getFullYear(); })():'-'))+'</b>'+(dias?(' &middot; '+dias):'')+'</div>'+
+        '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px"><i class="fas fa-user"></i> '+esc(consultorDe(r))+(r.link?(' &middot; <a href="'+esc(r.link)+'" target="_blank" rel="noopener" style="color:'+Co.blue+'"><i class="fas fa-link"></i> ver link</a>'):'')+'</div></div>'+
+        '<div style="flex:1 1 240px;min-width:210px"><label style="font-size:11px;color:'+Co.sub+';display:block;margin-bottom:4px;font-weight:700">Link do elogio</label>'+
+        '<div style="display:flex;gap:6px"><input id="dl_'+esc(r.id)+'" value="'+esc(r.link||'')+'" placeholder="cole o link do elogio (pode ser depois)" style="flex:1;min-width:0;padding:9px 11px;border-radius:10px;border:1px solid '+(r.link?Co.blue:Co.line)+';background:'+Co.card2+';color:#fff">'+
+        '<button onclick="__gwaCbSalvarLink(&#39;'+esc(r.id)+'&#39;)" title="Salvar so o link e continuar na fila" style="background:'+Co.card2+';border:1px solid '+Co.blue+';color:'+Co.blue+';border-radius:10px;padding:9px 13px;font-weight:700;cursor:pointer"><i class="fas fa-floppy-disk"></i></button></div></div>'+
         '<div><label style="font-size:11px;color:'+Co.orangeL+';display:block;margin-bottom:4px;font-weight:700">Data do elogio</label>'+
         '<input type="date" id="de_'+esc(r.id)+'" max="'+hojeIso+'" style="padding:9px 11px;border-radius:10px;border:1px solid '+Co.orangeD+';background:'+Co.card2+';color:#fff"></div>'+
-        '<button onclick="__gwaCbPorData(&#39;'+esc(r.id)+'&#39;)" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:11px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-arrow-right"></i> Enviar para verificacao</button>'+
+        '<button onclick="__gwaCbPorData(&#39;'+esc(r.id)+'&#39;)" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:11px;padding:11px 18px;font-weight:700;cursor:pointer;white-space:nowrap"><i class="fas fa-arrow-right"></i> Enviar para verificacao</button>'+
         '</div>'; }).join('');
     return topo+cards; }
   window.__gwaCbPorData=async function(id){ var r=regs('elogio').filter(function(x){return x.id===id;})[0]; if(!r) return;
