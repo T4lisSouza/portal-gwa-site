@@ -9877,6 +9877,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     googleClientId:'', sheetName:'Vendas GWA', sheetId:'',
     tabelaPremiacao:[{min:15000,max:17999.99,pct:12.5,valor:1875},{min:18000,max:21999.99,pct:15,valor:2700},{min:22000,max:24999.99,pct:18,valor:3960},{min:25000,max:29999.99,pct:22,valor:5500},{min:30000,max:34999.99,pct:23,valor:6900},{min:35000,max:39999.99,pct:25,valor:8750},{min:40000,max:44999.99,pct:26,valor:10400},{min:45000,max:69999.99,pct:26.5,valor:11925}],
     /* Prontuario e Curso — vigencia 02/02/2026 */
+    linkManutencao:{ativo:false,mensagem:'',por:'',em:0},
     tabelaPremiacaoNeg:[{min:35000,max:44999.99,pct:5,valor:1750},{min:45000,max:54999.99,pct:7,valor:3150},{min:55000,max:64999.99,pct:8,valor:4400},{min:65000,max:74999.99,pct:11,valor:7150},{min:75000,max:84999.99,pct:13,valor:9750},{min:85000,max:94999.99,pct:15,valor:12750},{min:95000,max:104999.99,pct:17,valor:16150},{min:105000,max:114999.99,pct:19,valor:19950},{min:115000,max:999999999,pct:20,valor:23000}], tabelaNegVersao:2, tabelaNegInicio:'02/02/2026',
     metasVendedor:{},
     deptVendas:{},
@@ -10213,6 +10214,49 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       var quando=''; try{ quando=new Date(x.ts).toLocaleString('pt-BR'); }catch(e){}
       return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-left:4px solid '+st.c+';border-radius:14px;padding:14px 16px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><div style="color:#fff;font-weight:700">'+esc(x.produto||'(sem nome)')+' · <span style="color:'+Co.green+'">'+money(x.valor)+'</span></div><div style="font-size:12px;color:'+Co.mut+';margin-top:3px">'+formaBadges(x)+(x.prazo?(' · venc.: '+esc(x.prazo)):'')+(x.cliente?(' · '+esc(x.cliente)):'')+'</div>'+(isAdmin()?('<div style="font-size:11px;color:'+Co.mut+';margin-top:3px">Solicitante: <b style="color:'+Co.sub+'">'+esc(x.solicitanteNome||x.solicitante)+'</b> · '+esc(x.dept||'comercial')+' · '+quando+'</div>'):('<div style="font-size:11px;color:'+Co.mut+';margin-top:3px">'+quando+'</div>'))+(x.descricao?('<div style="font-size:11px;color:'+Co.mut+';margin-top:3px">'+esc(x.descricao)+'</div>'):'')+'</div><div style="text-align:right"><span style="background:'+Co.card2+';border:1px solid '+st.c+';color:'+st.c+';border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;white-space:nowrap"><i class="fas '+st.i+'"></i> '+st.t+'</span></div></div><div style="margin-top:10px">'+linkCell+'</div>'+paySection+(acoes?('<div style="margin-top:10px;display:flex;justify-content:flex-end">'+acoes+'</div>'):'')+'</div>'; }).join('');
     return rows; }
+
+  /* ============ AVISO DE MANUTENCAO DOS LINKS DE PAGAMENTO (Master) ============ */
+  function manutLink(){ return (_cfg&&_cfg.linkManutencao)||{ativo:false,mensagem:'',por:'',em:0}; }
+  function linkEmManutencao(){ return manutLink().ativo===true; }
+
+  window.__gwaLinkManutencao=async function(){
+    if(!isMaster()){ alert('Apenas o Master pode ligar ou desligar a manutencao.'); return; }
+    var m=manutLink();
+    if(m.ativo){
+      if(!confirm('Liberar novamente a solicitacao de links de pagamento?')) return;
+      _cfg.linkManutencao={ativo:false,mensagem:'',por:loginU(curU()),em:Date.now()};
+    } else {
+      var txt=prompt('Mensagem que os consultores vao ver na tela de manutencao:',
+        'Estamos com uma instabilidade na geracao dos links. Nao solicite novos links ate o aviso de liberacao.');
+      if(txt===null) return;
+      _cfg.linkManutencao={ativo:true,mensagem:String(txt||'').trim(),por:loginU(curU()),em:Date.now()};
+    }
+    var ok=await saveCfg();
+    if(!ok) alert('Nao consegui salvar a configuracao.');
+    render();
+  };
+
+  function telaManutencaoLink(){
+    var m=manutLink();
+    var quando=m.em?new Date(m.em).toLocaleString('pt-BR'):'';
+    return '<div style="background:linear-gradient(160deg,#2a1a0c,#161616);border:2px solid '+Co.orange+';border-radius:20px;padding:34px 26px;text-align:center;margin-bottom:18px;box-shadow:0 14px 44px rgba(0,0,0,.45)">'+
+      '<div style="font-size:52px;line-height:1;color:'+Co.orange+'"><i class="fas fa-triangle-exclamation"></i></div>'+
+      '<div style="font-size:22px;font-weight:900;color:#fff;margin-top:12px;letter-spacing:-.3px">Links de pagamento em manutencao</div>'+
+      '<div style="font-size:14px;color:'+Co.sub+';margin-top:10px;max-width:560px;margin-left:auto;margin-right:auto;line-height:1.6">'+
+        esc(m.mensagem||'Estamos ajustando a geracao dos links. Nao solicite novos links por enquanto.')+'</div>'+
+      '<div style="margin-top:16px;display:inline-flex;align-items:center;gap:9px;background:rgba(224,120,32,.13);border:1px solid '+Co.orangeD+';border-radius:22px;padding:9px 18px;font-size:12.5px;color:'+Co.orangeL+';font-weight:700">'+
+        '<i class="fas fa-hourglass-half"></i> Aguarde o aviso de liberacao para voltar a solicitar</div>'+
+      (quando?('<div style="font-size:11px;color:'+Co.mut+';margin-top:12px">Em manutencao desde '+esc(quando)+(m.por?(' &middot; '+esc(m.por)):'')+'</div>'):'')+
+      (isMaster()?('<div style="margin-top:18px"><button onclick="__gwaLinkManutencao()" style="background:'+Co.green+';color:#fff;border:none;border-radius:12px;padding:12px 22px;font-weight:800;cursor:pointer"><i class="fas fa-unlock"></i> Liberar os links agora</button></div>'):'')+
+      '</div>'; }
+
+  function botaoManutencaoLink(){
+    if(!isMaster()) return '';
+    var on=linkEmManutencao();
+    return '<div style="display:flex;justify-content:flex-end;margin-bottom:12px">'+
+      '<button onclick="__gwaLinkManutencao()" style="background:'+(on?Co.green:Co.card2)+';border:1px solid '+(on?'transparent':Co.orangeD)+';color:'+(on?'#fff':Co.orangeL)+';border-radius:11px;padding:9px 16px;font-weight:700;cursor:pointer;font-size:13px">'+
+      '<i class="fas fa-'+(on?'unlock':'screwdriver-wrench')+'"></i> '+(on?'Liberar os links (sair da manutencao)':'Por os links em manutencao')+'</button></div>'; }
+
   function viewLinks(dept){ var podeInfo=isAdmin()?('<div style="background:'+Co.card2+';border:1px dashed '+Co.line+';border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:'+Co.mut+'"><i class="fas fa-robot" style="color:'+Co.orange+'"></i> A automação (robô) lê as solicitações com status <b>Na fila</b>, gera o link no portal da Rede e devolve aqui. Enquanto o robô não estiver ativo, você pode informar o link manualmente no botão <i class="fas fa-paste"></i>.</div>'):'';
     var deptSuf=(userDept(curU())==='negociacao')?'NEGOCIAÇÃO':'COMERCIAL'; var parc=''; for(var pp=1;pp<=12;pp++){ parc+='<option value="'+pp+'">'+pp+'x</option>'; }
     var form='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:18px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><span style="width:5px;height:20px;border-radius:3px;background:'+Co.gradO+'"></span><h3 style="margin:0;color:#fff;font-size:15px"><i class="fas fa-link" style="color:'+Co.orange+'"></i> Solicitar link de pagamento (Rede)</h3></div>'+
@@ -10232,11 +10276,13 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="margin-top:16px">'+btnPri('<i class="fas fa-paper-plane"></i> Solicitar link','__gwaLinkSolicitar()')+'</div></div>';
     var titulo=isAdmin()?'Solicitações do departamento':'Minhas solicitações';
     var limparBtn=isMaster()?'<button onclick="__gwaLinkLimparTravadas()" title="Parar e excluir todas as solicitações na fila / gerando / com erro" style="margin-left:auto;background:'+Co.red+';border:none;color:#fff;border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12px"><i class="fas fa-broom"></i> Limpar travadas</button>':'';
-    return podeInfo+form+'<div style="display:flex;align-items:center;gap:10px;margin:0 0 12px"><span style="width:5px;height:20px;border-radius:3px;background:'+Co.gradO+'"></span><h3 style="margin:0;color:#fff;font-size:15px"><i class="fas fa-list-check" style="color:'+Co.orange+'"></i> '+titulo+'</h3>'+limparBtn+'</div><div id="gwaLinkList">'+linksListHTML(dept)+'</div>'; }
+    if(linkEmManutencao()) form=telaManutencaoLink();
+    return botaoManutencaoLink()+podeInfo+form+'<div style="display:flex;align-items:center;gap:10px;margin:0 0 12px"><span style="width:5px;height:20px;border-radius:3px;background:'+Co.gradO+'"></span><h3 style="margin:0;color:#fff;font-size:15px"><i class="fas fa-list-check" style="color:'+Co.orange+'"></i> '+titulo+'</h3>'+limparBtn+'</div><div id="gwaLinkList">'+linksListHTML(dept)+'</div>'; }
   window.__gwaLinkSolicitar=async function(){ if(window.__linkEnviando) return; window.__linkEnviando=true; try{ var produtoBase=(document.getElementById('lkProduto').value||'').trim(); var valor=parseMoneyBR(document.getElementById('lkValor').value); var pix=!!document.getElementById('lkPix').checked; var cartao=!!document.getElementById('lkCartao').checked; var parcelas=cartao?Math.min(12,(parseInt(document.getElementById('lkParcelas').value,10)||1)):0; var cliente=(document.getElementById('lkCliente').value||'').trim(); var cpf=(document.getElementById('lkCpf').value||'').trim(); var descricao=(document.getElementById('lkDesc').value||'').trim();
     if(!produtoBase){ alert('Informe o nome do produto.'); return; } if(valor<=0){ alert('Informe um valor válido.'); return; } if(valor>30000){ alert('O valor do link não pode passar de R$ 30.000,00.'); return; } if(!pix&&!cartao){ alert('Selecione ao menos uma forma de pagamento.'); return; }
     var u=curU(); var L=loginU(u); var dep=userDept(u); var deptSuf=(dep==='negociacao')?'NEGOCIAÇÃO':'COMERCIAL'; var produto=produtoBase+'-'+deptSuf; var prazo=PRAZO_LINK_FIXO;
     var item={ id:'lkp_'+L+'_'+Date.now().toString(36), ts:Date.now(), solicitante:L, solicitanteNome:(u&&u.nome)||L, dept:dep, produtoBase:produtoBase, produto:produto, valor:valor, pix:pix, cartao:cartao, parcelas:parcelas, prazo:prazo, cliente:cliente, cpf:cpf, descricao:descricao, status:'solicitado', link:'', erroMsg:'', pagamento:'', comprovante:'' };
+    if(linkEmManutencao()){ alert('Os links de pagamento estao em manutencao no momento.\n\n'+(manutLink().mensagem||'Aguarde o aviso de liberacao.')); return; }
     var btnOk=true; try{ var r=await fetch(base()+'/api/link_pagamento',{method:'POST',headers:H(),body:JSON.stringify(item)}); btnOk=r.ok; }catch(e){ btnOk=false; }
     if(btnOk){ _links=_links||[]; _links.push(item); ['lkProduto','lkValor','lkCliente','lkCpf','lkDesc'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';}); var box=document.getElementById('gwaLinkList'); if(box) box.innerHTML=linksListHTML((_dept==='consolidado')?null:_dept); alert('Solicitação enviada! O link aparecerá aqui assim que for gerado.'); } else alert('Falha ao enviar a solicitação.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } finally{ window.__linkEnviando=false; } };
   async function _linkUpdate(id,patch){ var x=(_links||[]).find(function(v){return v.id===id;}); if(!x) return false; Object.keys(patch).forEach(function(k){ x[k]=patch[k]; }); x.statusEm=Date.now(); try{ var r=await fetch(base()+'/api/link_pagamento/'+encodeURIComponent(id),{method:'PUT',headers:H(),body:JSON.stringify(x)}); return r.ok; }catch(e){ return false; } }
@@ -11021,6 +11067,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function statusDe(t,r){ if(t==='defesa'){ if(String(r.objeto||'').trim()) return 'Com rastreio'; return String(r.tipoEnvio||'').toUpperCase()==='CORREIOS'?'Aguardando rastreio':(String(r.tipoEnvio||'').trim()||'(sem status)'); }
     if(t==='doc') return String(r.docsOkPasta||'').trim()||'(sem status)'; return String(r.status||'').trim()||'(sem status)'; }
   function dataDe(t,r){ return r.data||r.concluidoEm||r.dataContrato||r.feitoEm||''; }
+  /* novidade primeiro: vale tanto para o que acabou de entrar quanto para o que foi alterado */
+  function recencia(r){ if(!r) return 0;
+    return Math.max(Number(r.atualizadoEm)||0, Number(r.dataElogioEm)||0, Number(r.linkEm)||0,
+                    Number(r.validadoEm)||0, Number(r.ts)||0); }
   function parseData(s){ if(!s) return null; s=String(s).trim(); var m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return new Date(+m[1],+m[2]-1,+m[3],12,0,0);
     m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/); if(m){ var a=+m[3]; if(a<100)a+=2000; return new Date(a,+m[2]-1,+m[1],12,0,0); } return null; }
   function dentroPeriodo(d){ if(!d) return _dPer==='tudo'; var hoje=new Date(); var ini,fim=new Date(hoje.getFullYear(),hoje.getMonth(),hoje.getDate(),23,59,59);
@@ -11232,7 +11282,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(_fCons && !mesmoConsultor(v.consultorNome||v.consultor,_fCons)) return false;
     if(q){ var alvo=norm(v.nome)+' '+norm(v.cpf||'')+' '+norm(v.protocolosTxt||v.protocolo||'')+' '+norm(v.tipoDefesa||'')+' '+norm(v.orgao||'');
       if(alvo.indexOf(q)<0) return false; }
-    return true; }).sort(function(a,b){return (b.ts||0)-(a.ts||0);}); }
+    return true; }).sort(function(a,b){ return recencia(b)-recencia(a); }); }
   function viewLista(){ var vis=visiveis(); var arr=aplicaFiltros(vis);
     var consList=[]; vis.forEach(function(v){ var n=consultorDe(v); if(n && consList.indexOf(n)<0) consList.push(n); }); consList.sort();
     var podeFiltrarCons=(ehAdminDoc()||ehSupervisor());
@@ -11777,7 +11827,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   /* periodo em que a SOLICITACAO foi feita (para a fila de 2a data) */
   function mesSolic(r){ var d=parseData(r.data)||parseData(r.feitoEm); if(!d) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
   function aguardandoDataLista(){ return filtraEscopo(regs('elogio')).filter(elogioAguardandoData)
-    .sort(function(a,b){ return (b.ts||0)-(a.ts||0); }); }
+    .sort(function(a,b){ return recencia(b)-recencia(a); }); }
   function perAtual(){ if(_cbPer) return _cbPer; var h=new Date(); return h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0'); }
   function perLabel(p){ var M=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']; var a=p.split('-'); return (M[(+a[1])-1]||'')+'/'+a[0]; }
   function resumoCashback(per,todos){ var lista=todos?regs('elogio'):filtraEscopo(regs('elogio')); var m={};
@@ -11976,7 +12026,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   function cbValidar(){ if(!(ehAdminDoc()||ehSupervisor())) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito.</div>';
     var per=perAtual();
-    var lista=filtraEscopo(regs('elogio')).filter(function(r){ return mesRef(r)===per && elogioEmVerificacao(r); });
+    var lista=filtraEscopo(regs('elogio')).filter(function(r){ return mesRef(r)===per && elogioEmVerificacao(r); })
+      .sort(function(a,b){ return recencia(b)-recencia(a); });
     var rows=lista.slice(0,300).map(function(r){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:9px 10px;color:#fff">'+esc(r.nome||'')+(r.link?(' <a href="'+esc(r.link)+'" target="_blank" rel="noopener" style="color:'+Co.blue+';font-size:11px">link</a>'):'')+'</td><td style="padding:9px 10px">'+esc(consultorDe(r))+'</td><td style="padding:9px 10px">'+esc(r.plataforma||'')+'</td><td style="padding:9px 10px">'+esc(r.status||'')+'</td><td style="padding:9px 10px">'+esc(r.data||'')+'</td><td style="padding:9px 10px;color:'+Co.orangeL+';font-weight:700">'+esc(dataElogioDe(r)||'-')+'</td><td style="padding:9px 10px;white-space:nowrap"><button onclick="__gwaCbValidar(&#39;'+r.id+'&#39;,true)" style="background:'+Co.green+';color:#fff;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;margin-right:4px;font-weight:700"><i class="fas fa-circle-check"></i> Verificar</button><button onclick="__gwaCbValidar(&#39;'+r.id+'&#39;,false)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px">Recusar</button></td></tr>'; }).join('')||'<tr><td colspan="7" style="padding:22px;text-align:center;color:'+Co.mut+'">Nada aguardando verificação neste período. Os elogios só chegam aqui depois que o operador informa a <b>data do elogio</b>.</td></tr>';
     var topo='<div style="background:'+Co.card2+';border:1px dashed '+Co.line+';border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:'+Co.mut+'">Aqui ficam somente os elogios que <b>ja tem a data do elogio</b> informada pelo operador e ainda <b>nao foram verificados</b>. So depois da verificacao eles contam na premiacao. <b style="color:'+Co.orangeL+'">'+lista.length+'</b> aguardando em '+perLabel(per)+'.</div>'+
       (lista.length?('<div style="margin-bottom:12px"><button onclick="__gwaCbValidarTodos()" style="background:'+Co.green+';color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer"><i class="fas fa-check-double"></i> Verificar todos os '+lista.length+' deste periodo</button></div>'):'');
