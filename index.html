@@ -11079,7 +11079,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     t.push(['novos','Novos clientes'+(function(){ var q=qtdMinhaFila(); return q?('<span style="background:#e5533c;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:5px;font-weight:800">'+q+'</span>'):''; })(),'fa-user-plus']);
     t.push(['buscar','Buscar cliente','fa-magnifying-glass']);
     t.push(['cashback','Premiação DOC','fa-wallet']);
-    if(ehAdminDoc()||ehSupervisor()){ t.push(['relatorios','Relatorios','fa-chart-column']); t.push(['orgaos','Orgaos','fa-building-columns']); }
+    t.push(['orgaos','Orgaos','fa-building-columns']);
+    if(ehAdminDoc()||ehSupervisor()){ t.push(['relatorios','Relatorios','fa-chart-column']); }
     if(ehAdminDoc()){ t.push(['correios','Correios','fa-truck-fast']); t.push(['acessos','Acessos','fa-user-shield']); t.push(['config','Ajustes','fa-sliders']); t.push(['importar','Importar','fa-file-import']); }
     return t; }
   function render(){ ensurePanel(); var head=document.getElementById('gwaDocHead'), body=document.getElementById('gwaDocBody'); if(!head||!body) return;
@@ -11098,7 +11099,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       else if(_view==='importar'&&ehAdminDoc()) body.innerHTML=viewImportar();
       else if(_view==='correios'&&ehAdminDoc()) body.innerHTML=viewCorreios();
       else if(_view==='relatorios'&&(ehAdminDoc()||ehSupervisor())) body.innerHTML=viewRelatorios();
-      else if(_view==='orgaos'&&(ehAdminDoc()||ehSupervisor())) body.innerHTML=viewOrgaos();
+      else if(_view==='orgaos') body.innerHTML=viewOrgaos();
       else if(_view==='ficha') body.innerHTML=viewFicha();
       else if(_view==='buscar') body.innerHTML=viewBuscarCliente();
       else if(_view==='novos') body.innerHTML=viewNovos();
@@ -12062,7 +12063,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function orgaoPorId(id){ return (_orgaos||[]).filter(function(o){ return o.id===id; })[0]||null; }
 
   /* ---------- Ajustes: Orgaos e Enderecos ---------- */
-  function viewOrgaos(){ if(!(ehAdminDoc()||ehSupervisor())) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito a supervisores e administradores.</div>';
+  function viewOrgaos(){ if(!temAcesso()) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito.</div>';
     var q=norm(_orgBusca);
     var lista=(_orgaos||[]).filter(function(o){ if(_orgUf&&o.uf!==_orgUf) return false;
       if(q){ if(norm(o.orgao).indexOf(q)<0 && norm(o.municipio).indexOf(q)<0 && norm(o.endereco).indexOf(q)<0 && norm(o.cep).indexOf(q)<0) return false; } return true; })
@@ -12078,17 +12079,23 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       var tags=(o.incompleto?'<span style="background:rgba(229,83,60,.18);color:#f6b3a6;border-radius:12px;padding:2px 8px;font-size:10px;margin-right:4px">INCOMPLETO</span>':'')+
         (o.online?'<span style="background:rgba(74,159,213,.18);color:'+Co.blue+';border-radius:12px;padding:2px 8px;font-size:10px;margin-right:4px">ONLINE</span>':'')+
         (o.correio?'<span style="background:rgba(63,174,90,.18);color:'+Co.green+';border-radius:12px;padding:2px 8px;font-size:10px">CORREIO</span>':'');
-      return '<tr style="border-bottom:1px solid '+Co.line+';opacity:'+(inat?'.45':'1')+'"><td style="padding:9px 10px;color:'+Co.orangeL+';font-weight:700">'+esc(o.uf)+'</td><td style="padding:9px 10px;color:#fff">'+esc(o.orgao)+'<div style="margin-top:3px">'+tags+'</div></td><td style="padding:9px 10px">'+esc(o.municipio||'-')+'</td><td style="padding:9px 10px;font-size:12px">'+esc(o.endereco||'-')+'</td><td style="padding:9px 10px">'+esc(o.cep||'-')+'</td><td style="padding:9px 10px;white-space:nowrap"><button onclick="__gwaOrgEditar(&#39;'+o.id+'&#39;)" title="Editar" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:4px"><i class="fas fa-pen"></i></button><button onclick="__gwaOrgToggle(&#39;'+o.id+'&#39;)" title="'+(inat?'Ativar':'Desativar')+'" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+(inat?Co.green:Co.mut)+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-power-off"></i></button></td></tr>'; }).join('')||'<tr><td colspan="6" style="padding:22px;text-align:center;color:'+Co.mut+'">Nenhum orgao encontrado.</td></tr>';
+      return '<tr style="border-bottom:1px solid '+Co.line+';opacity:'+(inat?'.45':'1')+'"><td style="padding:9px 10px;color:'+Co.orangeL+';font-weight:700">'+esc(o.uf)+'</td><td style="padding:9px 10px;color:#fff">'+esc(o.orgao)+'<div style="margin-top:3px">'+tags+'</div></td><td style="padding:9px 10px">'+esc(o.municipio||'-')+'</td><td style="padding:9px 10px;font-size:12px">'+esc(o.endereco||'-')+'</td><td style="padding:9px 10px">'+esc(o.cep||'-')+'</td><td style="padding:9px 10px;white-space:nowrap"><button onclick="__gwaOrgEditar(&#39;'+o.id+'&#39;)" title="Editar" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:4px"><i class="fas fa-pen"></i></button>'+((ehAdminDoc()||ehSupervisor())?('<button onclick="__gwaOrgToggle(&#39;'+o.id+'&#39;)" title="'+(inat?'Ativar':'Desativar')+'" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+(inat?Co.green:Co.mut)+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-power-off"></i></button>'):'')+'</td></tr>'; }).join('')||'<tr><td colspan="6" style="padding:22px;text-align:center;color:'+Co.mut+'">Nenhum orgao encontrado.</td></tr>';
     return topo+vazia+alerta+form+'<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">UF</th><th style="padding:10px">Orgao</th><th style="padding:10px">Municipio</th><th style="padding:10px">Endereco</th><th style="padding:10px">CEP</th><th style="padding:10px">Acoes</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'; }
   function formOrgao(){ var o=(_orgEdit==='novo')?{uf:'',municipio:'',orgao:'',endereco:'',cep:'',online:false,linkOnline:'',correio:true,status:'ativo',incompleto:false}:(orgaoPorId(_orgEdit)||{});
     var ufOpts=UFS.map(function(u){ return '<option value="'+u+'"'+(o.uf===u?' selected':'')+'>'+u+'</option>'; }).join('');
     return '<div style="background:'+Co.card+';border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px;margin-bottom:16px"><h3 style="margin:0 0 12px;color:#fff;font-size:15px"><i class="fas fa-building-columns" style="color:'+Co.orange+'"></i> '+(_orgEdit==='novo'?'Cadastrar orgao':'Editar orgao')+'</h3>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">UF *</label><select id="ogUf" style="'+inpStyle()+'"><option value="">-</option>'+ufOpts+'</select></div>'+
-      '<div><label style="font-size:12px;color:'+Co.sub+'">Municipio</label><input id="ogMun" value="'+esc(o.municipio||'')+'" style="'+inpStyle()+'"></div>'+
-      '<div><label style="font-size:12px;color:'+Co.sub+'">Orgao *</label><input id="ogNome" value="'+esc(o.orgao||'')+'" placeholder="Ex.: PREFEITURA - Guarulhos" style="'+inpStyle()+'"></div>'+
-      '<div style="grid-column:1/-1"><label style="font-size:12px;color:'+Co.sub+'">Endereco</label><input id="ogEnd" value="'+esc(o.endereco||'')+'" style="'+inpStyle()+'"></div>'+
-      '<div><label style="font-size:12px;color:'+Co.sub+'">CEP</label><input id="ogCep" value="'+esc(o.cep||'')+'" placeholder="00000-000" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Cidade / Municipio</label><input id="ogMun" list="ogMunList" value="'+esc(o.municipio||'')+'" oninput="__gwaOrgSemelhantes()" placeholder="digite ou escolha uma ja cadastrada" style="'+inpStyle()+'">'+datalistHtml('ogMunList',listaMunicipios())+'</div>'+
+      '<div style="grid-column:1/-1"><label style="font-size:12px;color:'+Co.sub+'">Orgao * <span style="color:'+Co.mut+'">— a lupa avisa se ja existe algo parecido</span></label>'+
+      '<div style="display:flex;gap:7px"><input id="ogNome" list="ogNomeList" value="'+esc(o.orgao||'')+'" oninput="__gwaOrgSemelhantes()" placeholder="Ex.: PREFEITURA - Guarulhos" style="'+inpStyle()+'">'+
+      '<button onclick="__gwaOrgSemelhantes()" title="Procurar orgaos parecidos" style="flex:0 0 auto;background:'+Co.card2+';border:1px solid '+Co.orangeD+';color:'+Co.orangeL+';border-radius:10px;padding:0 15px;cursor:pointer"><i class="fas fa-magnifying-glass"></i></button></div>'+
+      datalistHtml('ogNomeList',listaOrgaos())+'<div id="ogSemelhantes"></div></div>'+
+      '<div style="grid-column:1/-1"><label style="font-size:12px;color:'+Co.sub+'">Endereco</label><input id="ogEnd" value="'+esc(o.endereco||'')+'" placeholder="rua, numero, bairro" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">CEP <span style="color:'+Co.mut+'">— busca o endereco sozinho</span></label>'+
+      '<div style="display:flex;gap:7px"><input id="ogCep" value="'+esc(o.cep||'')+'" placeholder="00000-000" onblur="__gwaOrgCep()" onkeydown="if(event.key===&#39;Enter&#39;){event.preventDefault();__gwaOrgCep();}" style="'+inpStyle()+'">'+
+      '<button onclick="__gwaOrgCep()" title="Buscar endereco pelo CEP" style="flex:0 0 auto;background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:0 15px;cursor:pointer;font-weight:700"><i class="fas fa-magnifying-glass-location"></i></button></div>'+
+      '<div id="ogCepAviso" style="font-size:11px;color:'+Co.mut+';margin-top:4px">Se o CEP nao trouxer nada, e so preencher na mao.</div></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Link da defesa online</label><input id="ogLink" value="'+esc(o.linkOnline||'')+'" placeholder="https://..." style="'+inpStyle()+'"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Observacao online</label><input id="ogObs" value="'+esc(o.obsOnline||'')+'" placeholder="Ex.: DSV DIGITAL" style="'+inpStyle()+'"></div>'+
       '</div><div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;align-items:center">'+
@@ -12098,6 +12105,62 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<label style="display:flex;gap:6px;align-items:center;color:'+Co.sub+';font-size:13px;cursor:pointer"><input type="checkbox" id="ogAtivo"'+(o.status!=='inativo'?' checked':'')+'> Ativo</label></div>'+
       (o.atualizadoEm?('<div style="font-size:11px;color:'+Co.mut+';margin-top:8px">Ultima atualizacao: '+new Date(o.atualizadoEm).toLocaleString('pt-BR')+' por '+esc(o.atualizadoPor||'-')+'</div>'):'')+
       '<div style="margin-top:14px;display:flex;gap:10px"><button onclick="__gwaOrgSalvar()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:11px 20px;font-weight:700;cursor:pointer"><i class="fas fa-check"></i> Salvar</button><button onclick="__gwaOrgCancelar()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:10px;padding:11px 16px;cursor:pointer">Cancelar</button></div></div>'; }
+
+  /* ---- CEP: preenche endereco, municipio e UF automaticamente ---- */
+  window.__gwaOrgCep=async function(){
+    var e=document.getElementById('ogCep'); if(!e) return;
+    var cep=String(e.value||'').replace(/\D+/g,'');
+    var av=document.getElementById('ogCepAviso');
+    function aviso(txt,cor){ if(av){ av.innerHTML=txt; av.style.color=cor||Co.mut; } }
+    if(cep.length!==8){ aviso('Digite o CEP com 8 numeros — ou preencha o endereco na mao.',Co.orangeL); return; }
+    aviso('<i class="fas fa-spinner fa-spin"></i> buscando...',Co.mut);
+    try{
+      var r=await fetch('https://viacep.com.br/ws/'+cep+'/json/');
+      if(!r.ok) throw new Error('sem resposta');
+      var d=await r.json();
+      if(d&&d.erro){ aviso('CEP nao encontrado. Pode preencher o endereco na mao.',Co.orangeL); return; }
+      var end=[d.logradouro,d.bairro].filter(Boolean).join(' - ');
+      var ie=document.getElementById('ogEnd'), im=document.getElementById('ogMun'), iu=document.getElementById('ogUf');
+      if(ie && end) ie.value=end;
+      if(im && d.localidade) im.value=d.localidade;
+      if(iu && d.uf) iu.value=d.uf;
+      e.value=cep.slice(0,5)+'-'+cep.slice(5);
+      aviso('<i class="fas fa-circle-check"></i> '+esc([d.localidade,d.uf].filter(Boolean).join('/'))+' preenchido. Confira e complete o numero.',Co.green);
+      __gwaOrgSemelhantes();
+    }catch(err){ aviso('Nao consegui consultar o CEP agora — preencha o endereco na mao.',Co.orangeL); }
+  };
+
+  /* ---- lupa: mostra orgaos parecidos para nao duplicar ---- */
+  function orgaosParecidos(nome,uf,mun){
+    var n=norm(nome); if(n.length<3) return [];
+    var toksN=n.split(' ').filter(function(x){ return x.length>2; });
+    return (_orgaos||[]).filter(function(o){
+      if(uf && o.uf && o.uf!==uf) return false;
+      var a=norm(o.orgao)+' '+norm(o.municipio);
+      if(a.indexOf(n)>=0) return true;
+      if(!toksN.length) return false;
+      var bate=0; toksN.forEach(function(t){ if(a.indexOf(t)>=0) bate++; });
+      return bate>=Math.max(1,Math.ceil(toksN.length*0.7));
+    }).slice(0,8); }
+
+  window.__gwaOrgSemelhantes=function(){
+    var box=document.getElementById('ogSemelhantes'); if(!box) return;
+    var g=function(i){ var e=document.getElementById(i); return e?String(e.value||'').trim():''; };
+    var achados=orgaosParecidos(g('ogNome'), g('ogUf'), g('ogMun'));
+    if(_orgEdit!=='novo'){ achados=achados.filter(function(o){ return o.id!==_orgEdit; }); }
+    if(!achados.length){ box.innerHTML=''; return; }
+    box.innerHTML='<div style="background:rgba(224,120,32,.10);border:1px solid '+Co.orangeD+';border-radius:12px;padding:11px 13px;margin-top:8px">'+
+      '<div style="font-size:12px;color:'+Co.orangeL+';font-weight:700;margin-bottom:7px"><i class="fas fa-magnifying-glass"></i> Ja existe algo parecido — use o cadastro que ja esta ai em vez de criar outro:</div>'+
+      achados.map(function(o){ return '<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:5px 0;border-top:1px solid '+Co.line+'">'+
+        '<div style="font-size:12px;color:'+Co.sub+'"><b style="color:#fff">'+esc(o.uf)+'</b> &middot; '+esc(o.orgao)+(o.municipio?(' <span style="color:'+Co.mut+'">('+esc(o.municipio)+')</span>'):'')+'</div>'+
+        '<button onclick="__gwaOrgEditar(&#39;'+esc(o.id)+'&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.orangeD+';color:'+Co.orangeL+';border-radius:8px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer">abrir este</button></div>'; }).join('')+
+      '</div>'; };
+
+  /* listas de apoio para o nome sair padronizado */
+  function listaMunicipios(){ var m={}; (_orgaos||[]).forEach(function(o){ if(o.municipio) m[String(o.municipio).trim()]=1; }); return Object.keys(m).sort(); }
+  function listaOrgaos(){ var m={}; (_orgaos||[]).forEach(function(o){ if(o.orgao) m[String(o.orgao).trim()]=1; }); return Object.keys(m).sort(); }
+  function datalistHtml(id,arr){ return '<datalist id="'+id+'">'+arr.slice(0,800).map(function(x){ return '<option value="'+esc(x)+'"></option>'; }).join('')+'</datalist>'; }
+
   window.__gwaOrgBusca=function(v){ _orgBusca=v; var b=document.getElementById('gwaDocBody'); if(!b) return; var a=document.activeElement,p=a&&a.selectionStart; b.innerHTML=viewOrgaos(); var ni=document.querySelector('#gwaDocBody input'); if(ni){ ni.focus(); try{ni.selectionStart=ni.selectionEnd=p;}catch(e){} } };
   window.__gwaOrgFiltroUf=function(v){ _orgUf=v; render(); };
   window.__gwaOrgNovo=function(){ _orgEdit='novo'; render(); };
@@ -12107,7 +12170,12 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     try{ var r=await fetch(base()+'/api/doc_orgaos/'+encodeURIComponent(o.id),{method:'PUT',headers:H(),body:JSON.stringify(o)}); if(r.ok) render(); else alert('Falha ao salvar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
   window.__gwaOrgSalvar=async function(){ var g=function(i){ var e=document.getElementById(i); return e?String(e.value||'').trim():''; }; var c=function(i){ var e=document.getElementById(i); return !!(e&&e.checked); };
     var uf=g('ogUf'), nome=g('ogNome'); if(!uf||!nome){ alert('Informe UF e nome do orgao.'); return; }
-    var novo=(_orgEdit==='novo'); var o=novo?{id:'org_'+norm(uf+'_'+nome).toLowerCase().replace(/\s+/g,'_').slice(0,48)+'_'+Date.now().toString(36)}:(orgaoPorId(_orgEdit)||{});
+    var novo=(_orgEdit==='novo');
+    if(novo){ var mun=g('ogMun');
+      var igual=(_orgaos||[]).filter(function(x){ return norm(x.uf)===norm(uf) && norm(x.orgao)===norm(nome) && norm(x.municipio||'')===norm(mun); })[0];
+      if(igual){ alert('Ja existe este orgao cadastrado:\n\n'+igual.uf+' - '+igual.orgao+(igual.municipio?(' ('+igual.municipio+')'):'')+'\n\nAbra o cadastro existente para completar os dados.'); __gwaOrgEditar(igual.id); return; }
+      var par=orgaosParecidos(nome,uf,mun);
+      if(par.length && !confirm('Encontrei '+par.length+' orgao(s) parecido(s):\n\n'+par.slice(0,5).map(function(x){ return '- '+x.uf+' '+x.orgao+(x.municipio?(' ('+x.municipio+')'):''); }).join('\n')+'\n\nCadastrar mesmo assim como um NOVO orgao?')) return; } var o=novo?{id:'org_'+norm(uf+'_'+nome).toLowerCase().replace(/\s+/g,'_').slice(0,48)+'_'+Date.now().toString(36)}:(orgaoPorId(_orgEdit)||{});
     o.uf=uf; o.municipio=g('ogMun'); o.orgao=nome; o.endereco=g('ogEnd'); o.cep=g('ogCep'); o.linkOnline=g('ogLink'); o.obsOnline=g('ogObs');
     o.online=c('ogOnline'); o.correio=c('ogCorreio'); o.incompleto=c('ogInc'); o.status=c('ogAtivo')?'ativo':'inativo';
     o.atualizadoEm=Date.now(); o.atualizadoPor=loginU(curU());
