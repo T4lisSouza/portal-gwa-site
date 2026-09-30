@@ -12066,7 +12066,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function viewOrgaos(){ if(!temAcesso()) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito.</div>';
     var q=norm(_orgBusca);
     var lista=(_orgaos||[]).filter(function(o){ if(_orgUf&&o.uf!==_orgUf) return false;
-      if(q){ if(norm(o.orgao).indexOf(q)<0 && norm(o.municipio).indexOf(q)<0 && norm(o.endereco).indexOf(q)<0 && norm(o.cep).indexOf(q)<0) return false; } return true; })
+      if(q){ if(norm(o.orgao).indexOf(q)<0 && norm(o.municipio).indexOf(q)<0 && norm(enderecoCompleto(o)).indexOf(q)<0 && norm(o.cep).indexOf(q)<0) return false; } return true; })
       .sort(function(a,b){ return (a.uf+a.orgao).localeCompare(b.uf+b.orgao); });
     var incomp=(_orgaos||[]).filter(function(o){return o.incompleto;}).length;
     var ufsComb=UFS.map(function(u){ return '<option value="'+u+'"'+(_orgUf===u?' selected':'')+'>'+u+'</option>'; }).join('');
@@ -12079,9 +12079,9 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       var tags=(o.incompleto?'<span style="background:rgba(229,83,60,.18);color:#f6b3a6;border-radius:12px;padding:2px 8px;font-size:10px;margin-right:4px">INCOMPLETO</span>':'')+
         (o.online?'<span style="background:rgba(74,159,213,.18);color:'+Co.blue+';border-radius:12px;padding:2px 8px;font-size:10px;margin-right:4px">ONLINE</span>':'')+
         (o.correio?'<span style="background:rgba(63,174,90,.18);color:'+Co.green+';border-radius:12px;padding:2px 8px;font-size:10px">CORREIO</span>':'');
-      return '<tr style="border-bottom:1px solid '+Co.line+';opacity:'+(inat?'.45':'1')+'"><td style="padding:9px 10px;color:'+Co.orangeL+';font-weight:700">'+esc(o.uf)+'</td><td style="padding:9px 10px;color:#fff">'+esc(o.orgao)+'<div style="margin-top:3px">'+tags+'</div></td><td style="padding:9px 10px">'+esc(o.municipio||'-')+'</td><td style="padding:9px 10px;font-size:12px">'+esc(o.endereco||'-')+'</td><td style="padding:9px 10px">'+esc(o.cep||'-')+'</td><td style="padding:9px 10px;white-space:nowrap"><button onclick="__gwaOrgEditar(&#39;'+o.id+'&#39;)" title="Editar" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:4px"><i class="fas fa-pen"></i></button>'+((ehAdminDoc()||ehSupervisor())?('<button onclick="__gwaOrgToggle(&#39;'+o.id+'&#39;)" title="'+(inat?'Ativar':'Desativar')+'" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+(inat?Co.green:Co.mut)+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-power-off"></i></button>'):'')+'</td></tr>'; }).join('')||'<tr><td colspan="6" style="padding:22px;text-align:center;color:'+Co.mut+'">Nenhum orgao encontrado.</td></tr>';
+      return '<tr style="border-bottom:1px solid '+Co.line+';opacity:'+(inat?'.45':'1')+'"><td style="padding:9px 10px;color:'+Co.orangeL+';font-weight:700">'+esc(o.uf)+'</td><td style="padding:9px 10px;color:#fff">'+esc(o.orgao)+'<div style="margin-top:3px">'+tags+'</div></td><td style="padding:9px 10px">'+esc(o.municipio||'-')+'</td><td style="padding:9px 10px;font-size:12px">'+esc(enderecoCompleto(o)||'-')+'</td><td style="padding:9px 10px">'+esc(o.cep||'-')+'</td><td style="padding:9px 10px;white-space:nowrap"><button onclick="__gwaOrgEditar(&#39;'+o.id+'&#39;)" title="Editar" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:4px"><i class="fas fa-pen"></i></button>'+((ehAdminDoc()||ehSupervisor())?('<button onclick="__gwaOrgToggle(&#39;'+o.id+'&#39;)" title="'+(inat?'Ativar':'Desativar')+'" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+(inat?Co.green:Co.mut)+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-power-off"></i></button>'):'')+'</td></tr>'; }).join('')||'<tr><td colspan="6" style="padding:22px;text-align:center;color:'+Co.mut+'">Nenhum orgao encontrado.</td></tr>';
     return topo+vazia+alerta+form+'<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">UF</th><th style="padding:10px">Orgao</th><th style="padding:10px">Municipio</th><th style="padding:10px">Endereco</th><th style="padding:10px">CEP</th><th style="padding:10px">Acoes</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'; }
-  function formOrgao(){ var o=(_orgEdit==='novo')?{uf:'',municipio:'',orgao:'',endereco:'',cep:'',online:false,linkOnline:'',correio:true,status:'ativo',incompleto:false}:(orgaoPorId(_orgEdit)||{});
+  function formOrgao(){ var o=(_orgEdit==='novo')?{uf:'',municipio:'',orgao:'',endereco:'',numero:'',complemento:'',cep:'',online:false,linkOnline:'',correio:true,status:'ativo',incompleto:false}:(orgaoPorId(_orgEdit)||{});
     var ufOpts=UFS.map(function(u){ return '<option value="'+u+'"'+(o.uf===u?' selected':'')+'>'+u+'</option>'; }).join('');
     return '<div style="background:'+Co.card+';border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px;margin-bottom:16px"><h3 style="margin:0 0 12px;color:#fff;font-size:15px"><i class="fas fa-building-columns" style="color:'+Co.orange+'"></i> '+(_orgEdit==='novo'?'Cadastrar orgao':'Editar orgao')+'</h3>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">'+
@@ -12091,7 +12091,9 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="display:flex;gap:7px"><input id="ogNome" list="ogNomeList" value="'+esc(o.orgao||'')+'" oninput="__gwaOrgSemelhantes()" placeholder="Ex.: PREFEITURA - Guarulhos" style="'+inpStyle()+'">'+
       '<button onclick="__gwaOrgSemelhantes()" title="Procurar orgaos parecidos" style="flex:0 0 auto;background:'+Co.card2+';border:1px solid '+Co.orangeD+';color:'+Co.orangeL+';border-radius:10px;padding:0 15px;cursor:pointer"><i class="fas fa-magnifying-glass"></i></button></div>'+
       datalistHtml('ogNomeList',listaOrgaos())+'<div id="ogSemelhantes"></div></div>'+
-      '<div style="grid-column:1/-1"><label style="font-size:12px;color:'+Co.sub+'">Endereco</label><input id="ogEnd" value="'+esc(o.endereco||'')+'" placeholder="rua, numero, bairro" style="'+inpStyle()+'"></div>'+
+      '<div style="grid-column:1/-1"><label style="font-size:12px;color:'+Co.sub+'">Endereco (rua / avenida)</label><input id="ogEnd" value="'+esc(o.endereco||'')+'" placeholder="Ex.: Av. Paulista - Bela Vista" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Numero</label><input id="ogNum" value="'+esc(o.numero||'')+'" placeholder="Ex.: 1578 ou S/N" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Complemento</label><input id="ogCompl" value="'+esc(o.complemento||'')+'" placeholder="Ex.: sala 12, bloco B, 3o andar" style="'+inpStyle()+'"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">CEP <span style="color:'+Co.mut+'">— busca o endereco sozinho</span></label>'+
       '<div style="display:flex;gap:7px"><input id="ogCep" value="'+esc(o.cep||'')+'" placeholder="00000-000" onblur="__gwaOrgCep()" onkeydown="if(event.key===&#39;Enter&#39;){event.preventDefault();__gwaOrgCep();}" style="'+inpStyle()+'">'+
       '<button onclick="__gwaOrgCep()" title="Buscar endereco pelo CEP" style="flex:0 0 auto;background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:0 15px;cursor:pointer;font-weight:700"><i class="fas fa-magnifying-glass-location"></i></button></div>'+
@@ -12105,6 +12107,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<label style="display:flex;gap:6px;align-items:center;color:'+Co.sub+';font-size:13px;cursor:pointer"><input type="checkbox" id="ogAtivo"'+(o.status!=='inativo'?' checked':'')+'> Ativo</label></div>'+
       (o.atualizadoEm?('<div style="font-size:11px;color:'+Co.mut+';margin-top:8px">Ultima atualizacao: '+new Date(o.atualizadoEm).toLocaleString('pt-BR')+' por '+esc(o.atualizadoPor||'-')+'</div>'):'')+
       '<div style="margin-top:14px;display:flex;gap:10px"><button onclick="__gwaOrgSalvar()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:11px 20px;font-weight:700;cursor:pointer"><i class="fas fa-check"></i> Salvar</button><button onclick="__gwaOrgCancelar()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:10px;padding:11px 16px;cursor:pointer">Cancelar</button></div></div>'; }
+
+  /* endereco montado: rua, numero - complemento */
+  function enderecoCompleto(o){ if(!o) return '';
+    var r=String(o.endereco||'').trim(), n=String(o.numero||'').trim(), c=String(o.complemento||'').trim();
+    var t=r; if(n) t+=(t?', ':'')+'n '+n; if(c) t+=(t?' - ':'')+c; return t; }
 
   /* ---- CEP: preenche endereco, municipio e UF automaticamente ---- */
   window.__gwaOrgCep=async function(){
@@ -12125,7 +12132,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       if(im && d.localidade) im.value=d.localidade;
       if(iu && d.uf) iu.value=d.uf;
       e.value=cep.slice(0,5)+'-'+cep.slice(5);
-      aviso('<i class="fas fa-circle-check"></i> '+esc([d.localidade,d.uf].filter(Boolean).join('/'))+' preenchido. Confira e complete o numero.',Co.green);
+      aviso('<i class="fas fa-circle-check"></i> '+esc([d.localidade,d.uf].filter(Boolean).join('/'))+' preenchido. Agora informe o <b>numero</b>.',Co.green);
+      var inum=document.getElementById('ogNum'); if(inum && !String(inum.value||'').trim()) setTimeout(function(){ inum.focus(); },80);
       __gwaOrgSemelhantes();
     }catch(err){ aviso('Nao consegui consultar o CEP agora — preencha o endereco na mao.',Co.orangeL); }
   };
@@ -12176,7 +12184,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       if(igual){ alert('Ja existe este orgao cadastrado:\n\n'+igual.uf+' - '+igual.orgao+(igual.municipio?(' ('+igual.municipio+')'):'')+'\n\nAbra o cadastro existente para completar os dados.'); __gwaOrgEditar(igual.id); return; }
       var par=orgaosParecidos(nome,uf,mun);
       if(par.length && !confirm('Encontrei '+par.length+' orgao(s) parecido(s):\n\n'+par.slice(0,5).map(function(x){ return '- '+x.uf+' '+x.orgao+(x.municipio?(' ('+x.municipio+')'):''); }).join('\n')+'\n\nCadastrar mesmo assim como um NOVO orgao?')) return; } var o=novo?{id:'org_'+norm(uf+'_'+nome).toLowerCase().replace(/\s+/g,'_').slice(0,48)+'_'+Date.now().toString(36)}:(orgaoPorId(_orgEdit)||{});
-    o.uf=uf; o.municipio=g('ogMun'); o.orgao=nome; o.endereco=g('ogEnd'); o.cep=g('ogCep'); o.linkOnline=g('ogLink'); o.obsOnline=g('ogObs');
+    o.uf=uf; o.municipio=g('ogMun'); o.orgao=nome; o.endereco=g('ogEnd'); o.numero=g('ogNum'); o.complemento=g('ogCompl'); o.cep=g('ogCep'); o.linkOnline=g('ogLink'); o.obsOnline=g('ogObs');
     o.online=c('ogOnline'); o.correio=c('ogCorreio'); o.incompleto=c('ogInc'); o.status=c('ogAtivo')?'ativo':'inativo';
     o.atualizadoEm=Date.now(); o.atualizadoPor=loginU(curU());
     try{ var r=await fetch(base()+'/api/doc_orgaos/'+encodeURIComponent(o.id),{method:'PUT',headers:H(),body:JSON.stringify(o)});
@@ -12225,7 +12233,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       envSel.innerHTML='<option value="">-</option><option value="CORREIOS">CORREIOS</option><option value="ONLINE">ONLINE</option>';
       if(atual) envSel.value=atual; else if(o.correio&&!o.online) envSel.value='CORREIOS'; else if(o.online&&!o.correio) envSel.value='ONLINE'; }
     if(box) box.innerHTML=(o.incompleto?('<div style="background:rgba(229,83,60,.14);border:1px solid '+Co.red+';border-radius:10px;padding:10px 12px;color:#f6b3a6;font-size:12px"><i class="fas fa-triangle-exclamation"></i> <b>Cadastro incompleto.</b> Este orgao ainda nao tem endereco confirmado — peca ao supervisor para revisar antes de enviar.</div>'):
-      ('<div style="background:'+Co.bgA+';border:1px solid '+Co.line+';border-radius:10px;padding:10px 12px;font-size:12px;color:'+Co.sub+'"><div><b style="color:#fff">'+esc(o.orgao)+'</b> &middot; '+esc(o.uf)+(o.municipio?(' &middot; '+esc(o.municipio)):'')+'</div><div style="margin-top:4px"><i class="fas fa-location-dot" style="color:'+Co.orange+'"></i> '+esc(o.endereco||'(sem endereco)')+'</div><div style="margin-top:3px"><i class="fas fa-envelope" style="color:'+Co.orange+'"></i> CEP: <b>'+esc(o.cep||'-')+'</b> &middot; Envio: <b>'+esc(env.join(' / ')||'-')+'</b></div>'+(o.linkOnline?('<div style="margin-top:3px"><i class="fas fa-link" style="color:'+Co.orange+'"></i> <a href="'+esc(o.linkOnline)+'" target="_blank" style="color:'+Co.orangeL+'">Abrir defesa online</a></div>'):'')+(o.obsOnline?('<div style="margin-top:3px;color:'+Co.blue+'">'+esc(o.obsOnline)+'</div>'):'')+'</div>')); };
+      ('<div style="background:'+Co.bgA+';border:1px solid '+Co.line+';border-radius:10px;padding:10px 12px;font-size:12px;color:'+Co.sub+'"><div><b style="color:#fff">'+esc(o.orgao)+'</b> &middot; '+esc(o.uf)+(o.municipio?(' &middot; '+esc(o.municipio)):'')+'</div><div style="margin-top:4px"><i class="fas fa-location-dot" style="color:'+Co.orange+'"></i> '+esc(enderecoCompleto(o)||'(sem endereco)')+'</div><div style="margin-top:3px"><i class="fas fa-envelope" style="color:'+Co.orange+'"></i> CEP: <b>'+esc(o.cep||'-')+'</b> &middot; Envio: <b>'+esc(env.join(' / ')||'-')+'</b></div>'+(o.linkOnline?('<div style="margin-top:3px"><i class="fas fa-link" style="color:'+Co.orange+'"></i> <a href="'+esc(o.linkOnline)+'" target="_blank" style="color:'+Co.orangeL+'">Abrir defesa online</a></div>'):'')+(o.obsOnline?('<div style="margin-top:3px;color:'+Co.blue+'">'+esc(o.obsOnline)+'</div>'):'')+'</div>')); };
   function viewLancarDefesa(){ var ed=_editId?(regs('defesa').filter(function(x){return x.id===_editId;})[0]||null):null;
     if(!ed&&_preCliente){ ed={nome:_preCliente.nome,cpf:_preCliente.cpf,_pre:1}; }
     if(!_defBlocos){ _defBlocos=(ed&&ed.defesas&&ed.defesas.length)?JSON.parse(JSON.stringify(ed.defesas)):(ed&&ed.tipoDefesa?[{tipo:ed.tipoDefesa,protocolos:[ed.protocolo||'']}]:defPadrao()); }
@@ -12260,7 +12268,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var obj=ed?ed:{ id:'defesa_'+loginU(curU())+'_'+Date.now().toString(36), ts:Date.now(), origem:'manual' };
     obj.nome=nome; obj.cpf=g('dcf_cpf'); obj.data=g('dcf_data'); obj.objeto=g('dcf_objeto');
     obj.uf=g('defUf'); obj.municipio=g('defMun'); obj.tipoEnvio=g('defEnvio');
-    if(o){ obj.orgaoId=o.id; obj.orgao=o.orgao; obj.orgaoEndereco=o.endereco||''; obj.orgaoCep=o.cep||''; obj.orgaoLinkOnline=o.linkOnline||''; }
+    if(o){ obj.orgaoId=o.id; obj.orgao=o.orgao; obj.orgaoEndereco=enderecoCompleto(o)||o.endereco||''; obj.orgaoCep=o.cep||''; obj.orgaoLinkOnline=o.linkOnline||''; }
     obj.defesas=defs; obj.tipoDefesa=defs.map(function(d){return d.tipo;}).filter(Boolean).join(' + ');
     obj.protocolosTxt=defs.map(function(d){ return (d.protocolos||[]).join(', '); }).filter(Boolean).join(' | ');
     if(ehAdminDoc()||ehSupervisor()){ var cn=g('dcf_consultor'); if(cn){ obj.consultorNome=cn; obj.consultor=norm(cn); } else if(!obj.consultor){ obj.consultorNome=(curU()||{}).nome||loginU(curU()); obj.consultor=norm(obj.consultorNome); } }
