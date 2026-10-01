@@ -10970,7 +10970,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   var ORDEM=['defesa','doc','elogio'];
 
   var _cfg={id:'atual',camposExtra:{},acessos:{},googleClientId:'',sheetId:'',sheetName:'Documentacao GWA'};
-  var _cfgOk=false, _regs={}, _tipo='defesa', _view=null, _editId=null, _busca='', _fCons='', _fEnvio='', _fObj='', _fPer='mes', _fStatus='';
+  var _cfgOk=false, _regs={}, _tipo='defesa', _view=null, _editId=null, _busca='', _fCons='', _fEnvio='', _fObj='', _fPer='mes', _fStatus='', _agrupar=true;
   var _dTipo='', _dCons='', _dSup='', _dCat='', _dStatus='', _dEnvio='', _dPer='mes', _dIni='', _dFim='', _dashOk=false;
   function T(){ return TIPOS[_tipo]||TIPOS.defesa; }
   function col(){ return T().col; }
@@ -11283,7 +11283,32 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(q){ var alvo=norm(v.nome)+' '+norm(v.cpf||'')+' '+norm(v.protocolosTxt||v.protocolo||'')+' '+norm(v.tipoDefesa||'')+' '+norm(v.orgao||'');
       if(alvo.indexOf(q)<0) return false; }
     return true; }).sort(function(a,b){ return recencia(b)-recencia(a); }); }
+  /* ---- um registro por cliente ----
+     O cliente so vira uma linha nova quando o ORGAO muda (regra da defesa).
+     Documentacao e elogio agrupam so pelo cliente. */
+  function chaveAgrupa(t,r){
+    var c=chaveCliente(r); if(!c) c='reg:'+(r.id||'');
+    if(t==='defesa'){ var o=norm(r.orgao||r.municipio||''); return c+'|'+o; }
+    return c; }
+
+  function agrupaLista(t,arr){
+    var m={}, ordem=[];
+    arr.forEach(function(r){ var k=chaveAgrupa(t,r);
+      if(!m[k]){ m[k]={chave:k, principal:r, itens:[r]}; ordem.push(k); }
+      else { m[k].itens.push(r); if(recencia(r)>recencia(m[k].principal)) m[k].principal=r; } });
+    return ordem.map(function(k){ return m[k]; }); }
+
+  /* total do cliente nas 3 areas, para a etiqueta da linha */
+  function totaisDoCliente(ch){
+    var t={defesa:0,doc:0,elogio:0};
+    if(!ch) return t;
+    ORDEM.forEach(function(k){ regs(k).forEach(function(r){ if(chaveCliente(r)===ch) t[k]++; }); });
+    return t; }
+
+  window.__gwaDocAgrupar=function(v){ _agrupar=!!v; render(); };
+
   function viewLista(){ var vis=visiveis(); var arr=aplicaFiltros(vis);
+    var grupos=agrupaLista(_tipo,arr);
     var consList=[]; vis.forEach(function(v){ var n=consultorDe(v); if(n && consList.indexOf(n)<0) consList.push(n); }); consList.sort();
     var podeFiltrarCons=(ehAdminDoc()||ehSupervisor());
     var perSel='<select onchange="__gwaDocFiltro(&#39;per&#39;,this.value)" style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.orangeD+';background:'+Co.card2+';color:#fff;font-weight:700">'+
@@ -11295,15 +11320,37 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       (_tipo==='defesa'?('<select onchange="__gwaDocFiltro(&#39;env&#39;,this.value)" style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"><option value="">Todos os envios</option><option value="CORREIOS"'+(_fEnvio==='CORREIOS'?' selected':'')+'>Correios</option><option value="ONLINE"'+(_fEnvio==='ONLINE'?' selected':'')+'>Online</option></select>'+
        '<select onchange="__gwaDocFiltro(&#39;obj&#39;,this.value)" style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"><option value="">Rastreio: todos</option><option value="novos"'+(_fObj==='novos'?' selected':'')+'>Objetos novos (7 dias)</option><option value="com"'+(_fObj==='com'?' selected':'')+'>Com rastreio</option><option value="sem"'+(_fObj==='sem'?' selected':'')+'>Sem rastreio</option></select>'):'')+
       (podeFiltrarCons?('<select onchange="__gwaDocFiltro(&#39;cons&#39;,this.value)" style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff"><option value="">Todos os consultores</option>'+consList.map(function(n){return '<option value="'+esc(n)+'"'+(norm(_fCons)===norm(n)?' selected':'')+'>'+esc(n)+'</option>';}).join('')+'</select>'):'')+
-      '<span style="margin-left:auto;font-size:12px;color:'+Co.mut+'"><b style="color:#fff">'+arr.length+'</b> registro(s)</span></div>';
+      '<label style="display:inline-flex;align-items:center;gap:7px;background:'+Co.card2+';border:1px solid '+(_agrupar?Co.orangeD:Co.line)+';border-radius:10px;padding:8px 13px;font-size:12px;color:'+Co.sub+';cursor:pointer" title="Mostra uma linha por cliente. Na defesa, o mesmo cliente em outro orgao vira outra linha."><input type="checkbox" onchange="__gwaDocAgrupar(this.checked)"'+(_agrupar?' checked':'')+' style="width:15px;height:15px;accent-color:'+Co.orange+';cursor:pointer"> 1 linha por cliente</label>'+
+      '<span style="margin-left:auto;font-size:12px;color:'+Co.mut+'">'+(_agrupar
+        ?('<b style="color:#fff">'+grupos.length+'</b> cliente(s) &middot; '+arr.length+' registro(s)')
+        :('<b style="color:#fff">'+arr.length+'</b> registro(s)'))+'</span></div>';
     var cols=campos().concat(podeFiltrarCons?[{key:'consultorNome',label:'Consultor'}]:[]);
     var head='<th style="padding:10px;font-size:11px;text-transform:uppercase;letter-spacing:.4px">Situacao</th>'+cols.map(function(c){return '<th style="padding:10px;font-size:11px;text-transform:uppercase;letter-spacing:.4px">'+esc(c.label)+'</th>';}).join('')+'<th></th>';
-    var rows=arr.map(function(v){ var tds=cols.map(function(c){ var raw=v[c.key]; var val; if(c.key==='objeto'&&raw){ val='<a href="https://rastreamento.correios.com.br/app/index.php?objetos='+encodeURIComponent(String(raw).trim())+'" target="_blank" rel="noopener" title="Rastrear nos Correios" style="color:'+Co.orangeL+';text-decoration:none;font-weight:600"><i class="fas fa-truck-fast"></i> '+esc(raw)+'</a>'; } else if(c.key==='link'&&raw){ val='<a href="'+esc(raw)+'" target="_blank" rel="noopener" style="color:'+Co.orangeL+'">'+esc(raw)+'</a>'; } else val=esc(raw);
+    var fonte=_agrupar?grupos:arr.map(function(r){ return {chave:chaveCliente(r)||('reg:'+r.id), principal:r, itens:[r]}; });
+    var rows=fonte.map(function(G){ var v=G.principal; var qtd=G.itens.length; var tds=cols.map(function(c){ var raw=v[c.key]; var val; if(c.key==='objeto'&&raw){ val='<a href="https://rastreamento.correios.com.br/app/index.php?objetos='+encodeURIComponent(String(raw).trim())+'" target="_blank" rel="noopener" title="Rastrear nos Correios" style="color:'+Co.orangeL+';text-decoration:none;font-weight:600"><i class="fas fa-truck-fast"></i> '+esc(raw)+'</a>'; } else if(c.key==='link'&&raw){ val='<a href="'+esc(raw)+'" target="_blank" rel="noopener" style="color:'+Co.orangeL+'">'+esc(raw)+'</a>'; } else val=esc(raw);
         return '<td style="padding:10px;color:'+(c.key==='nome'?'#fff':Co.sub)+'">'+(val||'<span style="color:'+Co.mut+'">-</span>')+'</td>'; }).join('');
       var acoes='<button onclick="__gwaCliPerfil(&#39;'+_tipo+'&#39;,&#39;'+v.id+'&#39;)" title="Abrir perfil do cliente" style="background:'+Co.card2+';border:1px solid '+Co.orangeD+';color:'+Co.orangeL+';border-radius:8px;padding:6px 10px;cursor:pointer;margin-right:4px;font-size:12px"><i class="fas fa-address-card"></i> Perfil</button>';
       acoes+=podeEditar(v)?('<button onclick="__gwaDocEditar(&#39;'+v.id+'&#39;)" title="Editar" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:4px"><i class="fas fa-pen"></i></button><button onclick="__gwaDocExcluir(&#39;'+v.id+'&#39;)" title="Excluir" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-trash"></i></button>'):'';
+      if(_agrupar){
+        var chCli=chaveCliente(v);
+        var tt=chCli?totaisDoCliente(chCli):{defesa:0,doc:0,elogio:0};
+        var selos=[];
+        if(qtd>1) selos.push('<span style="background:'+Co.gradO+';color:#fff;border-radius:20px;padding:2px 9px;font-size:10px;font-weight:800">'+qtd+'x '+esc(TIPOS[_tipo].label.toLowerCase())+'</span>');
+        if(_tipo!=='defesa'&&tt.defesa) selos.push('<span style="background:rgba(63,174,90,.18);color:'+Co.green+';border-radius:20px;padding:2px 8px;font-size:10px">'+tt.defesa+' def</span>');
+        if(_tipo!=='doc'&&tt.doc) selos.push('<span style="background:rgba(74,159,213,.18);color:'+Co.blue+';border-radius:20px;padding:2px 8px;font-size:10px">'+tt.doc+' doc</span>');
+        if(_tipo!=='elogio'&&tt.elogio) selos.push('<span style="background:rgba(240,148,58,.18);color:'+Co.orangeL+';border-radius:20px;padding:2px 8px;font-size:10px">'+tt.elogio+' elo</span>');
+        if(selos.length) tds=tds.replace('</td>', '<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">'+selos.join('')+'</div></td>');
+      }
       var sit=situacao(_tipo,v);
-      var chip='<td style="padding:10px;white-space:nowrap"><span style="display:inline-block;background:'+(sit.pend?'rgba(224,120,32,.14)':'rgba(255,255,255,.05)')+';border:1px solid '+sit.cor+';color:'+sit.cor+';border-radius:20px;padding:4px 11px;font-size:11px;font-weight:700">'+(sit.pend?'<i class="fas fa-hourglass-half"></i> ':'<i class="fas fa-circle-check"></i> ')+esc(sit.txt)+'</span></td>';
+      var nPend=0;
+      if(_agrupar && qtd>1){
+        var pends=G.itens.filter(function(x){ return situacao(_tipo,x).pend; });
+        nPend=pends.length;
+        if(nPend) sit=situacao(_tipo,pends[0]);           /* mostra o que falta */
+        else sit=situacao(_tipo,v);
+      }
+      var extraPend=(nPend>1)?(' <b>('+nPend+')</b>'):'';
+      var chip='<td style="padding:10px;white-space:nowrap"><span style="display:inline-block;background:'+(sit.pend?'rgba(224,120,32,.14)':'rgba(255,255,255,.05)')+';border:1px solid '+sit.cor+';color:'+sit.cor+';border-radius:20px;padding:4px 11px;font-size:11px;font-weight:700">'+(sit.pend?'<i class="fas fa-hourglass-half"></i> ':'<i class="fas fa-circle-check"></i> ')+esc(sit.txt)+extraPend+'</span></td>';
       return '<tr style="border-bottom:1px solid '+Co.line+'">'+chip+tds+'<td style="padding:10px;white-space:nowrap">'+acoes+'</td></tr>'; }).join('')||'<tr><td colspan="'+(cols.length+2)+'" style="padding:26px;text-align:center;color:'+Co.mut+'"><i class="fas fa-inbox" style="font-size:22px;display:block;margin-bottom:8px;opacity:.5"></i>Nenhum registro.</td></tr>';
     return filtros+'<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'">'+head+'</tr></thead><tbody>'+rows+'</tbody></table></div></div>'; }
   window.__gwaDocBusca=function(v){ _busca=v; var body=document.getElementById('gwaDocBody'); if(!body) return; var a=document.activeElement; var pos=a&&a.selectionStart; body.innerHTML=viewLista(); var ni=document.querySelector('#gwaDocBody input'); if(ni){ ni.focus(); try{ ni.selectionStart=ni.selectionEnd=pos; }catch(e){} } };
