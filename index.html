@@ -10215,10 +10215,41 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return sec('Análise para bater a meta do mês','fa-lightbulb','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-left:6px solid '+(noRitmo?Co.green:Co.burnt)+';border-radius:16px;padding:18px;box-shadow:0 3px 14px rgba(0,0,0,.28)"><ul style="margin:0;padding-left:18px;color:'+Co.sub+';font-size:13px;line-height:1.8">'+pontos.map(function(p){return '<li>'+p+'</li>';}).join('')+'</ul></div>'); }catch(e){ return ''; } }
 
   function viewMinhas(){ var L=loginU(curU()); var arr=aplicaBusca(aplicaFiltro((_vendas||[]).filter(function(v){return loginU({login:v.consultor})===L;}))); var liq=arr.reduce(function(s,v){return s+(Number(v.liquido)||0);},0); var tm=arr.length?liq/arr.length:0;
-    return filtroBar()+meuQuartilCard()+premiacaoCard()+buscaBar()+'<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px">'+stat('Meu faturamento líquido',money(liq),null,Co.green)+stat('Contratos',arr.length)+stat('Ticket médio',money(tm))+'</div>'+tabelaVendas(arr,true); }
+    var baixarBar='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:14px;padding:12px 15px;margin-bottom:14px">'+
+      '<div style="font-size:12px;color:'+Co.mut+'"><b style="color:#fff">'+arr.length+'</b> venda(s) no periodo selecionado &middot; liquido <b style="color:'+Co.green+'">'+money(liq)+'</b></div>'+
+      '<button onclick="__gwaVendasExportMinhas()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:11px;padding:10px 17px;font-weight:700;cursor:pointer"><i class="fas fa-file-excel"></i> Baixar minhas vendas</button></div>';
+    return filtroBar()+baixarBar+meuQuartilCard()+premiacaoCard()+buscaBar()+'<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px">'+stat('Meu faturamento líquido',money(liq),null,Co.green)+stat('Contratos',arr.length)+stat('Ticket médio',money(tm))+'</div>'+tabelaVendas(arr,true); }
   function viewVendas(dept){ var arr=dept?vendasDept(dept):(_vendas||[]); arr=aplicaBusca(aplicaFiltro(arr)); var somaLiq=arr.reduce(function(a,v){return a+(Number(v.liquido)||0);},0); var somaBru=arr.reduce(function(a,v){return a+(Number(v.valorPago)||0);},0);
     var expBar='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px"><div style="font-size:12px;color:'+Co.mut+'"><b style="color:#fff">'+arr.length+'</b> venda(s) · '+periodoLabel()+' · Bruto <b style="color:'+Co.sub+'">'+money(somaBru)+'</b> · Líquido <b style="color:'+Co.green+'">'+money(somaLiq)+'</b></div><button onclick="__gwaVendasExportExcel()"'+(arr.length?'':' disabled')+' style="background:'+(arr.length?Co.gradO:Co.card2)+';color:#fff;border:none;border-radius:10px;padding:9px 16px;font-weight:700;cursor:'+(arr.length?'pointer':'not-allowed')+';opacity:'+(arr.length?'1':'.5')+'"><i class="fas fa-file-excel"></i> Exportar Excel</button></div>';
     return filtroBar()+buscaBar()+expBar+tabelaVendas(arr,isAdmin()); }
+  /* o consultor baixa as proprias vendas do periodo escolhido */
+  window.__gwaVendasExportMinhas=function(){ try{
+    var L=loginU(curU());
+    var arr=aplicaBusca(aplicaFiltro((_vendas||[]).filter(function(v){ return loginU({login:v.consultor})===L; })));
+    arr=arr.slice().sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+    if(!arr.length){ alert('Voce nao tem vendas no periodo selecionado.'); return; }
+    csvVendas(arr, 'minhas_vendas');
+  }catch(e){ alert('Erro ao exportar: '+(e&&e.message||e)); } };
+
+  function csvVendas(arr, prefixo){
+    function q(v){ v=String(v==null?'':v); if(/[";\n\r]/.test(v)){ v='"'+v.replace(/"/g,'""')+'"'; } return v; }
+    function n(v){ var x=Number(v); if(!isFinite(x)) x=0; return x.toFixed(2).replace('.',','); }
+    function i(v){ var x=parseInt(v,10); return isFinite(x)?String(x):''; }
+    var cols=['Data','Hora','Cliente','CPF','Departamento','Forma','Parcelas','Produto','Valor Pago','Taxa (%)','Liquido','Consultor'];
+    var linhas=[cols.map(q).join(';')];
+    arr.forEach(function(v){ linhas.push([q(v.dataVenda||''),q(v.horaReg||''),q(v.cliente||''),q(v.cpf||''),q(v.dept||'comercial'),q(v.forma||''),i(v.parcelas),q(v.produtoInicial||''),n(v.valorPago),n(v.taxaPct),n(v.liquido),q(v.consultorNome||v.consultor||'')].join(';')); });
+    var somaBru=arr.reduce(function(a,v){return a+(Number(v.valorPago)||0);},0);
+    var somaLiq=arr.reduce(function(a,v){return a+(Number(v.liquido)||0);},0);
+    linhas.push(['','','','','','','TOTAIS','',n(somaBru),'',n(somaLiq),''].join(';'));
+    var csv='\ufeff'+linhas.join('\r\n');
+    var blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+    var h=new Date(); var hs=h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0')+'-'+String(h.getDate()).padStart(2,'0');
+    var per=_filtro.periodo+((_filtro.periodo==='custom'&&(_filtro.ini||_filtro.fim))?('_'+(_filtro.ini||'')+'_a_'+(_filtro.fim||'')):'');
+    var nome=prefixo+'_'+per+'_'+hs+'.csv';
+    var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nome;
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },1500); }
+
   window.__gwaVendasExportExcel=function(){ try{
     var deptAtivo=(_dept==='consolidado')?null:_dept; var arr=deptAtivo?vendasDept(deptAtivo):(_vendas||[]); arr=aplicaBusca(aplicaFiltro(arr)); arr=arr.slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);});
     if(!arr.length){ alert('Nenhuma venda no período selecionado.'); return; }
@@ -12386,7 +12417,9 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(box) box.innerHTML=(o.incompleto?('<div style="background:rgba(229,83,60,.14);border:1px solid '+Co.red+';border-radius:10px;padding:10px 12px;color:#f6b3a6;font-size:12px"><i class="fas fa-triangle-exclamation"></i> <b>Cadastro incompleto.</b> Este orgao ainda nao tem endereco confirmado — peca ao supervisor para revisar antes de enviar.</div>'):
       ('<div style="background:'+Co.bgA+';border:1px solid '+Co.line+';border-radius:10px;padding:10px 12px;font-size:12px;color:'+Co.sub+'"><div><b style="color:#fff">'+esc(o.orgao)+'</b> &middot; '+esc(o.uf)+(o.municipio?(' &middot; '+esc(o.municipio)):'')+'</div><div style="margin-top:4px"><i class="fas fa-location-dot" style="color:'+Co.orange+'"></i> '+esc(enderecoCompleto(o)||'(sem endereco)')+'</div><div style="margin-top:3px"><i class="fas fa-envelope" style="color:'+Co.orange+'"></i> CEP: <b>'+esc(o.cep||'-')+'</b> &middot; Envio: <b>'+esc(env.join(' / ')||'-')+'</b></div>'+(o.linkOnline?('<div style="margin-top:3px"><i class="fas fa-link" style="color:'+Co.orange+'"></i> <a href="'+esc(o.linkOnline)+'" target="_blank" style="color:'+Co.orangeL+'">Abrir defesa online</a></div>'):'')+(o.obsOnline?('<div style="margin-top:3px;color:'+Co.blue+'">'+esc(o.obsOnline)+'</div>'):'')+'</div>')); };
   function viewLancarDefesa(){ var ed=_editId?(regs('defesa').filter(function(x){return x.id===_editId;})[0]||null):null;
-    if(!ed&&_preCliente){ ed={nome:_preCliente.nome,cpf:_preCliente.cpf,_pre:1}; }
+    if(!ed&&_preCliente){ var _dc=dadosCli(_cliAberto)||{}; var _bs=_cliBase||{};
+      ed={nome:_preCliente.nome||_dc.nome||_bs.nome||'', cpf:_preCliente.cpf||_dc.cpf||_bs.cpf||'',
+          _pre:1, _cad:_dc, _municipio:_dc.cidade||_bs.cidade||'', _uf:_dc.uf||_bs.uf||''}; }
     if(!_defBlocos){ _defBlocos=(ed&&ed.defesas&&ed.defesas.length)?JSON.parse(JSON.stringify(ed.defesas)):(ed&&ed.tipoDefesa?[{tipo:ed.tipoDefesa,protocolos:[ed.protocolo||'']}]:defPadrao()); }
     var ufOpts=UFS.map(function(u){ return '<option value="'+u+'"'+((ed&&ed.uf)===u?' selected':'')+'>'+u+'</option>'; }).join('');
     var orgOpts=''; if(ed&&ed.uf){ orgOpts=orgaosDaUf(ed.uf).map(function(o){ return '<option value="'+esc(o.id)+'"'+(ed.orgaoId===o.id?' selected':'')+'>'+esc(o.orgao)+(o.municipio?(' ('+esc(o.municipio)+')'):'')+'</option>'; }).join(''); }
@@ -12397,7 +12430,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Nome do cliente *</label><input id="dcf_nome" value="'+esc(ed?ed.nome:'')+'" style="'+inpStyle()+'"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">CPF</label><input id="dcf_cpf" value="'+esc(ed?ed.cpf:'')+'" style="'+inpStyle()+'"></div>'+
-      '<div><label style="font-size:12px;color:'+Co.sub+'">Data</label><input id="dcf_data" value="'+esc(ed?ed.data:'')+'" placeholder="dd/mm/aaaa" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Data</label><input id="dcf_data" value="'+esc((ed&&!ed._pre)?(ed.data||''):hojeBR())+'" placeholder="dd/mm/aaaa" style="'+inpStyle()+'"></div>'+
       consBox+'</div>'+
       '<div style="margin-top:16px;padding-top:14px;border-top:1px solid '+Co.line+'"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px"><i class="fas fa-building-columns" style="color:'+Co.orange+'"></i> Orgao de destino</div>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">'+
@@ -12705,8 +12738,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   /* ---------------- ELOGIO ---------------- */
   function viewLancarElogio(){ var ed=_editId?(regs('elogio').filter(function(x){return x.id===_editId;})[0]||null):null;
-    if(!ed&&_preCliente){ ed={nome:_preCliente.nome,cpf:_preCliente.cpf,_pre:1}; }
-    var dataV=ed?(ed.data||''):hojeBR(); var mesV=ed?(ed.mes||mesAtualNome()):mesAtualNome();
+    if(!ed&&_preCliente){ var _dc=dadosCli(_cliAberto)||{}; var _bs=_cliBase||{};
+      ed={nome:_preCliente.nome||_dc.nome||_bs.nome||'', cpf:_preCliente.cpf||_dc.cpf||_bs.cpf||'',
+          _pre:1, _cad:_dc, _municipio:_dc.cidade||_bs.cidade||'', _uf:_dc.uf||_bs.uf||''}; }
+    var dataV=(ed&&!ed._pre)?(ed.data||''):hojeBR(); var mesV=(ed&&!ed._pre)?(ed.mes||mesAtualNome()):mesAtualNome();
     var deV=''; if(ed&&ed.dataElogio){ var _d=parseData(ed.dataElogio); if(_d) deV=_d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0')+'-'+String(_d.getDate()).padStart(2,'0'); }
     var stV=ed?(ed.status||ELOGIO_STATUS):ELOGIO_STATUS;
     return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:20px;max-width:760px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span style="width:5px;height:20px;border-radius:3px;background:'+Co.gradO+'"></span><h3 style="margin:0;color:#fff;font-size:15px"><i class="fas fa-star" style="color:'+Co.orange+'"></i> '+(_editId?'Editar elogio':'Lançar elogio')+'</h3></div>'+
@@ -12753,16 +12788,18 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   window.__gwaSvcAdd=function(){ svcColeta(); (_svcBlocos=_svcBlocos||svcPadrao()).push(''); var el=document.getElementById('svcLista'); if(el) el.innerHTML=svcHtml(); };
   window.__gwaSvcDel=function(i){ svcColeta(); _svcBlocos.splice(i,1); if(!_svcBlocos.length)_svcBlocos=svcPadrao(); var el=document.getElementById('svcLista'); if(el) el.innerHTML=svcHtml(); };
   function viewLancarDoc(){ var ed=_editId?(regs('doc').filter(function(x){return x.id===_editId;})[0]||null):null;
-    if(!ed&&_preCliente){ ed={nome:_preCliente.nome,cpf:_preCliente.cpf,_pre:1}; }
+    if(!ed&&_preCliente){ var _dc=dadosCli(_cliAberto)||{}; var _bs=_cliBase||{};
+      ed={nome:_preCliente.nome||_dc.nome||_bs.nome||'', cpf:_preCliente.cpf||_dc.cpf||_bs.cpf||'',
+          _pre:1, _cad:_dc, _municipio:_dc.cidade||_bs.cidade||'', _uf:_dc.uf||_bs.uf||''}; }
     if(!_svcBlocos){ _svcBlocos=(ed&&ed.servicos&&ed.servicos.length)?ed.servicos.slice():(ed&&ed.servicoContratado?String(ed.servicoContratado).split('+').map(function(s){return s.trim();}).filter(Boolean):svcPadrao()); if(!_svcBlocos.length)_svcBlocos=svcPadrao(); }
     var pastaOpts=DOCS_PASTA.map(function(x){ return '<option value="'+esc(x)+'"'+((ed&&norm(ed.docsOkPasta)===norm(x))?' selected':'')+'>'+esc(x)+'</option>'; }).join('');
     return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:20px;max-width:880px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><span style="width:5px;height:20px;border-radius:3px;background:'+Co.gradO+'"></span><h3 style="margin:0;color:#fff;font-size:15px"><i class="fas fa-folder-open" style="color:'+Co.orange+'"></i> '+(_editId?'Editar documentação':'Lançar documentação')+'</h3></div>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Nome do cliente *</label><input id="dcf_nome" value="'+esc(ed?ed.nome:'')+'" style="'+inpStyle()+'"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">CPF</label><input id="dcf_cpf" value="'+esc(ed?ed.cpf:'')+'" style="'+inpStyle()+'"></div>'+
-      '<div><label style="font-size:12px;color:'+Co.sub+'">Município da CNH</label><div style="display:flex;gap:6px"><input id="dcf_municipioCnh" value="'+esc(ed?ed.municipioCnh:'')+'" placeholder="clique em buscar" style="'+inpStyle()+'"><button onclick="__gwaCidadeAbrir(&#39;dcf_municipioCnh&#39;)" title="Buscar município" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:0 14px;cursor:pointer"><i class="fas fa-magnifying-glass"></i></button></div></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Município da CNH</label><div style="display:flex;gap:6px"><input id="dcf_municipioCnh" value="'+esc(ed?(ed.municipioCnh||ed._municipio||''):'')+'" placeholder="clique em buscar" style="'+inpStyle()+'"><button onclick="__gwaCidadeAbrir(&#39;dcf_municipioCnh&#39;)" title="Buscar município" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:0 14px;cursor:pointer"><i class="fas fa-magnifying-glass"></i></button></div></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">DocsOK / Pasta</label><select id="dcf_docsOkPasta" style="'+inpStyle()+'"><option value="">- selecione -</option>'+pastaOpts+'</select></div>'+
-      '<div><label style="font-size:12px;color:'+Co.sub+'">Data do contrato</label><input id="dcf_dataContrato" type="date" value="'+esc(ed?ed.dataContrato:hojeISO())+'" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Data do contrato</label><input id="dcf_dataContrato" type="date" value="'+esc((ed&&!ed._pre)?ed.dataContrato:hojeISO())+'" style="'+inpStyle()+'"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Concluído em</label><input id="dcf_concluidoEm" type="date" value="'+esc(ed?ed.concluidoEm:'')+'" style="'+inpStyle()+'"></div>'+
       selConsultor(ed)+'</div>'+
       '<div style="margin-top:16px;padding-top:14px;border-top:1px solid '+Co.line+'"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px"><i class="fas fa-list-check" style="color:'+Co.orange+'"></i> Serviços contratados</div><div id="svcLista">'+svcHtml()+'</div></div>'+
@@ -12926,7 +12963,15 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return topo+cards; }
   window.__gwaCliBusca=function(v){ _cliBusca=v; var b=document.getElementById('gwaDocBody'); if(!b) return;
     b.innerHTML=viewBuscarCliente(); var ni=document.getElementById('cliBuscaInp'); if(ni){ ni.focus(); try{ ni.selectionStart=ni.selectionEnd=ni.value.length; }catch(e){} } };
-  window.__gwaCliAbrirChave=function(ch){ _cliAberto=ch; _cliForm=''; _fichaVolta=''; _fichaOrigem='buscar'; _view='ficha'; render(); };
+  window.__gwaCliAbrirChave=function(ch){
+    var idx=indiceClientes(); var c=idx[ch]||{}; var d=dadosCli(ch);
+    var nv=(_novos||[]).filter(function(x){ return chaveDoNovo(x)===ch; })[0]||{};
+    var nome=c.nome||d.nome||nomeNovo(nv)||'';
+    var cpf=c.cpf||d.cpf||nv.cpf||'';
+    _cliBase={nome:nome, cpf:cpf, telefone:d.telefone||d.whatsapp||nv.telefone||'',
+      cidade:d.cidade||'', uf:d.uf||''};
+    _preCliente={nome:nome, cpf:cpf};
+    _cliAberto=ch; _cliForm=''; _fichaVolta=''; _fichaOrigem='buscar'; _view='ficha'; render(); };
   window.__gwaCliVoltar=function(){ _cliAberto=''; _cliForm=''; _preCliente=null; _fichaVolta=''; _editId=null; _view=(_fichaOrigem==='buscar')?'buscar':((_fichaOrigem==='novos')?'novos':'lista'); _novoVinculo=''; _cliBase=null; render(); };
 
   /* --- criar registros direto do perfil --- */
@@ -13231,6 +13276,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   function viewFicha(){ var ch=_cliAberto; var idx=indiceClientes(); var c=idx[ch]; var d=dadosCli(ch);
     /* cliente que ainda nao tem nenhum registro (veio da fila de novos clientes) */
+    if(!c && !d.id){ var _nv=(_novos||[]).filter(function(x){ return chaveDoNovo(x)===ch; })[0];
+      if(_nv && !_cliBase) _cliBase={nome:nomeNovo(_nv),cpf:_nv.cpf||'',telefone:_nv.telefone||''}; }
     if(!c && !d.id && _cliBase && (_cliBase.nome||_cliBase.cpf))
       c={nome:_cliBase.nome||'',cpf:_cliBase.cpf||'',consultores:[],itens:[],n:{defesa:0,doc:0,elogio:0},rastreios:0,ultima:0,novo:true};
     if(!c && !d.id) return '<div style="padding:20px;color:'+Co.mut+'">Cliente nao encontrado. <button onclick="__gwaCliVoltar()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:8px;padding:6px 12px;cursor:pointer;margin-left:8px">Voltar</button></div>';
