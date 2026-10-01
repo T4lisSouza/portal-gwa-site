@@ -12728,6 +12728,13 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function mesAtualNome(){ return MESES_PT[new Date().getMonth()]; }
   function campoBloqueado(valor,dica){ return '<input value="'+esc(valor)+'" readonly title="'+esc(dica||'Preenchido automaticamente')+'" style="width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:'+Co.mut+';cursor:not-allowed">'; }
   function selConsultor(ed){ if(!(ehAdminDoc()||ehSupervisor())) return '';
+    /* cliente que veio da fila: sugere o responsavel do card */
+    if(ed && ed._pre && !ed.consultorNome && !ed.consultor){
+      var _nvS=cardDaFila(_cliAberto);
+      if(_nvS){ var _dn=opDoNovo(_nvS); var _nm=_dn?nomeDoLogin(_dn):(_nvS.responsavel||'');
+        if(_nm) ed=Object.assign({},ed,{consultorNome:_nm,consultor:norm(_nm)}); }
+      if(!ed.consultorNome){ var _dS=dadosCli(_cliAberto)||{};
+        if(_dS.responsavelPlanilha) ed=Object.assign({},ed,{consultorNome:_dS.responsavelPlanilha,consultor:norm(_dS.responsavelPlanilha)}); } }
     var permitidos=ehAdminDoc()?usuarios():equipeDe(loginU(curU())).map(function(l){ return usuarioPorLogin(l)||{login:l,nome:nomeDoLogin(l)}; });
     var us=permitidos.slice().sort(function(a,b){return String(a.nome||a.login).localeCompare(String(b.nome||b.login));});
     return '<div><label style="font-size:12px;color:'+Co.sub+'">Consultor</label><select id="dcf_consultor" style="'+inpStyle()+'"><option value="">- selecione -</option>'+us.map(function(u){ var nm=u.nome||u.login; return '<option value="'+esc(nm)+'"'+(ed&&mesmoConsultor(ed.consultorNome||ed.consultor,nm)?' selected':'')+'>'+esc(nm)+'</option>'; }).join('')+'</select></div>'; }
@@ -12965,7 +12972,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     b.innerHTML=viewBuscarCliente(); var ni=document.getElementById('cliBuscaInp'); if(ni){ ni.focus(); try{ ni.selectionStart=ni.selectionEnd=ni.value.length; }catch(e){} } };
   window.__gwaCliAbrirChave=function(ch){
     var idx=indiceClientes(); var c=idx[ch]||{}; var d=dadosCli(ch);
-    var nv=(_novos||[]).filter(function(x){ return chaveDoNovo(x)===ch; })[0]||{};
+    var nv=cardDaFila(ch)||{};
+    if(nv.id){ try{ prefillDeNovo(nv); d=dadosCli(ch)||{}; }catch(e){} }
     var nome=c.nome||d.nome||nomeNovo(nv)||'';
     var cpf=c.cpf||d.cpf||nv.cpf||'';
     _cliBase={nome:nome, cpf:cpf, telefone:d.telefone||d.whatsapp||nv.telefone||'',
@@ -13274,6 +13282,23 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function campoCli(id,label,val,ph){ return '<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:4px">'+esc(label)+'</label><input id="'+id+'" value="'+esc(val||'')+'" placeholder="'+esc(ph||'')+'" style="width:100%;box-sizing:border-box;padding:9px 11px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff;font-size:13px"></div>'; }
   function bloco(titulo,sub,inner,icone){ return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:14px"><div style="margin-bottom:12px"><div style="color:#fff;font-weight:700;font-size:14px"><i class="fas '+(icone||'fa-circle')+'" style="color:'+Co.orange+';margin-right:7px"></i>'+esc(titulo)+'</div>'+(sub?('<div style="font-size:11px;color:'+Co.mut+';margin-top:2px">'+esc(sub)+'</div>'):'')+'</div>'+inner+'</div>'; }
 
+  /* card da planilha rotativa deste cliente */
+  function cardDaFila(ch){ var l=(_novos||[]).filter(function(x){ return x && x.removido!==true && chaveDoNovo(x)===ch; });
+    l.sort(function(a,b){ return Number(b.ts||0)-Number(a.ts||0); }); return l[0]||null; }
+
+  /* responsavel: usa o do registro e, se nao houver, o da planilha rotativa */
+  function consultoresDaFicha(ch,c){
+    var lista=((c&&c.consultores)||[]).slice();
+    var d=dadosCli(ch)||{};
+    var nv=cardDaFila(ch);
+    var cand=[];
+    if(nv){ var dono=opDoNovo(nv); cand.push(dono?nomeDoLogin(dono):(nv.responsavel||'')); }
+    if(d.responsavelPlanilha) cand.push(d.responsavelPlanilha);
+    cand.forEach(function(nm){ if(!nm) return;
+      var ja=lista.some(function(x){ return mesmoConsultor(x,nm); });
+      if(!ja) lista.push(canonConsultor(nm)); });
+    return lista; }
+
   function viewFicha(){ var ch=_cliAberto; var idx=indiceClientes(); var c=idx[ch]; var d=dadosCli(ch);
     /* cliente que ainda nao tem nenhum registro (veio da fila de novos clientes) */
     if(!c && !d.id){ var _nv=(_novos||[]).filter(function(x){ return chaveDoNovo(x)===ch; })[0];
@@ -13287,7 +13312,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var topo='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px"><div><div style="font-size:22px;font-weight:800;color:#fff">'+esc(nome)+'</div><div style="font-size:12px;color:'+Co.mut+';margin-top:2px">Perfil do cliente, historico completo e registros das tres areas.</div></div><button onclick="__gwaCliVoltar()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:10px;padding:9px 16px;cursor:pointer"><i class="fas fa-arrow-left"></i> Voltar</button></div>';
     var zap=soDigitos(d.whatsapp||d.telefone);
     var capa='<div style="background:linear-gradient(135deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:18px;padding:18px 20px;margin-bottom:16px;display:flex;gap:16px;flex-wrap:wrap;align-items:center"><div style="width:58px;height:58px;border-radius:16px;background:'+Co.gradO+';display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:#fff">'+esc(iniciais)+'</div>'+
-      '<div style="flex:1;min-width:200px"><div style="font-size:10px;color:'+Co.orange+';text-transform:uppercase;letter-spacing:1px;font-weight:700">Perfil do cliente</div><div style="font-size:19px;font-weight:800;color:#fff;margin-top:2px">'+esc(nome)+'</div><div style="font-size:12px;color:'+Co.sub+';margin-top:3px">CPF '+esc(cpfBonito(cpf))+' &middot; '+esc((c.consultores||[]).join(', ')||'sem consultor')+'</div></div>'+
+      '<div style="flex:1;min-width:200px"><div style="font-size:10px;color:'+Co.orange+';text-transform:uppercase;letter-spacing:1px;font-weight:700">Perfil do cliente</div><div style="font-size:19px;font-weight:800;color:#fff;margin-top:2px">'+esc(nome)+'</div><div style="font-size:12px;color:'+Co.sub+';margin-top:3px">CPF '+esc(cpfBonito(cpf))+' &middot; '+esc((c.consultores||[]).join(', ')||consultoresDaFicha(ch,c).join(', ')||'sem consultor')+'</div></div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+(zap?('<a href="https://wa.me/55'+esc(zap)+'" target="_blank" rel="noopener" style="background:'+Co.green+';color:#fff;border-radius:10px;padding:10px 16px;font-weight:700;text-decoration:none;font-size:13px"><i class="fab fa-whatsapp"></i> Chamar no WhatsApp</a>'):'')+'</div></div>';
     var cards='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">'+
       card('Defesas',c.n.defesa||0,null,Co.green)+card('Documentacao',c.n.doc||0,null,Co.blue)+
@@ -13306,15 +13331,25 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<button onclick="__gwaCliNovo(&#39;elogio&#39;)" style="flex:1;min-width:170px;background:'+Co.card2+';border:1px solid '+Co.orangeD+';color:'+Co.orangeL+';border-radius:12px;padding:13px;font-weight:700;cursor:pointer"><i class="fas fa-star"></i> Novo elogio</button></div>','fa-plus');
     /* origem: card da planilha rotativa */
     var origem='';
-    if(d.cardKey||d.vendedor||d.recebidoEm||d.responsavelPlanilha){
-      var itO=[]; 
-      if(d.cardKey) itO.push(['Card',d.cardKey]);
-      if(d.recebidoEm) itO.push(['Recebido em',d.recebidoEm]);
-      if(d.vendedor) itO.push(['Vendedor',d.vendedor]);
-      if(d.responsavelPlanilha) itO.push(['Responsavel',d.responsavelPlanilha]);
-      if(d.tipoServico) itO.push(['Tipo de servico',d.tipoServico]);
-      if(d.canal) itO.push(['Canal I.A',d.canal]);
-      if(d.setor) itO.push(['Setor origem',d.setor]);
+    var nvF=cardDaFila(ch);
+    var oF={
+      cardKey: d.cardKey || (nvF&&nvF.cardKey) || '',
+      recebidoEm: d.recebidoEm || (nvF&&nvF.atribuidoEm) || '',
+      vendedor: d.vendedor || (nvF&&nvF.vendedor) || '',
+      responsavel: d.responsavelPlanilha || (nvF&&nvF.responsavel) || '',
+      tipoServico: d.tipoServico || (nvF&&nvF.tipoServico) || '',
+      canal: d.canal || (nvF&&nvF.canal) || '',
+      setor: d.setor || (nvF&&nvF.setor) || ''
+    };
+    if(oF.cardKey||oF.vendedor||oF.recebidoEm||oF.responsavel){
+      var itO=[];
+      if(oF.cardKey) itO.push(['Card',oF.cardKey]);
+      if(oF.recebidoEm) itO.push(['Recebido em',oF.recebidoEm]);
+      if(oF.vendedor) itO.push(['Vendedor',oF.vendedor]);
+      if(oF.responsavel) itO.push(['Responsavel',oF.responsavel]);
+      if(oF.tipoServico) itO.push(['Tipo de servico',oF.tipoServico]);
+      if(oF.canal) itO.push(['Canal I.A',oF.canal]);
+      if(oF.setor) itO.push(['Setor origem',oF.setor]);
       origem='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-left:4px solid '+Co.blue+';border-radius:14px;padding:14px 16px;margin-bottom:14px">'+
         '<div style="font-size:11px;color:'+Co.blue+';text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:9px"><i class="fas fa-table-cells"></i> Veio da planilha rotativa</div>'+
         '<div style="display:flex;gap:9px;flex-wrap:wrap">'+itO.map(function(k){
