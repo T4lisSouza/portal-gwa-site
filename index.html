@@ -10984,6 +10984,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function invalidaCache(t){ if(t){ delete _limpos[t]; delete _limposN[t]; } else { _limpos={}; _limposN={}; } }
   /* mantem UMA copia de cada registro; prefere a planilha do proprio consultor */
   function dedupLista(t,a){ var vistos={}, out=[];
+    a=a.filter(function(r){ return !r || r.removido!==true; });
     a.slice().sort(function(x,y){
       var xx=/CONTROLE/i.test(String(x.planilha||''))?1:0, yy=/CONTROLE/i.test(String(y.planilha||''))?1:0;
       if(xx!==yy) return xx-yy; return (x.ts||0)-(y.ts||0); })
@@ -11287,7 +11288,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
      O cliente so vira uma linha nova quando o ORGAO muda (regra da defesa).
      Documentacao e elogio agrupam so pelo cliente. */
   function chaveAgrupa(t,r){
-    var c=chaveCliente(r); if(!c) c='reg:'+(r.id||'');
+    var c=chaveCli(r); if(!c) c='reg:'+(r.id||'');
     if(t==='defesa'){ var o=norm(r.orgao||r.municipio||''); return c+'|'+o; }
     return c; }
 
@@ -11302,7 +11303,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function totaisDoCliente(ch){
     var t={defesa:0,doc:0,elogio:0};
     if(!ch) return t;
-    ORDEM.forEach(function(k){ regs(k).forEach(function(r){ if(chaveCliente(r)===ch) t[k]++; }); });
+    ORDEM.forEach(function(k){ regs(k).forEach(function(r){ if(chaveCli(r)===ch) t[k]++; }); });
     return t; }
 
   window.__gwaDocAgrupar=function(v){ _agrupar=!!v; render(); };
@@ -11330,9 +11331,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var rows=fonte.map(function(G){ var v=G.principal; var qtd=G.itens.length; var tds=cols.map(function(c){ var raw=v[c.key]; var val; if(c.key==='objeto'&&raw){ val='<a href="https://rastreamento.correios.com.br/app/index.php?objetos='+encodeURIComponent(String(raw).trim())+'" target="_blank" rel="noopener" title="Rastrear nos Correios" style="color:'+Co.orangeL+';text-decoration:none;font-weight:600"><i class="fas fa-truck-fast"></i> '+esc(raw)+'</a>'; } else if(c.key==='link'&&raw){ val='<a href="'+esc(raw)+'" target="_blank" rel="noopener" style="color:'+Co.orangeL+'">'+esc(raw)+'</a>'; } else val=esc(raw);
         return '<td style="padding:10px;color:'+(c.key==='nome'?'#fff':Co.sub)+'">'+(val||'<span style="color:'+Co.mut+'">-</span>')+'</td>'; }).join('');
       var acoes='<button onclick="__gwaCliPerfil(&#39;'+_tipo+'&#39;,&#39;'+v.id+'&#39;)" title="Abrir perfil do cliente" style="background:'+Co.card2+';border:1px solid '+Co.orangeD+';color:'+Co.orangeL+';border-radius:8px;padding:6px 10px;cursor:pointer;margin-right:4px;font-size:12px"><i class="fas fa-address-card"></i> Perfil</button>';
+      if(isMaster()) acoes+='<button onclick="__gwaCliExcluirTudo(&#39;'+_tipo+'&#39;,&#39;'+v.id+'&#39;)" title="Master: excluir este cliente e TUDO ligado a ele" style="background:'+Co.card2+';border:1px solid '+Co.red+';color:'+Co.red+';border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:4px"><i class="fas fa-user-slash"></i></button>';
       acoes+=podeEditar(v)?('<button onclick="__gwaDocEditar(&#39;'+v.id+'&#39;)" title="Editar" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:4px"><i class="fas fa-pen"></i></button><button onclick="__gwaDocExcluir(&#39;'+v.id+'&#39;)" title="Excluir" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-trash"></i></button>'):'';
       if(_agrupar){
-        var chCli=chaveCliente(v);
+        var chCli=chaveCli(v);
         var tt=chCli?totaisDoCliente(chCli):{defesa:0,doc:0,elogio:0};
         var selos=[];
         if(qtd>1) selos.push('<span style="background:'+Co.gradO+';color:#fff;border-radius:20px;padding:2px 9px;font-size:10px;font-weight:800">'+qtd+'x '+esc(TIPOS[_tipo].label.toLowerCase())+'</span>');
@@ -12767,8 +12769,48 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function soDigitos(s){ return String(s||'').replace(/\D+/g,''); }
   function chaveCliente(r){ var c=soDigitos(r&&r.cpf); if(c.length>=8) return 'cpf:'+c; var n=norm(r&&r.nome); return n?('nome:'+n):''; }
   function cpfBonito(c){ c=soDigitos(c); if(c.length===11) return c.slice(0,3)+'.'+c.slice(3,6)+'.'+c.slice(6,9)+'-'+c.slice(9); return c||'—'; }
+
+  /* ================= IDENTIDADE UNICA DO CLIENTE =================
+     O mesmo cliente aparecia mais de uma vez quando um registro tinha
+     CPF e outro nao (um virava "cpf:...", o outro "nome:..."). Aqui o
+     nome e amarrado ao CPF uma unica vez e todos passam a cair na
+     mesma ficha. */
+  var _mapaNomeCpf=null, _mapaNomeCpfN=-1;
+
+  function totalRegistros(){ var n=0; ORDEM.forEach(function(t){ n+=(_regs[t]||[]).length; });
+    n+=Object.keys(_cliDados||{}).length; return n; }
+
+  function mapaNomeCpf(){
+    var n=totalRegistros();
+    if(_mapaNomeCpf && _mapaNomeCpfN===n) return _mapaNomeCpf;
+    var m={}, conta={};
+    function anota(nome,cpf){
+      var nm=norm(nome), c=soDigitos(cpf);
+      if(!nm || c.length<8) return;
+      conta[nm]=conta[nm]||{};
+      conta[nm][c]=(conta[nm][c]||0)+1; }
+    ORDEM.forEach(function(t){ (_regs[t]||[]).forEach(function(r){ anota(r.nome, r.cpf); }); });
+    Object.keys(_cliDados||{}).forEach(function(k){ var d=_cliDados[k]; anota(d.nome, d.cpf); });
+    /* so amarra quando o nome aponta para UM unico CPF — nomes iguais
+       com CPFs diferentes continuam separados, como tem que ser */
+    Object.keys(conta).forEach(function(nm){
+      var cpfs=Object.keys(conta[nm]);
+      if(cpfs.length===1) m[nm]='cpf:'+cpfs[0]; });
+    _mapaNomeCpf=m; _mapaNomeCpfN=n;
+    return m; }
+
+  function chaveCanonica(ch, nome){
+    if(!ch) return '';
+    if(ch.indexOf('cpf:')===0) return ch;
+    var nm = nome!==undefined ? norm(nome) : ch.slice(5);
+    var m=mapaNomeCpf();
+    return m[nm] || ch; }
+
+  /* chave do registro ja resolvida */
+  function chaveCli(r){ return chaveCanonica(chaveCliente(r), r && r.nome); }
+
   function indiceClientes(){ var m={};
-    ORDEM.forEach(function(t){ regs(t).forEach(function(r){ var k=chaveCliente(r); if(!k) return;
+    ORDEM.forEach(function(t){ regs(t).forEach(function(r){ var k=chaveCli(r); if(!k) return;
       var o=m[k]; if(!o){ o=m[k]={chave:k,nome:'',cpf:'',consultores:[],itens:[],ultima:0,n:{defesa:0,doc:0,elogio:0},rastreios:0}; }
       if(String(r.nome||'').length>String(o.nome).length) o.nome=r.nome;
       if(!o.cpf && soDigitos(r.cpf)) o.cpf=r.cpf;
@@ -12784,7 +12826,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function logsDoCliente(ch){ return (_cliLogs||[]).filter(function(l){ return l.chave===ch; }).sort(function(a,b){ return (b.ts||0)-(a.ts||0); }); }
 
   window.__gwaCliPerfil=function(t,id){ var r=regs(t).filter(function(x){return x.id===id;})[0]; if(!r) return;
-    var ch=chaveCliente(r); if(!ch){ alert('Este registro nao tem nome nem CPF para montar o perfil.'); return; }
+    var ch=chaveCli(r); if(!ch){ alert('Este registro nao tem nome nem CPF para montar o perfil.'); return; }
     _cliAberto=ch; _fichaVolta=''; _fichaOrigem='lista'; _view='ficha';
     var pend=[]; if(!_cliTodosOk){ _cliTodosOk=true; pend.push(loadTodos()); }
     if(!_cliLogsOk) pend.push(loadCliLogs());
@@ -12792,8 +12834,14 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     render(); if(pend.length) Promise.all(pend).then(function(){ if(_view==='ficha') render(); }); };
   function viewBuscarCliente(){ var idx=indiceClientes();
     /* inclui tambem clientes que so existem no cadastro */
-    Object.keys(_cliDados||{}).forEach(function(k){ if(!idx[k]){ var d=_cliDados[k];
-      idx[k]={chave:k,nome:d.nome||'',cpf:d.cpf||'',consultores:[],itens:[],ultima:d.atualizadoEm||0,n:{defesa:0,doc:0,elogio:0},rastreios:0}; } });
+    Object.keys(_cliDados||{}).forEach(function(k){ var d=_cliDados[k]||{};
+      var cpfD=soDigitos(d.cpf);
+      var kk = cpfD.length>=8 ? ('cpf:'+cpfD) : chaveCanonica(k, d.nome);
+      if(idx[kk]){ /* ja existe pelos registros: so completa o que falta */
+        if(!idx[kk].cpf && d.cpf) idx[kk].cpf=d.cpf;
+        if(!idx[kk].nome && d.nome) idx[kk].nome=d.nome;
+        return; }
+      idx[kk]={chave:kk,nome:d.nome||'',cpf:d.cpf||'',consultores:[],itens:[],ultima:d.atualizadoEm||0,n:{defesa:0,doc:0,elogio:0},rastreios:0}; });
     var lista=Object.keys(idx).map(function(k){ return idx[k]; });
     var q=norm(_cliBusca), qd=soDigitos(_cliBusca);
     var buscando=!!String(_cliBusca||'').trim();
@@ -12826,6 +12874,91 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   window.__gwaCliEditar=function(t,id){ _fichaVolta=_cliAberto; _preCliente=null;
     _tipo=t; _editId=id; _defBlocos=null; _svcBlocos=null; _cliForm=t; _view='ficha';
     loadRegs(t).then(function(){ if(_view==='ficha') render(); }); render(); };
+
+  /* ================= EXCLUSAO TOTAL DO CLIENTE (somente Master) =================
+     Apaga o registro e tudo que esta amarrado aquele cliente:
+     defesas, documentacoes, elogios, cadastro, historico e o card da
+     fila de novos clientes. */
+
+  async function apagarDaApi(colecao, id){
+    try{
+      var r=await fetch(base()+'/api/'+colecao+'/'+encodeURIComponent(id),{method:'DELETE',headers:H()});
+      if(r.ok) return true;
+    }catch(e){}
+    return false; }
+
+  function itensDoCliente(ch){
+    var out={defesa:[],doc:[],elogio:[]};
+    if(!ch) return out;
+    ORDEM.forEach(function(t){ (_regs[t]||[]).forEach(function(r){ if(chaveCli(r)===ch) out[t].push(r); }); });
+    return out; }
+
+  window.__gwaCliExcluirTudo=async function(t,id){
+    if(!isMaster()){ alert('Apenas o Master pode excluir um cliente e tudo que esta ligado a ele.'); return; }
+
+    var ch='', nome='';
+    if(t&&id){ var r=(regs(t)||[]).filter(function(x){return x.id===id;})[0];
+      if(!r){ alert('Registro nao encontrado.'); return; }
+      ch=chaveCli(r); nome=r.nome||''; }
+    else { ch=_cliAberto; var idx=indiceClientes(); nome=(idx[ch]||{}).nome||dadosCli(ch).nome||''; }
+    if(!ch){ alert('Nao consegui identificar o cliente deste registro.'); return; }
+
+    var it=itensDoCliente(ch);
+    var logs=(_cliLogs||[]).filter(function(l){ return l.chave===ch; });
+    var cards=(_novos||[]).filter(function(n){ return chaveDoNovo(n)===ch; });
+    var temCad=!!(_cliDados&&_cliDados[ch]);
+    var total=it.defesa.length+it.doc.length+it.elogio.length;
+
+    var resumo='EXCLUSAO DEFINITIVA\n\nCliente: '+(nome||'(sem nome)')+'\n\n'+
+      '- '+it.defesa.length+' defesa(s)\n'+
+      '- '+it.doc.length+' documentacao(oes)\n'+
+      '- '+it.elogio.length+' elogio(s)\n'+
+      '- '+logs.length+' nota(s) do historico\n'+
+      '- '+cards.length+' card(s) da fila de novos clientes\n'+
+      (temCad?'- o cadastro do cliente\n':'')+
+      '\nIsso nao tem como desfazer.';
+
+    if(!confirm(resumo+'\n\nContinuar?')) return;
+
+    var conf=prompt('Para confirmar, digite EXCLUIR em maiusculas:','');
+    if(String(conf||'').trim().toUpperCase()!=='EXCLUIR'){ alert('Cancelado — nada foi apagado.'); return; }
+
+    var ok=0, falhas=0;
+
+    for(var i=0;i<ORDEM.length;i++){ var tt=ORDEM[i];
+      for(var j=0;j<it[tt].length;j++){ var reg=it[tt][j];
+        var foi=await apagarDaApi(TIPOS[tt].col, reg.id);
+        if(!foi){
+          /* se o servidor nao aceitar o DELETE, marca como removido
+             para sumir de todas as telas e contagens */
+          reg.duplicado=true; reg.removido=true; reg.removidoPor=loginU(curU()); reg.removidoEm=Date.now();
+          try{ var rr=await fetch(base()+'/api/'+TIPOS[tt].col+'/'+encodeURIComponent(reg.id),{method:'PUT',headers:H(),body:JSON.stringify(reg)});
+            foi=rr.ok; }catch(e){}
+        }
+        if(foi){ ok++; _regs[tt]=(_regs[tt]||[]).filter(function(x){ return x.id!==reg.id; }); } else falhas++;
+      }
+      invalidaCache(tt);
+    }
+
+    for(var L=0;L<logs.length;L++){ if(await apagarDaApi('doc_cliente_log', logs[L].id)) ok++; else falhas++; }
+    _cliLogs=(_cliLogs||[]).filter(function(l){ return l.chave!==ch; });
+
+    for(var C=0;C<cards.length;C++){ var card=cards[C];
+      var foiC=await apagarDaApi(COL_NOVOS, card.id);
+      if(!foiC){ card.removido=true; card.status='atendido';
+        try{ var rc=await fetch(base()+'/api/'+COL_NOVOS+'/'+encodeURIComponent(card.id),{method:'PUT',headers:H(),body:JSON.stringify(card)}); foiC=rc.ok; }catch(e){} }
+      if(foiC){ ok++; } else falhas++; }
+    _novos=(_novos||[]).filter(function(n){ return chaveDoNovo(n)!==ch; });
+
+    if(temCad){ if(await apagarDaApi('doc_clientes', ch)) ok++; else falhas++; delete _cliDados[ch]; }
+
+    _mapaNomeCpf=null; _dashOk=false; _cbOk=false; _relOk=false;
+
+    alert('Cliente excluido.\n\n'+ok+' item(ns) apagados'+(falhas?('\n'+falhas+' nao puderam ser apagados — confira na lista.'):'')+'\n\nTotal de registros que existiam: '+total);
+
+    if(_view==='ficha'){ _cliAberto=''; _cliBase=null; _view=(_fichaOrigem==='buscar')?'buscar':'lista'; }
+    render(); };
+
   window.__gwaCliFecharForm=function(){ _cliForm=''; _editId=null; _preCliente=null; _defBlocos=null; _svcBlocos=null; render(); };
 
   /* ================= FILA DE NOVOS CLIENTES (planilha rotativa Documentacao) ================= */
@@ -12848,7 +12981,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     for(var i=0;i<us.length;i++){ if(mesmoConsultor(nome, us[i].nome||us[i].login)) return loginU(us[i]); } return ''; }
   /* operador do DOC responsavel pelo card ('' = ninguem reconhecido) */
   function opDoNovo(n){ var l=loginDoNome((n&&n.responsavel)||''); return (l&&acessos()[l])?l:''; }
-  function chaveDoNovo(n){ var c=soDigitos(n&&n.cpf); if(c.length>=8) return 'cpf:'+c; var x=norm(nomeNovo(n)); return x?('nome:'+x):''; }
+  function chaveDoNovo(n){ var c=soDigitos(n&&n.cpf); if(c.length>=8) return 'cpf:'+c;
+    var x=norm(nomeNovo(n)); return x?chaveCanonica('nome:'+x, nomeNovo(n)):''; }
   /* o card sai da fila quando o operador lanca qualquer registro desse cliente */
   function movimentado(n,idx){ if(!n) return false; if(n.status==='atendido') return true;
     var ch=chaveDoNovo(n); if(!ch) return false; var c=(idx||indiceClientes())[ch];
@@ -13052,6 +13186,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var formInline='';
     if(_cliForm){ var vf=(_cliForm==='defesa')?viewLancarDefesa():((_cliForm==='doc')?viewLancarDoc():viewLancarElogio());
       formInline='<div style="border:2px solid '+Co.orangeD+';border-radius:18px;margin-bottom:14px;overflow:hidden"><div style="background:'+Co.gradO+';padding:11px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><b style="color:#fff;font-size:14px"><i class="fas '+TIPOS[_cliForm].icon+'"></i> '+(_editId?'Editando':'Novo')+' — '+esc(TIPOS[_cliForm].label)+' de '+esc(nome)+'</b><button onclick="__gwaCliFecharForm()" style="background:rgba(0,0,0,.25);border:none;color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px"><i class="fas fa-times"></i> fechar</button></div><div style="padding:4px">'+vf+'</div></div>'; }
+    var zonaPerigo=isMaster()?('<div style="background:rgba(229,83,60,.08);border:1px solid '+Co.red+';border-radius:14px;padding:14px 16px;margin-bottom:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:center">'+
+      '<div style="flex:1;min-width:230px"><div style="color:'+Co.red+';font-weight:800;font-size:13px"><i class="fas fa-triangle-exclamation"></i> Area do Master</div>'+
+      '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px;line-height:1.5">Excluir este cliente apaga as defesas, documentacoes, elogios, o cadastro, o historico e o card da fila. Nao da para desfazer.</div></div>'+
+      '<button onclick="__gwaCliExcluirTudo()" style="background:'+Co.red+';color:#fff;border:none;border-radius:11px;padding:11px 18px;font-weight:800;cursor:pointer"><i class="fas fa-user-slash"></i> Excluir cliente e tudo dele</button></div>'):'';
     var acoes=_cliForm?'':bloco('Novo registro para este cliente','O cliente ja vem preenchido no formulario','<div style="display:flex;gap:10px;flex-wrap:wrap">'+
       '<button onclick="__gwaCliNovo(&#39;defesa&#39;)" style="flex:1;min-width:170px;background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:13px;font-weight:700;cursor:pointer"><i class="fas fa-scale-balanced"></i> Nova defesa</button>'+
       '<button onclick="__gwaCliNovo(&#39;doc&#39;)" style="flex:1;min-width:170px;background:'+Co.card2+';border:1px solid '+Co.blue+';color:'+Co.blue+';border-radius:12px;padding:13px;font-weight:700;cursor:pointer"><i class="fas fa-folder-open"></i> Nova documentacao</button>'+
@@ -13100,8 +13238,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     eventos.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
     var nota=bloco('Registrar no historico','Fica gravado com seu nome e a data','<textarea id="cliNota" placeholder="Ex.: cliente ligou pedindo atualizacao do processo..." style="width:100%;box-sizing:border-box;min-height:64px;padding:10px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff;resize:vertical"></textarea><div style="margin-top:10px"><button onclick="__gwaCliNota()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer"><i class="fas fa-plus"></i> Adicionar</button></div>','fa-pen-to-square');
     var linha=bloco('Historico e movimentacao ('+eventos.length+')','Defesas, documentacao, elogios e anotacoes',(eventos.length?eventos.map(function(e){return e.html;}).join(''):'<div style="color:'+Co.mut+';font-size:13px">Nada registrado ainda.</div>'),'fa-timeline');
-    if(_cliForm) return topo+capa+origem+formInline+'<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start"><div style="flex:1 1 380px;min-width:320px">'+dados+nota+'</div><div style="flex:1 1 340px;min-width:300px">'+linha+'</div></div>';
-    return topo+capa+origem+cards+'<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start"><div style="flex:1 1 380px;min-width:320px">'+dados+nota+'</div><div style="flex:1 1 340px;min-width:300px">'+acoes+linha+'</div></div>'; }
+    if(_cliForm) return topo+capa+origem+zonaPerigo+formInline+'<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start"><div style="flex:1 1 380px;min-width:320px">'+dados+nota+'</div><div style="flex:1 1 340px;min-width:300px">'+linha+'</div></div>';
+    return topo+capa+origem+zonaPerigo+cards+'<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start"><div style="flex:1 1 380px;min-width:320px">'+dados+nota+'</div><div style="flex:1 1 340px;min-width:300px">'+acoes+linha+'</div></div>'; }
 
   window.__gwaCliNota=async function(){ var ch=_cliAberto; var e=document.getElementById('cliNota'); var txt=e?String(e.value||'').trim():'';
     if(!txt){ alert('Escreva a anotacao.'); return; }
