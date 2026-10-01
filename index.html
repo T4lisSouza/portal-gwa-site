@@ -9941,7 +9941,36 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function vendasDept(dept){ return (_vendas||[]).filter(function(v){ return (v.dept||'comercial')===dept; }); }
   function aplicaFiltro(arr){ return arr.filter(function(v){ if(!inPeriodo(v)) return false; if(_filtro.consultor && loginU({login:v.consultor})!==_filtro.consultor.toUpperCase()) return false; if(_filtro.forma && v.forma!==_filtro.forma) return false; return true; }); }
   function isAdminUser(u){ var r=String((u&&u.role)||'').toLowerCase(); return loginU(u)==='TALIS'||r==='master'||r==='admin'||r==='gestor'||r==='supervisor'; }
+  function log0(m){ try{ console.log('[vendas] '+m); }catch(e){} }
   function vendedoresDept(dept){ return (window._usersCache||[]).filter(function(u){ return userDept(u)===dept && !isAdminUser(u); }); }
+
+  /* supervisor, gestor, admin e master podem lancar / editar em nome de outro vendedor */
+  function podeEscolherVendedor(){ return isMaster() || ['supervisor','gestor','admin','master'].indexOf(role())>=0; }
+
+  /* lista de vendedores que aparecem no seletor */
+  function listaVendedores(dept){
+    var us=(typeof getUsers==='function'?getUsers():(window._usersCache||[]))||[];
+    var out=us.filter(function(u){ if(!u||!loginU(u)) return false;
+      if(isAdminUser(u)) return false;
+      return dept ? (userDept(u)===dept) : true; });
+    if(!out.length) out=us.filter(function(u){ return u && loginU(u) && !isAdminUser(u); });
+    return out.sort(function(a,b){ return String(a.nome||a.login).localeCompare(String(b.nome||b.login)); }); }
+
+  function seletorVendedor(ed,dept){
+    if(!podeEscolherVendedor()) return '';
+    var us=listaVendedores(dept);
+    var atual=ed?loginU({login:ed.consultor}):loginU(curU());
+    var achou=us.some(function(u){ return loginU(u)===atual; });
+    var opts='';
+    if(!achou && atual) opts+='<option value="'+esc(atual)+'" selected>'+esc((ed&&(ed.consultorNome||ed.consultor))||atual)+'</option>';
+    opts+=us.map(function(u){ var L=loginU(u);
+      return '<option value="'+esc(L)+'"'+(L===atual?' selected':'')+'>'+esc(u.nome||u.login)+'</option>'; }).join('');
+    var aviso=ed
+      ? 'Trocar o vendedor move a venda — e a premiacao — para a pessoa escolhida.'
+      : 'Lance a venda em nome de um consultor da sua equipe. Por padrao vem voce.';
+    return row('Vendedor'+(ed?' (pode ser alterado)':''),
+      '<select id="vVendedor" '+inp()+'>'+opts+'</select>'+
+      '<div style="font-size:11px;color:'+Co.mut+';margin-top:4px"><i class="fas fa-circle-info"></i> '+aviso+'</div>'); }
 
   var _dept='comercial', _view='';
   function podeDept(dept){ if(isMaster()) return true; var pd=(_cfg&&_cfg.permissoesDept&&_cfg.permissoesDept[loginU(curU())])||{}; return dept==='comercial'?!!pd.admComercial:!!pd.admNegociacao; }
@@ -10023,12 +10052,14 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var titulo=ed?('<i class="fas fa-pen" style="color:'+Co.orange+'"></i> Editar venda'):('<i class="fas fa-plus" style="color:'+Co.orange+'"></i> Lançar venda');
     var subt=ed?('Editando venda de <b style="color:#fff">'+esc(ed.consultorNome||ed.consultor||'')+'</b>'):'Departamento <b style="color:'+Co.orange+'">'+esc(d)+'</b> · definido pelo cadastro do consultor';
     var btn=ed?btnPri('<i class="fas fa-check"></i> Salvar alterações','__gwaVendasSalvar()')+' <button onclick="__gwaVendasCancelarEdicao()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer">Cancelar</button>':btnPri('<i class="fas fa-check"></i> Salvar venda','__gwaVendasSalvar()');
+    var selVend=seletorVendedor(ed,d);
     var negBlock=''; if(d==='negociacao'){ var prods=(_cfg&&_cfg.negProdutos)||[]; var servs=(_cfg&&_cfg.negServicos)||[]; var edServ=(ed&&ed.servicos)||[]; var extras=''; for(var si=2;si<edServ.length;si++){ extras+='<div style="margin-top:8px"><select class="negServ" '+inp()+'>'+negOptList(servs,edServ[si])+'</select></div>'; }
       negBlock=row('Produto inicial','<select id="negProd" '+inp()+'>'+negOptList(prods,(ed&&ed.produtoInicial)||'')+'</select>')+'<div style="margin-bottom:10px"><label style="font-size:12px;color:'+Co.mut+';display:block;margin-bottom:4px">Serviços adicionais</label><div id="negServWrap"><div style="margin-bottom:8px"><select class="negServ" '+inp()+'>'+negOptList(servs,edServ[0]||'')+'</select></div><div><select class="negServ" '+inp()+'>'+negOptList(servs,edServ[1]||'')+'</select></div>'+extras+'</div><button type="button" onclick="__gwaVendasAddServ()" style="margin-top:8px;background:'+Co.card2+';border:1px solid '+Co.line+';color:#fff;border-radius:10px;padding:8px 14px;cursor:pointer"><i class="fas fa-plus"></i> Adicionar serviço</button></div>'; }
     return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:20px;padding:24px;max-width:660px;margin:0 auto;color:'+Co.sub+';box-shadow:0 6px 26px rgba(0,0,0,.35)">'+
       '<h3 style="margin:0 0 4px;color:#fff;font-size:19px">'+titulo+'</h3><p style="font-size:12px;color:'+Co.mut+';margin:0 0 18px">'+subt+'</p>'+
       row('Data da venda','<input id="vDat" type="date" value="'+esc(g.dat)+'" '+inp()+'>')+row('Nome do cliente','<input id="vCli" value="'+esc(g.cli)+'" '+inp()+'>')+
       row('CPF','<input id="vCpf" placeholder="000.000.000-00" value="'+esc(g.cpf)+'" '+inp()+'>')+negBlock+
+      selVend+
       row('Valor pago (R$)','<input id="vPago" type="number" step="0.01" value="'+esc(g.pago)+'" oninput="__gwaVendasCalc()" '+inp()+'>')+
       '<div style="display:flex;gap:12px;flex-wrap:wrap">'+cel('Forma de pagamento','<select id="vForma" onchange="__gwaVendasCalc()" '+inp()+'>'+formaOpts(g.forma)+'</select>')+cel('Parcelas','<input id="vParc" type="number" min="1" value="'+esc(g.parc)+'" oninput="__gwaVendasCalc()" '+inp()+'>')+'</div>'+
       '<div id="vCalc" style="background:'+Co.bgA+';border:1px dashed '+Co.orangeD+';border-radius:12px;padding:14px;margin:10px 0 16px;font-size:13px"></div>'+
@@ -10038,6 +10069,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function cel(l,i){ return '<div style="flex:1;min-width:150px;margin-bottom:12px"><label style="font-size:12px;color:'+Co.mut+';display:block;margin-bottom:5px">'+l+'</label>'+i+'</div>'; }
   window.__gwaVendasCalc=function(){ var pago=Number((document.getElementById('vPago')||{}).value)||0; var forma=(document.getElementById('vForma')||{}).value||'cartao'; var parc=parseInt((document.getElementById('vParc')||{}).value)||1; var c=calc(pago,forma,parc); var el=document.getElementById('vCalc'); if(el) el.innerHTML='<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><span>Taxa: <b style="color:'+Co.orange+'">'+pct(c.pct)+'</b></span><span>Desconto: <b>'+money(c.desconto)+'</b></span><span style="font-size:15px">Líquido: <b style="color:'+Co.green+'">'+money(c.liquido)+'</b></span></div>'; };
   window.__gwaVendasSalvar=async function(){ try{ var u=curU();
+    /* vendedor escolhido pelo supervisor/master (quando o seletor existe) */
+    var vendSel=''; var elV=document.getElementById('vVendedor');
+    if(elV && podeEscolherVendedor()) vendSel=String(elV.value||'').trim();
+    function usuarioPorLoginV(L){ var us=(typeof getUsers==='function'?getUsers():(window._usersCache||[]))||[];
+      for(var i=0;i<us.length;i++){ if(loginU(us[i])===String(L).toUpperCase()) return us[i]; } return null; }
     var pago=Number((document.getElementById('vPago')||{}).value)||0; var forma=(document.getElementById('vForma')||{}).value; var parc=parseInt((document.getElementById('vParc')||{}).value)||1; var cli=((document.getElementById('vCli')||{}).value||'').trim(); var cpf=(document.getElementById('vCpf')||{}).value||''; var dat=(document.getElementById('vDat')||{}).value||today();
     if(!cli){ alert('Informe o nome do cliente.'); return; } if(pago<=0){ alert('Informe o valor pago.'); return; }
     var produtoInicial=((document.getElementById('negProd')||{}).value)||''; var servicos=[]; Array.prototype.forEach.call(document.querySelectorAll('.negServ'),function(s){ if(s.value) servicos.push(s.value); });
@@ -10045,11 +10081,24 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(_editId){ var v=(_vendas||[]).find(function(x){return x.id===_editId;}); if(!v){ alert('Venda não encontrada.'); return; } var L=loginU(u); if(!isAdmin() && loginU({login:v.consultor})!==L){ alert('Sem permissão.'); return; }
       v.hist=v.hist||[]; var campos=[['cliente',cli],['cpf',cpf],['dataVenda',dat],['valorPago',pago],['forma',forma],['parcelas',parc]];
       campos.forEach(function(cp){ if(String(v[cp[0]])!==String(cp[1])){ v.hist.push({por:L,ts:Date.now(),acao:'edicao',campo:cp[0],de:v[cp[0]],para:cp[1]}); v[cp[0]]=cp[1]; } });
+      if(vendSel && loginU({login:v.consultor})!==String(vendSel).toUpperCase()){
+        var uv=usuarioPorLoginV(vendSel);
+        var antes=v.consultorNome||v.consultor;
+        v.hist.push({por:L,ts:Date.now(),acao:'troca-vendedor',campo:'consultor',de:v.consultor,para:(uv?uv.login:vendSel)});
+        v.consultor=uv?uv.login:vendSel;
+        v.consultorNome=uv?(uv.nome||uv.name||uv.login):vendSel;
+        if(uv) v.dept=userDept(uv)||v.dept;
+        log0('Venda transferida de '+antes+' para '+v.consultorNome); }
       if(document.getElementById('negProd')){ v.produtoInicial=produtoInicial; v.servicos=servicos; }
       v.taxaPct=c.pct; v.desconto=c.desconto; v.liquido=c.liquido; v.atualizadoEm=Date.now();
       var ok2=await saveVenda(v); if(ok2){ _editId=null; alert('Venda atualizada. Histórico registrado.'); _view=isAdmin()?'vendas':'minhas'; render(); } else alert('Falha ao salvar.'); return; }
-    var d=(!isAdmin())?userDept(u):((_dept==='consolidado')?userDept(u):_dept); var now=Date.now(); var tsReg=clampExpedienteTs(now);
-    var nv={ id:'vnd_'+now.toString(36)+Math.random().toString(36).slice(2,6), dept:d, consultor:u.login, consultorNome:u.nome||u.name||u.login, dataVenda:dat, cliente:cli, cpf:cpf, produtoInicial:produtoInicial, servicos:servicos, valorProduto:0, valorPago:pago, forma:forma, parcelas:parc, taxaPct:c.pct, desconto:c.desconto, liquido:c.liquido, ts:tsReg, horaReg:new Date(tsReg).toLocaleTimeString('pt-BR'), atualizadoEm:now, hist:[{por:u.login,ts:now,acao:'criacao'}] };
+    var dono=u, donoSel=null;
+    if(vendSel){ donoSel=usuarioPorLoginV(vendSel); if(donoSel) dono=donoSel; }
+    var d=(!isAdmin())?userDept(u):((_dept==='consolidado')?userDept(dono):_dept);
+    if(donoSel) d=userDept(donoSel)||d;
+    var now=Date.now(); var tsReg=clampExpedienteTs(now);
+    var nv={ id:'vnd_'+now.toString(36)+Math.random().toString(36).slice(2,6), dept:d, consultor:dono.login, consultorNome:dono.nome||dono.name||dono.login,
+      lancadoPor:(donoSel?loginU(u):''), lancadoPorNome:(donoSel?(u.nome||u.name||u.login):''), dataVenda:dat, cliente:cli, cpf:cpf, produtoInicial:produtoInicial, servicos:servicos, valorProduto:0, valorPago:pago, forma:forma, parcelas:parc, taxaPct:c.pct, desconto:c.desconto, liquido:c.liquido, ts:tsReg, horaReg:new Date(tsReg).toLocaleTimeString('pt-BR'), atualizadoEm:now, hist:[{por:u.login,ts:now,acao:'criacao'}] };
     var ok=await saveVenda(nv); if(ok){ _vendas=_vendas||[]; _vendas.push(nv); _vendasKnown[nv.id]=1; gwaCelebrar(c.liquido); _view=isAdmin()?'dash':'minhas'; render(); } else alert('Falha ao salvar. Verifique a conexão.');
   }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
 
@@ -11165,6 +11214,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(_view==='relatorios'&&!_relOk){ _relOk=true; Promise.all([loadTodos(),_novosOk?Promise.resolve(null):loadNovos()]).then(function(){ _cliTodosOk=true; _novosOk=true; if(_view==='relatorios') render(); }); }
     if(!_novosOk&&!_novosCarregando){ _novosCarregando=true;
       Promise.all([loadNovos(), _cliTodosOk?Promise.resolve(null):loadTodos()]).then(function(){ _cliTodosOk=true; _novosCarregando=false; autoFechar(); render(); }); }
+    if((_view==='buscar'||_view==='ficha')&&!_novosOk&&!_novosCarregando){ _novosCarregando=true;
+      loadNovos().then(function(){ _novosCarregando=false; if(_view==='buscar'||_view==='ficha') render(); }); }
     if((_view==='buscar'||_view==='ficha')&&!_cliTodosOk){ _cliTodosOk=true;
       Promise.all([loadTodos(),loadCliLogs(),loadCliDados()]).then(function(){ if(_view==='buscar'||_view==='ficha') render(); }); }
     if(_view==='cashback'&&!_cbOk){ _cbOk=true; loadRegs('elogio').then(function(){ if(_view==='cashback') render(); }); }
@@ -12842,6 +12893,17 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         if(!idx[kk].nome && d.nome) idx[kk].nome=d.nome;
         return; }
       idx[kk]={chave:kk,nome:d.nome||'',cpf:d.cpf||'',consultores:[],itens:[],ultima:d.atualizadoEm||0,n:{defesa:0,doc:0,elogio:0},rastreios:0}; });
+    /* clientes que vieram da fila de Novos clientes — inclusive os ja movimentados */
+    (_novos||[]).forEach(function(nv){ if(!nv || nv.removido===true) return;
+      var kn=chaveDoNovo(nv); if(!kn) return;
+      if(idx[kn]){ if(!idx[kn].cpf && nv.cpf) idx[kn].cpf=nv.cpf;
+        if(!idx[kn].nome && nomeNovo(nv)) idx[kn].nome=nomeNovo(nv);
+        var dono=opDoNovo(nv); var nmD=dono?nomeDoLogin(dono):(nv.responsavel||'');
+        if(nmD && idx[kn].consultores.indexOf(nmD)<0) idx[kn].consultores.push(nmD);
+        idx[kn].daFila=true; return; }
+      var dn=opDoNovo(nv); var nmC=dn?nomeDoLogin(dn):(nv.responsavel||'');
+      idx[kn]={chave:kn,nome:nomeNovo(nv),cpf:nv.cpf||'',consultores:nmC?[nmC]:[],itens:[],
+        ultima:Number(nv.atendidoEm||nv.ts||0),n:{defesa:0,doc:0,elogio:0},rastreios:0,daFila:true}; });
     var lista=Object.keys(idx).map(function(k){ return idx[k]; });
     var q=norm(_cliBusca), qd=soDigitos(_cliBusca);
     var buscando=!!String(_cliBusca||'').trim();
@@ -12858,7 +12920,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       var tags='<span style="background:rgba(63,174,90,.16);color:'+Co.green+';border-radius:20px;padding:2px 9px;font-size:11px;margin-right:4px">'+(c.n.defesa||0)+' defesa(s)</span>'+
         '<span style="background:rgba(74,159,213,.16);color:'+Co.blue+';border-radius:20px;padding:2px 9px;font-size:11px;margin-right:4px">'+(c.n.doc||0)+' doc</span>'+
         '<span style="background:rgba(240,148,58,.16);color:'+Co.orangeL+';border-radius:20px;padding:2px 9px;font-size:11px">'+(c.n.elogio||0)+' elogio(s)</span>'+
-        (c.rastreios?('<span style="background:'+Co.card2+';color:'+Co.orangeL+';border-radius:20px;padding:2px 9px;font-size:11px;margin-left:4px"><i class="fas fa-truck-fast"></i> '+c.rastreios+'</span>'):'');
+        (c.rastreios?('<span style="background:'+Co.card2+';color:'+Co.orangeL+';border-radius:20px;padding:2px 9px;font-size:11px;margin-left:4px"><i class="fas fa-truck-fast"></i> '+c.rastreios+'</span>'):'')+
+        (c.daFila?('<span style="background:rgba(74,159,213,.16);color:'+Co.blue+';border-radius:20px;padding:2px 9px;font-size:11px;margin-left:4px"><i class="fas fa-user-plus"></i> da fila</span>'):'');
       return '<div onclick="__gwaCliAbrirChave(&#39;'+esc(c.chave).replace(/'/g,'')+'&#39;)" style="background:'+Co.card+';border:1px solid '+Co.line+';border-left:4px solid '+Co.orangeD+';border-radius:14px;padding:14px 16px;margin-bottom:10px;cursor:pointer;display:flex;gap:14px;align-items:center;flex-wrap:wrap" onmouseover="this.style.background=&#39;'+Co.card2+'&#39;" onmouseout="this.style.background=&#39;'+Co.card+'&#39;"><div style="width:44px;height:44px;border-radius:13px;background:'+Co.gradO+';display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff">'+esc(iniciais)+'</div><div style="flex:1;min-width:200px"><div style="color:#fff;font-weight:700">'+esc(c.nome||'(sem nome)')+'</div><div style="font-size:12px;color:'+Co.mut+';margin-top:2px">CPF '+esc(cpfBonito(c.cpf))+' &middot; '+esc((c.consultores||[]).join(', ')||'sem consultor')+'</div><div style="margin-top:7px">'+tags+'</div></div><div style="color:'+Co.orange+';font-weight:700;font-size:13px"><i class="fas fa-address-card"></i> abrir perfil</div></div>'; }).join('');
     return topo+cards; }
   window.__gwaCliBusca=function(v){ _cliBusca=v; var b=document.getElementById('gwaDocBody'); if(!b) return;
