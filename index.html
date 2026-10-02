@@ -327,7 +327,8 @@ a{text-decoration:none;color:inherit}button{cursor:pointer;border:none;backgroun
 .dest-name{font-size:16px;font-weight:800;color:#111827;margin-bottom:4px}
 .dest-dept{font-size:12px;color:#6b7280;font-weight:600;margin-bottom:8px}
 .dest-pts{font-size:22px;font-weight:900;color:#FF8000}
-.dest-photo{width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid #FF8000;margin:0 auto 10px;display:block;background:#f3f4f6}
+.dest-photo{width:110px;height:110px;border-radius:50%;object-fit:cover;border:4px solid #FF8000;margin:0 auto 12px;display:block;background:#f3f4f6;box-shadow:0 6px 18px rgba(0,0,0,.18)}
+@media (max-width:600px){.dest-photo{width:88px;height:88px}}
 .dest-section{margin-bottom:28px}
 .dest-section-title{font-size:14px;font-weight:800;color:var(--text-light);letter-spacing:.5px;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px}
 .dest-section-title::before{content:'';width:4px;height:18px;background:#FF8000;border-radius:4px;display:inline-block}
@@ -834,6 +835,7 @@ a{text-decoration:none;color:inherit}button{cursor:pointer;border:none;backgroun
                   <option value="Operações">Operações</option>
                   <option value="Marketing">Marketing</option>
                   <option value="Negociação">Negociação</option>
+              <option value="Documentação">Documentação</option>
                   <option value="Administrativo">Administrativo</option>
                   <option value="Gerência">Gerência</option>
                 </select>
@@ -3779,7 +3781,7 @@ function renderAdmDestaques() {
       <thead><tr><th>#</th><th>Foto</th><th>Nome</th><th>Departamento</th><th>Pontos</th><th>Ações</th></tr></thead>
       <tbody>${st.ranking.map((r,i)=>{
         const photoUrl = destGetPhotoUrl(r.foto);
-        const thumb = photoUrl ? `<img src="${photoUrl}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid #FF8000" onerror="this.style.display='none'">` : `<div style="width:32px;height:32px;border-radius:50%;background:#FF8000;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">${r.nome[0].toUpperCase()}</div>`;
+        const thumb = photoUrl ? `<img src="${photoUrl}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid #FF8000;box-shadow:0 2px 8px rgba(0,0,0,.18)" onerror="this.style.display='none'">` : `<div style="width:56px;height:56px;border-radius:50%;background:#FF8000;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px">${r.nome[0].toUpperCase()}</div>`;
         return `<tr><td>${i+1}</td><td>${thumb}</td><td>${r.nome}</td><td>${r.dept||'-'}</td><td>${r.pts||'-'}</td><td><button onclick="destRemove('ranking','${r.id}')" class="mc-btn mc-btn--danger mc-btn--sm">Remover</button></td></tr>`;
       }).join('')}</tbody>
     </table></div>` : '<p style="color:#9ca3af;font-size:13px;margin-top:8px">Nenhum item no ranking.</p>';
@@ -3828,13 +3830,35 @@ function admAddDestaque(tipo) {
 
 function destRemove(tipo, id) {
   if(!confirm('Remover item?')) return;
+
+  /* segura as sincronizacoes por 10s para o item nao voltar */
+  window.__destBloqueio = Date.now() + 10000;
+
   const st = destLoad();
-  st[tipo] = (st[tipo]||[]).filter(x=>x.id!==id);
+  const antes = (st[tipo]||[]).length;
+  st[tipo] = (st[tipo]||[]).filter(x => String(x.id) !== String(id));
+
+  if(st[tipo].length === antes){
+    window.__destBloqueio = 0;
+    toast('Item nao encontrado para remover.','error');
+    return;
+  }
+
+  _destState = st;
   destSave();
-  saveDestaquesAPI();
+
+  /* reflete no banco local antes de qualquer releitura */
+  try{ if(typeof syncDestaquesToLocal==='function') syncDestaquesToLocal(); }catch(e){}
+
   renderAdmDestaques();
   renderDestaques();
   toast('Removido.');
+
+  /* grava no servidor; so libera a sincronizacao depois */
+  Promise.resolve(saveDestaquesAPI()).then(function(){
+    try{ if(typeof syncDestaquesToLocal==='function') syncDestaquesToLocal(); }catch(e){}
+    setTimeout(function(){ window.__destBloqueio = 0; }, 1500);
+  }).catch(function(){ window.__destBloqueio = 0; });
 }
 
 /* ============================================================
@@ -8217,6 +8241,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   }
   function syncDestaquesFromLocal(){
     try{
+      /* acabou de remover algo: nao sobrescreve o estado atual */
+      if(window.__destBloqueio && Date.now() < window.__destBloqueio) return;
       var arr=Array.isArray(DB.destaques)?DB.destaques:[];
       var payload=arr.find(function(x){return x && (x.id==='destaques_gwa_anchor'||x.type===DEST_API_TYPE);});
       if(payload) applyDestState(payload);
