@@ -12169,16 +12169,23 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var o=document.getElementById('gwaFestaOv'); if(o){ o.style.transition='opacity .22s'; o.style.opacity='0'; setTimeout(function(){ if(o&&o.parentNode) o.parentNode.removeChild(o); },230); } };
 
   function cbEquipe(){ var per=perAtual(); var dados=resumoCashback(per,false);
-    var totEnv=0,totCon=0,totVal=0; dados.forEach(function(d){ totEnv+=d.enviados; totCon+=d.concluidos; totVal+=d.total; });
+    var totEnv=0,totCon=0,totVal=0,totSem=0,totPend=0;
+    dados.forEach(function(d){ totEnv+=d.enviados; totCon+=d.concluidos; totVal+=d.total; totSem+=(d.semData||0); totPend+=(d.pendentes||0); });
     var pctG=totEnv?(totCon/totEnv*100):0;
     var cards='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
       gauge('Enviados', totEnv/Math.max(1,totEnv), String(totEnv), Co.blue)+
       gauge('% Elogio', pctG/100, pctG.toFixed(1)+'%', Co.green)+
       gauge('Elogios', totCon/Math.max(1,totEnv||1), String(totCon), Co.orangeL)+
       '<div style="flex:1 1 200px;min-width:200px;background:linear-gradient(160deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px;display:flex;flex-direction:column;justify-content:center;text-align:center"><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px">Total a pagar</div><div style="font-size:30px;font-weight:900;color:'+Co.orangeL+';margin-top:6px">'+moedaBR(totVal)+'</div><div style="font-size:11px;color:'+Co.mut+';margin-top:3px">'+dados.length+' consultor(es)</div></div></div>';
-    var rows=dados.map(function(d){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:10px;color:#fff;font-weight:600">'+esc(d.consultor)+'</td><td style="padding:10px">'+d.enviados+'</td><td style="padding:10px;color:'+Co.green+';font-weight:700">'+d.concluidos+'</td><td style="padding:10px">'+(d.pendentes||0)+'</td><td style="padding:10px">'+d.pct.toFixed(1)+'%</td><td style="padding:10px">'+moedaBR(d.valorUnit)+'</td><td style="padding:10px;color:'+Co.orangeL+';font-weight:800">'+moedaBR(d.total)+'</td></tr>'; }).join('')||'<tr><td colspan="7" style="padding:22px;text-align:center;color:'+Co.mut+'">Sem elogios neste período.</td></tr>';
-    var tab='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden;margin-bottom:16px"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Consultor</th><th style="padding:10px">Enviados</th><th style="padding:10px">Verificados</th><th style="padding:10px">Aguardando</th><th style="padding:10px">% Elogio</th><th style="padding:10px">Valor unit.</th><th style="padding:10px">Premiação</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'"><td style="padding:10px;color:#fff;font-weight:800">TOTAL</td><td style="padding:10px;font-weight:700">'+totEnv+'</td><td style="padding:10px;font-weight:700;color:'+Co.green+'">'+totCon+'</td><td style="padding:10px"></td><td style="padding:10px;font-weight:700">'+pctG.toFixed(1)+'%</td><td style="padding:10px"></td><td style="padding:10px;color:'+Co.orangeL+';font-weight:900">'+moedaBR(totVal)+'</td></tr></tfoot></table></div></div>';
-    var acoes='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"><button onclick="__gwaCbRelatorio()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:12px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-file-pdf"></i> Baixar relatório</button><button onclick="__gwaCbCsv()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.green+';border-radius:12px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-file-csv"></i> Exportar CSV</button><button onclick="__gwaCbSolicitar()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:11px 20px;font-weight:700;cursor:pointer"><i class="fas fa-paper-plane"></i> Solicitar pagamento ao financeiro</button></div>';
+    var rows=dados.map(function(d){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:10px;color:#fff;font-weight:600">'+esc(d.consultor)+'</td><td style="padding:10px;color:'+Co.orangeL+';font-weight:700">'+((d.semData||0)+d.enviados)+'</td><td style="padding:10px;color:'+((d.semData||0)?Co.orangeL:Co.mut)+'">'+(d.semData||0)+'</td><td style="padding:10px">'+d.enviados+'</td><td style="padding:10px;color:'+Co.green+';font-weight:700">'+d.concluidos+'</td><td style="padding:10px">'+(d.pendentes||0)+'</td><td style="padding:10px">'+d.pct.toFixed(1)+'%</td><td style="padding:10px">'+moedaBR(d.valorUnit)+'</td><td style="padding:10px;color:'+Co.orangeL+';font-weight:800">'+moedaBR(d.total)+'</td></tr>'; }).join('')||'<tr><td colspan="7" style="padding:22px;text-align:center;color:'+Co.mut+'">Sem elogios neste período.</td></tr>';
+    var tab='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden;margin-bottom:16px"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Consultor</th><th style="padding:10px" title="Tudo que o operador pediu no mes">Solicitados</th><th style="padding:10px" title="Pedidos que ainda esperam a data do elogio">Sem data</th><th style="padding:10px">Enviados</th><th style="padding:10px">Verificados</th><th style="padding:10px">Aguardando</th><th style="padding:10px">% Elogio</th><th style="padding:10px">Valor unit.</th><th style="padding:10px">Premiação</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'"><td style="padding:10px;color:#fff;font-weight:800">TOTAL</td><td style="padding:10px;font-weight:700;color:'+Co.orangeL+'">'+(totSem+totEnv)+'</td><td style="padding:10px;font-weight:700">'+totSem+'</td><td style="padding:10px;font-weight:700">'+totEnv+'</td><td style="padding:10px;font-weight:700;color:'+Co.green+'">'+totCon+'</td><td style="padding:10px">'+totPend+'</td><td style="padding:10px;font-weight:700">'+pctG.toFixed(1)+'%</td><td style="padding:10px"></td><td style="padding:10px;color:'+Co.orangeL+';font-weight:900">'+moedaBR(totVal)+'</td></tr></tfoot></table></div></div>';
+    var legenda='<div style="background:'+Co.card2+';border:1px dashed '+Co.line+';border-radius:12px;padding:11px 15px;margin-bottom:14px;font-size:12px;color:'+Co.mut+';line-height:1.7">'+
+      '<b style="color:'+Co.orangeL+'">Solicitados</b>: tudo que o operador pediu no mes &middot; '+
+      '<b>Sem data</b>: ainda esperam o cliente publicar &middot; '+
+      '<b>Enviados</b>: ja foram para a verificacao &middot; '+
+      '<b style="color:'+Co.green+'">Verificados</b>: viraram elogio e contam na premiacao &middot; '+
+      '<b>Aguardando</b>: enviados que o supervisor ainda nao conferiu.</div>';
+    var acoes=legenda+'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"><button onclick="__gwaCbRelatorio()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:12px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-file-pdf"></i> Baixar relatório</button><button onclick="__gwaCbCsv()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.green+';border-radius:12px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-file-csv"></i> Exportar CSV</button><button onclick="__gwaCbSolicitar()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:11px 20px;font-weight:700;cursor:pointer"><i class="fas fa-paper-plane"></i> Solicitar pagamento ao financeiro</button></div>';
     return cards+acoes+tab+tabelaFaixas(null); }
 
   function cbValidar(){ if(!(ehAdminDoc()||ehSupervisor())) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito.</div>';
@@ -12456,7 +12463,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Nome do cliente *</label><input id="dcf_nome" value="'+esc(ed?ed.nome:'')+'" style="'+inpStyle()+'"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">CPF</label><input id="dcf_cpf" value="'+esc(ed?ed.cpf:'')+'" style="'+inpStyle()+'"></div>'+
-      '<div><label style="font-size:12px;color:'+Co.sub+'">Data</label><input id="dcf_data" value="'+esc((ed&&!ed._pre)?(ed.data||''):hojeBR())+'" placeholder="dd/mm/aaaa" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Data</label><input id="dcf_data" value="'+esc((ed&&!ed._pre&&ed.data)?ed.data:hojeBR())+'" readonly title="Fixada no dia do lancamento" style="'+inpStyle()+';opacity:.75;cursor:not-allowed"></div>'+
       consBox+'</div>'+
       '<div style="margin-top:16px;padding-top:14px;border-top:1px solid '+Co.line+'"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px"><i class="fas fa-building-columns" style="color:'+Co.orange+'"></i> Orgao de destino</div>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">'+
@@ -12476,7 +12483,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var ed=_editId?(regs('defesa').filter(function(x){return x.id===_editId;})[0]||null):null;
     if(ed && !podeEditar(ed)){ alert('Sem permissao.'); return; }
     var obj=ed?ed:{ id:'defesa_'+loginU(curU())+'_'+Date.now().toString(36), ts:Date.now(), origem:'manual' };
-    obj.nome=nome; obj.cpf=g('dcf_cpf'); obj.data=g('dcf_data'); obj.objeto=g('dcf_objeto');
+    obj.nome=nome; obj.cpf=g('dcf_cpf'); obj.objeto=g('dcf_objeto');
+    obj.data = ed ? (ed.data || g('dcf_data') || hojeBR()) : hojeBR();   /* travada no dia do lancamento */
     obj.uf=g('defUf'); obj.municipio=g('defMun'); obj.tipoEnvio=g('defEnvio');
     if(o){ obj.orgaoId=o.id; obj.orgao=o.orgao; obj.orgaoEndereco=enderecoCompleto(o)||o.endereco||''; obj.orgaoCep=o.cep||''; obj.orgaoLinkOnline=o.linkOnline||''; }
     obj.defesas=defs; obj.tipoDefesa=defs.map(function(d){return d.tipo;}).filter(Boolean).join(' + ');
@@ -12641,22 +12649,26 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var per=ref.getFullYear()+'-'+String(ref.getMonth()+1).padStart(2,'0');
     var dados=resumoCashback(per,ehAdminDoc());
     if(!dados.length) return '<div class="box"><b>Premiação DOC — '+esc(perLabel(per))+'</b><p style="font-size:12px;color:#666;margin:8px 0 0">Nenhum elogio no período.</p></div>';
-    var totEn=0,totCon=0,totVal=0;
-    dados.forEach(function(d){ totEn+=d.enviados; totCon+=d.concluidos; totVal+=d.total; });
+    var totEn=0,totCon=0,totVal=0,totSem=0;
+    dados.forEach(function(d){ totEn+=d.enviados; totCon+=d.concluidos; totVal+=d.total; totSem+=(d.semData||0); });
     var linhas=dados.map(function(d){ return '<tr><td>'+esc(d.consultor)+'</td>'+
+      '<td style="text-align:center">'+((d.semData||0)+d.enviados)+'</td>'+
+      '<td style="text-align:center">'+(d.semData||0)+'</td>'+
       '<td style="text-align:center">'+d.enviados+'</td><td style="text-align:center">'+d.concluidos+'</td>'+
       '<td style="text-align:center">'+((d.pct||0).toFixed(1))+'%</td>'+
       '<td style="text-align:right">'+moedaBR(d.valorUnit)+'</td><td style="text-align:right">'+moedaBR(d.total)+'</td></tr>'; }).join('');
     var fx=cbCfg().faixas.slice().sort(function(a,b){return a.de-b.de;}).map(function(f){
       return '<tr><td style="text-align:center">'+f.de+'</td><td style="text-align:center">'+f.ate+'</td><td style="text-align:right">'+moedaBR(f.valor)+'</td></tr>'; }).join('');
     return '<div class="box" style="page-break-before:always"><b>Premiação DOC — '+esc(cbCfg().campanha)+' · '+esc(perLabel(per))+'</b>'+
-      '<div class="row"><span>Elogios enviados</span><span><b>'+totEn+'</b></span></div>'+
+      '<div class="row"><span>Solicitacoes feitas no mes</span><span><b>'+(totSem+totEn)+'</b></span></div>'+
+      '<div class="row"><span>&nbsp;&nbsp;&bull; ainda sem a data do elogio</span><span>'+totSem+'</span></div>'+
+      '<div class="row"><span>Elogios enviados para verificacao</span><span><b>'+totEn+'</b></span></div>'+
       '<div class="row"><span>Verificados pelo supervisor</span><span><b>'+totCon+'</b></span></div>'+
       '<div class="row"><span>% de conversão</span><span>'+(totEn?(totCon/totEn*100).toFixed(1):'0.0')+'%</span></div>'+
       '<div class="row"><span><b>Total a pagar</b></span><span><b>'+moedaBR(totVal)+'</b></span></div>'+
-      '<table><thead><tr><th>Consultor</th><th style="text-align:center">Enviados</th><th style="text-align:center">Verificados</th><th style="text-align:center">% Elogio</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Premiação</th></tr></thead>'+
+      '<table><thead><tr><th>Consultor</th><th style="text-align:center">Solicitados</th><th style="text-align:center">Sem data</th><th style="text-align:center">Enviados</th><th style="text-align:center">Verificados</th><th style="text-align:center">% Elogio</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Premiação</th></tr></thead>'+
       '<tbody>'+linhas+'</tbody>'+
-      '<tfoot><tr><td>TOTAL</td><td style="text-align:center">'+totEn+'</td><td style="text-align:center">'+totCon+'</td><td></td><td></td><td style="text-align:right">'+moedaBR(totVal)+'</td></tr></tfoot></table>'+
+      '<tfoot><tr><td>TOTAL</td><td style="text-align:center">'+(totSem+totEn)+'</td><td style="text-align:center">'+totSem+'</td><td style="text-align:center">'+totEn+'</td><td style="text-align:center">'+totCon+'</td><td></td><td></td><td style="text-align:right">'+moedaBR(totVal)+'</td></tr></tfoot></table>'+
       '<div style="margin-top:12px"><b>Faixas da campanha</b>'+
       '<table><thead><tr><th style="text-align:center">De</th><th style="text-align:center">Até</th><th style="text-align:right">Valor por elogio</th></tr></thead><tbody>'+fx+'</tbody></table></div>'+
       '<p style="margin-top:18px;font-size:12px">Assinatura do responsável pela premiação: ____________________________________</p></div>'; }
@@ -12782,7 +12794,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Nome do cliente *</label><input id="dcf_nome" value="'+esc(ed?ed.nome:'')+'" style="'+inpStyle()+'"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Link do elogio (opcional)</label><input id="dcf_link" value="'+esc(ed?ed.link:'')+'" placeholder="cole aqui, se tiver" style="'+inpStyle()+'"></div>'+
-      '<div><label style="font-size:12px;color:'+Co.sub+'">Data da solicitação</label><input id="dcf_data" value="'+esc(dataV)+'" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Data da solicitação</label><input id="dcf_data" value="'+esc(dataV)+'" readonly title="Fixada no dia do lancamento" style="'+inpStyle()+';opacity:.75;cursor:not-allowed"></div>'+
       '<div><label style="font-size:12px;color:'+Co.orangeL+';font-weight:700">Data do elogio (2ª data)</label><input type="date" id="dcf_dataelogio" value="'+esc(deV)+'" style="'+inpStyle()+'"><div style="font-size:11px;color:'+Co.mut+';margin-top:3px">deixe em branco se o cliente ainda não publicou</div></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Plataforma</label>'+campoBloqueado(ELOGIO_PLATAFORMA)+'</div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Mês</label>'+campoBloqueado(mesV)+'</div>'+
@@ -12794,7 +12806,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var ed=_editId?(regs('elogio').filter(function(x){return x.id===_editId;})[0]||null):null;
     if(ed && !podeEditar(ed)){ alert('Sem permissão.'); return; }
     var obj=ed?ed:{ id:'elogio_'+loginU(curU())+'_'+Date.now().toString(36), ts:Date.now(), origem:'manual' };
-    obj.nome=nome; obj.link=g('dcf_link'); obj.data=g('dcf_data')||hojeBR();
+    obj.nome=nome; obj.link=g('dcf_link');
+    obj.data = ed ? (ed.data || hojeBR()) : hojeBR();                     /* travada no dia do pedido */
     obj.plataforma=ELOGIO_PLATAFORMA; obj.mes=ed?(ed.mes||mesAtualNome()):mesAtualNome();
     var deRaw=g('dcf_dataelogio'), deD=deRaw?parseData(deRaw):null;
     if(deD && !obj.link){ alert('Para enviar o elogio a verificacao e preciso informar o LINK do elogio.'); return; }
@@ -12832,7 +12845,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div><label style="font-size:12px;color:'+Co.sub+'">CPF</label><input id="dcf_cpf" value="'+esc(ed?ed.cpf:'')+'" style="'+inpStyle()+'"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Município da CNH</label><div style="display:flex;gap:6px"><input id="dcf_municipioCnh" value="'+esc(ed?(ed.municipioCnh||ed._municipio||''):'')+'" placeholder="clique em buscar" style="'+inpStyle()+'"><button onclick="__gwaCidadeAbrir(&#39;dcf_municipioCnh&#39;)" title="Buscar município" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:0 14px;cursor:pointer"><i class="fas fa-magnifying-glass"></i></button></div></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">DocsOK / Pasta</label><select id="dcf_docsOkPasta" style="'+inpStyle()+'"><option value="">- selecione -</option>'+pastaOpts+'</select></div>'+
-      '<div><label style="font-size:12px;color:'+Co.sub+'">Data do contrato</label><input id="dcf_dataContrato" type="date" value="'+esc((ed&&!ed._pre)?ed.dataContrato:hojeISO())+'" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Data do contrato</label><input id="dcf_dataContrato" type="date" value="'+esc((ed&&!ed._pre&&ed.dataContrato)?ed.dataContrato:hojeISO())+'" readonly title="Fixada no dia do lancamento" style="'+inpStyle()+';opacity:.75;cursor:not-allowed"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Concluído em</label><input id="dcf_concluidoEm" type="date" value="'+esc(ed?ed.concluidoEm:'')+'" style="'+inpStyle()+'"></div>'+
       selConsultor(ed)+'</div>'+
       '<div style="margin-top:16px;padding-top:14px;border-top:1px solid '+Co.line+'"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px"><i class="fas fa-list-check" style="color:'+Co.orange+'"></i> Serviços contratados</div><div id="svcLista">'+svcHtml()+'</div></div>'+
@@ -12844,7 +12857,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(ed && !podeEditar(ed)){ alert('Sem permissão.'); return; }
     var obj=ed?ed:{ id:'doc_'+loginU(curU())+'_'+Date.now().toString(36), ts:Date.now(), origem:'manual' };
     obj.nome=nome; obj.cpf=g('dcf_cpf'); obj.municipioCnh=g('dcf_municipioCnh'); obj.docsOkPasta=g('dcf_docsOkPasta');
-    obj.dataContrato=g('dcf_dataContrato'); obj.concluidoEm=g('dcf_concluidoEm');
+    obj.dataContrato = ed ? (ed.dataContrato || g('dcf_dataContrato') || hojeISO()) : hojeISO();  /* travada no dia do lancamento */
+    obj.concluidoEm=g('dcf_concluidoEm');
     obj.servicos=svc; obj.servicoContratado=svc.join(' + ');
     baseSalvar(obj,ed);
     var r=await fetch(base()+'/api/doc_doc/'+encodeURIComponent(obj.id),{method:'PUT',headers:H(),body:JSON.stringify(obj)});
