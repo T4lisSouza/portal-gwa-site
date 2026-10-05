@@ -11994,7 +11994,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     lista.forEach(function(r){ if(!elogioAguardandoData(r)) return; if(mesSolic(r)!==per) return;
       var c=consultorDe(r); if(!m[c]) m[c]={consultor:c,enviados:0,concluidos:0,pendentes:0,semData:0}; m[c].semData=(m[c].semData||0)+1; });
     return Object.keys(m).map(function(k){ var o=m[k]; var f=faixaDe(o.concluidos); o.valorUnit=Number(f.valor)||0; o.total=o.concluidos*o.valorUnit; o.faixa=f;
-      o.pct=o.enviados?(o.concluidos/o.enviados*100):0; return o; }).sort(function(a,b){return b.total-a.total;}); }
+      /* solicitados = tudo que o operador pediu no mes (com ou sem a data do elogio) */
+      o.solicitados=(o.semData||0)+o.enviados;
+      o.andamento=Math.max(0,o.solicitados-o.concluidos);
+      o.pct=o.solicitados?(o.concluidos/o.solicitados*100):0;
+      return o; }).sort(function(a,b){return b.total-a.total;}); }
   function moedaBR(n){ n=Number(n)||0; try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }catch(e){ return 'R$ '+n.toFixed(2); } }
   function gauge(titulo,pct,texto,cor){ pct=Math.max(0,Math.min(1,pct||0)); var ang=-90+pct*180; var arc=220;
     return '<div style="flex:1 1 150px;min-width:150px;text-align:center;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:14px"><svg viewBox="0 0 180 112" style="width:100%;max-width:190px"><path d="M20 90 A70 70 0 0 1 160 90" fill="none" stroke="'+Co.card2+'" stroke-width="14" stroke-linecap="round"/><path d="M20 90 A70 70 0 0 1 160 90" fill="none" stroke="'+(cor||Co.orange)+'" stroke-width="14" stroke-linecap="round" stroke-dasharray="'+(pct*arc).toFixed(1)+' '+arc+'"/><line x1="90" y1="90" x2="90" y2="32" stroke="#fff" stroke-width="3.5" stroke-linecap="round" transform="rotate('+ang.toFixed(1)+' 90 90)"/><circle cx="90" cy="90" r="7" fill="'+(cor||Co.orange)+'"/></svg><div style="font-size:24px;font-weight:900;color:#fff;margin-top:-8px">'+texto+'</div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px;margin-top:2px">'+esc(titulo)+'</div></div>'; }
@@ -12020,11 +12024,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return nav+corpo; }
 
   function cbMeu(){ var per=perAtual(); var meuNome=canonConsultor((curU()||{}).nome||loginU(curU()));
-    var tudo=resumoCashback(per,true); var eu=tudo.filter(function(x){ return mesmoConsultor(x.consultor,meuNome); })[0]||{consultor:meuNome,enviados:0,concluidos:0,pendentes:0,valorUnit:0,total:0,pct:0,faixa:faixaDe(0)};
+    var tudo=resumoCashback(per,true); var eu=tudo.filter(function(x){ return mesmoConsultor(x.consultor,meuNome); })[0]||{consultor:meuNome,enviados:0,solicitados:0,andamento:0,concluidos:0,pendentes:0,valorUnit:0,total:0,pct:0,faixa:faixaDe(0)};
     var prox=proxFaixa(eu.concluidos); var faltam=prox?Math.max(0,Number(prox.de)-eu.concluidos):0;
     var metaVis=prox?Number(prox.de):Math.max(1,eu.concluidos);
     var cards='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
-      gauge('Enviados', eu.enviados/Math.max(1,Math.max(eu.enviados,50)), String(eu.enviados), Co.blue)+
+      gauge('Solicitados', (eu.solicitados||0)/Math.max(1,Math.max(eu.solicitados||0,50)), String(eu.solicitados||0), Co.blue)+
       gauge('% de elogios', eu.pct/100, eu.pct.toFixed(1)+'%', Co.green)+
       gauge('Verificados', eu.concluidos/Math.max(1,metaVis), String(eu.concluidos), Co.orangeL)+
       '<div style="flex:1 1 200px;min-width:200px;background:linear-gradient(160deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px;display:flex;flex-direction:column;justify-content:center;text-align:center"><div style="font-size:34px">🏆</div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;margin-top:4px">Minha premiação</div><div style="font-size:30px;font-weight:900;color:'+Co.orangeL+';margin-top:4px">'+moedaBR(eu.total)+'</div><div style="font-size:11px;color:'+Co.mut+';margin-top:3px">'+eu.concluidos+' x '+moedaBR(eu.valorUnit)+'</div></div></div>';
@@ -12169,22 +12173,21 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var o=document.getElementById('gwaFestaOv'); if(o){ o.style.transition='opacity .22s'; o.style.opacity='0'; setTimeout(function(){ if(o&&o.parentNode) o.parentNode.removeChild(o); },230); } };
 
   function cbEquipe(){ var per=perAtual(); var dados=resumoCashback(per,false);
-    var totEnv=0,totCon=0,totVal=0,totSem=0,totPend=0;
-    dados.forEach(function(d){ totEnv+=d.enviados; totCon+=d.concluidos; totVal+=d.total; totSem+=(d.semData||0); totPend+=(d.pendentes||0); });
-    var pctG=totEnv?(totCon/totEnv*100):0;
+    var totSol=0,totCon=0,totVal=0;
+    dados.forEach(function(d){ totSol+=d.solicitados; totCon+=d.concluidos; totVal+=d.total; });
+    var pctG=totSol?(totCon/totSol*100):0;
     var cards='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
-      gauge('Enviados', totEnv/Math.max(1,totEnv), String(totEnv), Co.blue)+
+      gauge('Solicitados', 1, String(totSol), Co.blue)+
       gauge('% Elogio', pctG/100, pctG.toFixed(1)+'%', Co.green)+
-      gauge('Elogios', totCon/Math.max(1,totEnv||1), String(totCon), Co.orangeL)+
+      gauge('Verificados', totCon/Math.max(1,totSol||1), String(totCon), Co.orangeL)+
       '<div style="flex:1 1 200px;min-width:200px;background:linear-gradient(160deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px;display:flex;flex-direction:column;justify-content:center;text-align:center"><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px">Total a pagar</div><div style="font-size:30px;font-weight:900;color:'+Co.orangeL+';margin-top:6px">'+moedaBR(totVal)+'</div><div style="font-size:11px;color:'+Co.mut+';margin-top:3px">'+dados.length+' consultor(es)</div></div></div>';
-    var rows=dados.map(function(d){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:10px;color:#fff;font-weight:600">'+esc(d.consultor)+'</td><td style="padding:10px;color:'+Co.orangeL+';font-weight:700">'+((d.semData||0)+d.enviados)+'</td><td style="padding:10px;color:'+((d.semData||0)?Co.orangeL:Co.mut)+'">'+(d.semData||0)+'</td><td style="padding:10px">'+d.enviados+'</td><td style="padding:10px;color:'+Co.green+';font-weight:700">'+d.concluidos+'</td><td style="padding:10px">'+(d.pendentes||0)+'</td><td style="padding:10px">'+d.pct.toFixed(1)+'%</td><td style="padding:10px">'+moedaBR(d.valorUnit)+'</td><td style="padding:10px;color:'+Co.orangeL+';font-weight:800">'+moedaBR(d.total)+'</td></tr>'; }).join('')||'<tr><td colspan="7" style="padding:22px;text-align:center;color:'+Co.mut+'">Sem elogios neste período.</td></tr>';
-    var tab='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden;margin-bottom:16px"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Consultor</th><th style="padding:10px" title="Tudo que o operador pediu no mes">Solicitados</th><th style="padding:10px" title="Pedidos que ainda esperam a data do elogio">Sem data</th><th style="padding:10px">Enviados</th><th style="padding:10px">Verificados</th><th style="padding:10px">Aguardando</th><th style="padding:10px">% Elogio</th><th style="padding:10px">Valor unit.</th><th style="padding:10px">Premiação</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'"><td style="padding:10px;color:#fff;font-weight:800">TOTAL</td><td style="padding:10px;font-weight:700;color:'+Co.orangeL+'">'+(totSem+totEnv)+'</td><td style="padding:10px;font-weight:700">'+totSem+'</td><td style="padding:10px;font-weight:700">'+totEnv+'</td><td style="padding:10px;font-weight:700;color:'+Co.green+'">'+totCon+'</td><td style="padding:10px">'+totPend+'</td><td style="padding:10px;font-weight:700">'+pctG.toFixed(1)+'%</td><td style="padding:10px"></td><td style="padding:10px;color:'+Co.orangeL+';font-weight:900">'+moedaBR(totVal)+'</td></tr></tfoot></table></div></div>';
+    var rows=dados.map(function(d){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:10px;color:#fff;font-weight:600">'+esc(d.consultor)+'</td><td style="padding:10px;color:'+Co.orangeL+';font-weight:700">'+d.solicitados+'</td><td style="padding:10px;color:'+(d.andamento?Co.orangeL:Co.mut)+'">'+d.andamento+'</td><td style="padding:10px;color:'+Co.green+';font-weight:700">'+d.concluidos+'</td><td style="padding:10px">'+d.pct.toFixed(1)+'%</td><td style="padding:10px">'+moedaBR(d.valorUnit)+'</td><td style="padding:10px;color:'+Co.orangeL+';font-weight:800">'+moedaBR(d.total)+'</td></tr>'; }).join('')||'<tr><td colspan="7" style="padding:22px;text-align:center;color:'+Co.mut+'">Sem elogios neste período.</td></tr>';
+    var tab='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden;margin-bottom:16px"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Consultor</th><th style="padding:10px" title="Tudo que o operador pediu no mes">Solicitados</th><th style="padding:10px" title="Ainda nao viraram elogio">Em andamento</th><th style="padding:10px" title="Viraram elogio e contam na premiacao">Verificados</th><th style="padding:10px">% Elogio</th><th style="padding:10px">Valor unit.</th><th style="padding:10px">Premiação</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'"><td style="padding:10px;color:#fff;font-weight:800">TOTAL</td><td style="padding:10px;font-weight:700;color:'+Co.orangeL+'">'+totSol+'</td><td style="padding:10px;font-weight:700">'+(totSol-totCon)+'</td><td style="padding:10px;font-weight:700;color:'+Co.green+'">'+totCon+'</td><td style="padding:10px;font-weight:700">'+pctG.toFixed(1)+'%</td><td style="padding:10px"></td><td style="padding:10px;color:'+Co.orangeL+';font-weight:900">'+moedaBR(totVal)+'</td></tr></tfoot></table></div></div>';
     var legenda='<div style="background:'+Co.card2+';border:1px dashed '+Co.line+';border-radius:12px;padding:11px 15px;margin-bottom:14px;font-size:12px;color:'+Co.mut+';line-height:1.7">'+
       '<b style="color:'+Co.orangeL+'">Solicitados</b>: tudo que o operador pediu no mes &middot; '+
-      '<b>Sem data</b>: ainda esperam o cliente publicar &middot; '+
-      '<b>Enviados</b>: ja foram para a verificacao &middot; '+
-      '<b style="color:'+Co.green+'">Verificados</b>: viraram elogio e contam na premiacao &middot; '+
-      '<b>Aguardando</b>: enviados que o supervisor ainda nao conferiu.</div>';
+      '<b>Em andamento</b>: ainda nao viraram elogio (esperando o cliente publicar ou a conferencia do supervisor) &middot; '+
+      '<b style="color:'+Co.green+'">Verificados</b>: viraram elogio e contam na premiacao. '+
+      'Solicitados = Em andamento + Verificados.</div>';
     var acoes=legenda+'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"><button onclick="__gwaCbRelatorio()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:12px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-file-pdf"></i> Baixar relatório</button><button onclick="__gwaCbCsv()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.green+';border-radius:12px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-file-csv"></i> Exportar CSV</button><button onclick="__gwaCbSolicitar()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:11px 20px;font-weight:700;cursor:pointer"><i class="fas fa-paper-plane"></i> Solicitar pagamento ao financeiro</button></div>';
     return cards+acoes+tab+tabelaFaixas(null); }
 
@@ -12234,23 +12237,24 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(!confirm('Solicitar ao financeiro o pagamento de '+moedaBR(tot)+' ('+dados.length+' consultor(es), '+totEl+' elogios) referente a '+perLabel(per)+'?')) return;
     var s={ id:'cb_'+per+'_'+loginU(curU())+'_'+Date.now().toString(36), periodo:per, ts:Date.now(), status:'solicitada',
       solicitadoPor:loginU(curU()), solicitadoNome:(curU()||{}).nome||loginU(curU()), campanha:cbCfg().campanha,
-      totalElogios:totEl, valorTotal:tot, itens:dados.map(function(d){ return {consultor:d.consultor,enviados:d.enviados,concluidos:d.concluidos,valorUnit:d.valorUnit,total:d.total}; }) };
+      totalElogios:totEl, valorTotal:tot, itens:dados.map(function(d){ return {consultor:d.consultor,solicitados:(d.solicitados!==undefined?d.solicitados:d.enviados),enviados:d.enviados,concluidos:d.concluidos,valorUnit:d.valorUnit,total:d.total}; }) };
     try{ var r=await fetch(base()+'/api/doc_cashback',{method:'POST',headers:H(),body:JSON.stringify(s)}); if(r.ok){ _cbSols.unshift(s); _cbSolsOk=true; alert('Solicitação enviada ao financeiro!'); _cbView='pagamentos'; render(); } else alert('Falha ao solicitar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
   window.__gwaCbCsv=function(){ var per=perAtual(); var dados=resumoCashback(per,false);
-    var l=[['Consultor','Enviados','Verificados','% Elogio','Valor unitario','Premiacao'].join(';')];
-    dados.forEach(function(d){ l.push([d.consultor,d.enviados,d.concluidos,d.pct.toFixed(1).replace('.',',')+'%',String(d.valorUnit.toFixed(2)).replace('.',','),String(d.total.toFixed(2)).replace('.',',')].join(';')); });
+    var l=[['Consultor','Solicitados','Verificados','% Elogio','Valor unitario','Premiacao'].join(';')];
+    dados.forEach(function(d){ l.push([d.consultor,(d.solicitados!==undefined?d.solicitados:d.enviados),d.concluidos,d.pct.toFixed(1).replace('.',',')+'%',String(d.valorUnit.toFixed(2)).replace('.',','),String(d.total.toFixed(2)).replace('.',',')].join(';')); });
     var tot=dados.reduce(function(a,d){return a+d.total;},0); l.push(['TOTAL','','','','',String(tot.toFixed(2)).replace('.',',')].join(';'));
     var blob=new Blob(['﻿'+l.join('\r\n')],{type:'text/csv;charset=utf-8'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='premiacao_doc_'+per+'.csv'; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },1200); };
   window.__gwaCbRelatorio=function(solId){ var per=perAtual(), dados, titulo, extra='';
     if(solId){ var s=_cbSols.filter(function(x){return x.id===solId;})[0]; if(!s) return; per=s.periodo; dados=s.itens.map(function(i){ return Object.assign({pct:i.enviados?(i.concluidos/i.enviados*100):0},i); }); titulo=cbCfg().campanha; extra='<div class="row"><span><b>Status</b></span><span>'+(s.status==='paga'?'Paga':(s.status==='confirmada'?'Confirmada':'Aguardando financeiro'))+'</span></div><div class="row"><span><b>Solicitante</b></span><span>'+esc(s.solicitadoNome||'')+'</span></div>'; }
     else { dados=resumoCashback(per,false); titulo=cbCfg().campanha; extra='<div class="row"><span><b>Emitido por</b></span><span>'+esc((curU()||{}).nome||loginU(curU()))+'</span></div>'; }
-    var tot=dados.reduce(function(a,d){return a+d.total;},0); var totEl=dados.reduce(function(a,d){return a+d.concluidos;},0); var totEn=dados.reduce(function(a,d){return a+d.enviados;},0);
-    var linhas=dados.map(function(d){ return '<tr><td>'+esc(d.consultor)+'</td><td style="text-align:center">'+d.enviados+'</td><td style="text-align:center">'+d.concluidos+'</td><td style="text-align:center">'+(d.pct||0).toFixed(1)+'%</td><td style="text-align:right">'+moedaBR(d.valorUnit)+'</td><td style="text-align:right"><b>'+moedaBR(d.total)+'</b></td></tr>'; }).join('');
+    var tot=dados.reduce(function(a,d){return a+d.total;},0); var totEl=dados.reduce(function(a,d){return a+d.concluidos;},0); var totEn=dados.reduce(function(a,d){return a+(d.solicitados!==undefined?d.solicitados:d.enviados);},0);
+    var linhas=dados.map(function(d){ var _sol=(d.solicitados!==undefined?d.solicitados:d.enviados);
+      return '<tr><td>'+esc(d.consultor)+'</td><td style="text-align:center">'+_sol+'</td><td style="text-align:center">'+Math.max(0,_sol-d.concluidos)+'</td><td style="text-align:center">'+d.concluidos+'</td><td style="text-align:center">'+(d.pct||0).toFixed(1)+'%</td><td style="text-align:right">'+moedaBR(d.valorUnit)+'</td><td style="text-align:right"><b>'+moedaBR(d.total)+'</b></td></tr>'; }).join('');
     var fx=cbCfg().faixas.slice().sort(function(a,b){return a.de-b.de;}).map(function(f){ return '<tr><td style="text-align:center">'+f.de+'</td><td style="text-align:center">'+f.ate+'</td><td style="text-align:right">'+moedaBR(f.valor)+'</td></tr>'; }).join('');
     var html='<!doctype html><html><head><meta charset="utf-8"><title>Premiação DOC '+perLabel(per)+'</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:30px}h1{color:#c4661a;font-size:20px;margin:0 0 4px}.sub{color:#666;font-size:12px}.hd{display:flex;align-items:center;gap:14px;border-bottom:3px solid #c4661a;padding-bottom:12px}.box{border:1px solid #e0e0e0;border-radius:10px;padding:14px;margin-top:16px}.row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid #f0f0f0}table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}th,td{border-bottom:1px solid #eee;padding:7px}th{background:#f7f7f7;text-align:left}.tot{font-size:20px;font-weight:800;color:#c4661a}</style></head><body>'+
       '<div class="hd"><img src="'+GWA_LOGO_PDF+'" style="height:52px"><div><h1>RELATÓRIO DE PREMIAÇÃO DOC — '+esc(titulo)+'</h1><div class="sub">GWA Consultoria · Documentação · Período '+perLabel(per)+' · emitido em '+new Date().toLocaleDateString('pt-BR')+'</div></div></div>'+
-      '<div class="box"><div class="row"><span><b>Total de elogios enviados</b></span><span>'+totEn+'</span></div><div class="row"><span><b>Elogios verificados</b></span><span>'+totEl+'</span></div><div class="row"><span><b>% de conversão</b></span><span>'+(totEn?(totEl/totEn*100).toFixed(1):'0.0')+'%</span></div>'+extra+'<div class="row"><span class="tot">TOTAL A PAGAR</span><span class="tot">'+moedaBR(tot)+'</span></div></div>'+
-      '<div class="box"><b>Detalhamento por consultor</b><table><thead><tr><th>Consultor</th><th style="text-align:center">Enviados</th><th style="text-align:center">Verificados</th><th style="text-align:center">% Elogio</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Premiação</th></tr></thead><tbody>'+linhas+'<tr><td colspan="5" style="text-align:right"><b>TOTAL</b></td><td style="text-align:right"><b>'+moedaBR(tot)+'</b></td></tr></tbody></table></div>'+
+      '<div class="box"><div class="row"><span><b>Total solicitado no mes</b></span><span>'+totEn+'</span></div><div class="row"><span><b>Em andamento</b></span><span>'+Math.max(0,totEn-totEl)+'</span></div><div class="row"><span><b>Verificados (viraram elogio)</b></span><span>'+totEl+'</span></div><div class="row"><span><b>% de conversão</b></span><span>'+(totEn?(totEl/totEn*100).toFixed(1):'0.0')+'%</span></div>'+extra+'<div class="row"><span class="tot">TOTAL A PAGAR</span><span class="tot">'+moedaBR(tot)+'</span></div></div>'+
+      '<div class="box"><b>Detalhamento por consultor</b><table><thead><tr><th>Consultor</th><th style="text-align:center">Solicitados</th><th style="text-align:center">Em andamento</th><th style="text-align:center">Verificados</th><th style="text-align:center">% Elogio</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Premiação</th></tr></thead><tbody>'+linhas+'<tr><td colspan="5" style="text-align:right"><b>TOTAL</b></td><td style="text-align:right"><b>'+moedaBR(tot)+'</b></td></tr></tbody></table></div>'+
       '<div class="box"><b>Faixas da campanha</b><table><thead><tr><th style="text-align:center">De</th><th style="text-align:center">Até</th><th style="text-align:right">Valor por elogio</th></tr></thead><tbody>'+fx+'</tbody></table></div>'+
       '<p style="margin-top:26px;font-size:12px">Assinatura do responsável: ____________________________________</p>'+
       '<p style="text-align:center;color:#999;font-size:11px;margin-top:18px">Documento gerado pela Intranet GWA para solicitação de pagamento ao Financeiro.</p>'+
@@ -12649,26 +12653,25 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var per=ref.getFullYear()+'-'+String(ref.getMonth()+1).padStart(2,'0');
     var dados=resumoCashback(per,ehAdminDoc());
     if(!dados.length) return '<div class="box"><b>Premiação DOC — '+esc(perLabel(per))+'</b><p style="font-size:12px;color:#666;margin:8px 0 0">Nenhum elogio no período.</p></div>';
-    var totEn=0,totCon=0,totVal=0,totSem=0;
-    dados.forEach(function(d){ totEn+=d.enviados; totCon+=d.concluidos; totVal+=d.total; totSem+=(d.semData||0); });
+    var totSol=0,totCon=0,totVal=0;
+    dados.forEach(function(d){ totSol+=d.solicitados; totCon+=d.concluidos; totVal+=d.total; });
     var linhas=dados.map(function(d){ return '<tr><td>'+esc(d.consultor)+'</td>'+
-      '<td style="text-align:center">'+((d.semData||0)+d.enviados)+'</td>'+
-      '<td style="text-align:center">'+(d.semData||0)+'</td>'+
-      '<td style="text-align:center">'+d.enviados+'</td><td style="text-align:center">'+d.concluidos+'</td>'+
+      '<td style="text-align:center">'+d.solicitados+'</td>'+
+      '<td style="text-align:center">'+d.andamento+'</td>'+
+      '<td style="text-align:center">'+d.concluidos+'</td>'+
       '<td style="text-align:center">'+((d.pct||0).toFixed(1))+'%</td>'+
       '<td style="text-align:right">'+moedaBR(d.valorUnit)+'</td><td style="text-align:right">'+moedaBR(d.total)+'</td></tr>'; }).join('');
     var fx=cbCfg().faixas.slice().sort(function(a,b){return a.de-b.de;}).map(function(f){
       return '<tr><td style="text-align:center">'+f.de+'</td><td style="text-align:center">'+f.ate+'</td><td style="text-align:right">'+moedaBR(f.valor)+'</td></tr>'; }).join('');
     return '<div class="box" style="page-break-before:always"><b>Premiação DOC — '+esc(cbCfg().campanha)+' · '+esc(perLabel(per))+'</b>'+
-      '<div class="row"><span>Solicitacoes feitas no mes</span><span><b>'+(totSem+totEn)+'</b></span></div>'+
-      '<div class="row"><span>&nbsp;&nbsp;&bull; ainda sem a data do elogio</span><span>'+totSem+'</span></div>'+
-      '<div class="row"><span>Elogios enviados para verificacao</span><span><b>'+totEn+'</b></span></div>'+
-      '<div class="row"><span>Verificados pelo supervisor</span><span><b>'+totCon+'</b></span></div>'+
-      '<div class="row"><span>% de conversão</span><span>'+(totEn?(totCon/totEn*100).toFixed(1):'0.0')+'%</span></div>'+
+      '<div class="row"><span>Solicitados no mes</span><span><b>'+totSol+'</b></span></div>'+
+      '<div class="row"><span>&nbsp;&nbsp;&bull; em andamento</span><span>'+(totSol-totCon)+'</span></div>'+
+      '<div class="row"><span>Verificados (viraram elogio)</span><span><b>'+totCon+'</b></span></div>'+
+      '<div class="row"><span>% de conversão</span><span>'+(totSol?(totCon/totSol*100).toFixed(1):'0.0')+'%</span></div>'+
       '<div class="row"><span><b>Total a pagar</b></span><span><b>'+moedaBR(totVal)+'</b></span></div>'+
-      '<table><thead><tr><th>Consultor</th><th style="text-align:center">Solicitados</th><th style="text-align:center">Sem data</th><th style="text-align:center">Enviados</th><th style="text-align:center">Verificados</th><th style="text-align:center">% Elogio</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Premiação</th></tr></thead>'+
+      '<table><thead><tr><th>Consultor</th><th style="text-align:center">Solicitados</th><th style="text-align:center">Em andamento</th><th style="text-align:center">Verificados</th><th style="text-align:center">% Elogio</th><th style="text-align:right">Valor unit.</th><th style="text-align:right">Premiação</th></tr></thead>'+
       '<tbody>'+linhas+'</tbody>'+
-      '<tfoot><tr><td>TOTAL</td><td style="text-align:center">'+(totSem+totEn)+'</td><td style="text-align:center">'+totSem+'</td><td style="text-align:center">'+totEn+'</td><td style="text-align:center">'+totCon+'</td><td></td><td></td><td style="text-align:right">'+moedaBR(totVal)+'</td></tr></tfoot></table>'+
+      '<tfoot><tr><td>TOTAL</td><td style="text-align:center">'+totSol+'</td><td style="text-align:center">'+(totSol-totCon)+'</td><td style="text-align:center">'+totCon+'</td><td></td><td></td><td style="text-align:right">'+moedaBR(totVal)+'</td></tr></tfoot></table>'+
       '<div style="margin-top:12px"><b>Faixas da campanha</b>'+
       '<table><thead><tr><th style="text-align:center">De</th><th style="text-align:center">Até</th><th style="text-align:right">Valor por elogio</th></tr></thead><tbody>'+fx+'</tbody></table></div>'+
       '<p style="margin-top:18px;font-size:12px">Assinatura do responsável pela premiação: ____________________________________</p></div>'; }
