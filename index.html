@@ -12824,6 +12824,17 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       if(obj.dataElogio){ __gwaDocPosSalvar(); setTimeout(function(){ festaElogio(obj); },120); }
       else { alert('Solicitacao registrada! Assim que o cliente publicar, informe a data do elogio em Premiacao DOC > Data do elogio.'); __gwaDocPosSalvar(); } } else alert('Falha ao salvar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
 
+  /* data "Recebido em" do card da planilha rotativa, pronta para o campo date */
+  function recebidoEmISO(ch){
+    try{
+      var d=dadosCli(ch)||{};
+      var nv=(typeof cardDaFila==='function')?cardDaFila(ch):null;
+      var bruto=d.recebidoEm || (nv&&(nv.ymd||nv.atribuidoEm)) || '';
+      var p=parseData(bruto);
+      if(!p) return '';
+      return p.getFullYear()+'-'+String(p.getMonth()+1).padStart(2,'0')+'-'+String(p.getDate()).padStart(2,'0');
+    }catch(e){ return ''; } }
+
   /* ---------------- DOCUMENTACAO ---------------- */
   var _svcBlocos=null;
   function svcPadrao(){ return ['']; }
@@ -12848,7 +12859,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div><label style="font-size:12px;color:'+Co.sub+'">CPF</label><input id="dcf_cpf" value="'+esc(ed?ed.cpf:'')+'" style="'+inpStyle()+'"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Município da CNH</label><div style="display:flex;gap:6px"><input id="dcf_municipioCnh" value="'+esc(ed?(ed.municipioCnh||ed._municipio||''):'')+'" placeholder="clique em buscar" style="'+inpStyle()+'"><button onclick="__gwaCidadeAbrir(&#39;dcf_municipioCnh&#39;)" title="Buscar município" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:0 14px;cursor:pointer"><i class="fas fa-magnifying-glass"></i></button></div></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">DocsOK / Pasta</label><select id="dcf_docsOkPasta" style="'+inpStyle()+'"><option value="">- selecione -</option>'+pastaOpts+'</select></div>'+
-      '<div><label style="font-size:12px;color:'+Co.sub+'">Data do contrato</label><input id="dcf_dataContrato" type="date" value="'+esc((ed&&!ed._pre&&ed.dataContrato)?ed.dataContrato:hojeISO())+'" readonly title="Fixada no dia do lancamento" style="'+inpStyle()+';opacity:.75;cursor:not-allowed"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">Data do contrato <span style="color:'+Co.mut+';font-weight:400">— vem do "Recebido em", pode alterar</span></label><input id="dcf_dataContrato" type="date" value="'+esc((ed&&!ed._pre&&ed.dataContrato)?ed.dataContrato:(recebidoEmISO(_cliAberto)||hojeISO()))+'" title="Vem do Recebido em da planilha — pode alterar" style="'+inpStyle()+'"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Concluído em</label><input id="dcf_concluidoEm" type="date" value="'+esc(ed?ed.concluidoEm:'')+'" style="'+inpStyle()+'"></div>'+
       selConsultor(ed)+'</div>'+
       '<div style="margin-top:16px;padding-top:14px;border-top:1px solid '+Co.line+'"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px"><i class="fas fa-list-check" style="color:'+Co.orange+'"></i> Serviços contratados</div><div id="svcLista">'+svcHtml()+'</div></div>'+
@@ -12860,7 +12871,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(ed && !podeEditar(ed)){ alert('Sem permissão.'); return; }
     var obj=ed?ed:{ id:'doc_'+loginU(curU())+'_'+Date.now().toString(36), ts:Date.now(), origem:'manual' };
     obj.nome=nome; obj.cpf=g('dcf_cpf'); obj.municipioCnh=g('dcf_municipioCnh'); obj.docsOkPasta=g('dcf_docsOkPasta');
-    obj.dataContrato = ed ? (ed.dataContrato || g('dcf_dataContrato') || hojeISO()) : hojeISO();  /* travada no dia do lancamento */
+    obj.dataContrato = g('dcf_dataContrato') || (ed&&ed.dataContrato) || recebidoEmISO(_cliAberto) || hojeISO();
     obj.concluidoEm=g('dcf_concluidoEm');
     obj.servicos=svc; obj.servicoContratado=svc.join(' + ');
     baseSalvar(obj,ed);
