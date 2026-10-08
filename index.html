@@ -12594,6 +12594,27 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         mini('Elogios',g.eloEnv,g.eloVer+' verificado(s)',Co.orangeL)+
       '</div></div>'; }
 
+  /* mesmo quadro do relatorio, agora tambem na tela (atualiza a cada abertura) */
+  function blocoOperadores(){ var g=relGeralDados();
+    var tot=g.lista.reduce(function(a,o){ return {novos:a.novos+o.novos,comercial:a.comercial+o.comercial,negociacao:a.negociacao+o.negociacao,defesas:a.defesas+o.defesas,docs:a.docs+o.docs,eloEnv:a.eloEnv+o.eloEnv,eloVer:a.eloVer+o.eloVer}; },
+      {novos:0,comercial:0,negociacao:0,defesas:0,docs:0,eloEnv:0,eloVer:0});
+    var c=function(v,cor,peso){ return '<td style="padding:9px 10px;text-align:center;color:'+(cor||Co.sub)+';font-weight:'+(peso||600)+'">'+v+'</td>'; };
+    var th=function(t,al){ return '<th style="padding:10px;text-align:'+(al||'center')+';white-space:nowrap">'+t+'</th>'; };
+    var rows=g.lista.map(function(o){ return '<tr style="border-bottom:1px solid '+Co.line+'">'+
+      '<td style="padding:9px 10px;color:#fff;font-weight:600;white-space:nowrap">'+esc(o.quem)+'</td>'+
+      c(o.novos,Co.orangeL,800)+c(o.comercial,Co.green)+c(o.negociacao,Co.blue)+c(o.defesas,Co.green)+c(o.docs,Co.blue)+c(o.eloEnv,Co.orangeL)+c(o.eloVer)+'</tr>'; }).join('')
+      ||'<tr><td colspan="8" style="padding:22px;text-align:center;color:'+Co.mut+'">Sem movimento no periodo.</td></tr>';
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden;margin-bottom:16px">'+
+      '<div style="padding:14px 16px 10px"><div style="color:#fff;font-weight:800;font-size:15px"><i class="fas fa-users" style="color:'+Co.orange+'"></i> Detalhamento por operador</div>'+
+      '<div style="font-size:11px;color:'+Co.mut+';margin-top:2px">Mesmo quadro do relatorio &middot; periodo '+esc(g.periodo.label)+'</div></div>'+
+      '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px">'+
+      '<thead><tr style="color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'">'+
+      th('Operador','left')+th('Contratos novos')+th('Comercial')+th('Negociacao')+th('Defesas')+th('Documentacao')+th('Elogios')+th('Verificados')+'</tr></thead>'+
+      '<tbody>'+rows+'</tbody>'+
+      '<tfoot><tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'"><td style="padding:10px;color:#fff;font-weight:800">TOTAL</td>'+
+      c(tot.novos,Co.orangeL,900)+c(tot.comercial,'#fff',800)+c(tot.negociacao,'#fff',800)+c(tot.defesas,'#fff',800)+c(tot.docs,'#fff',800)+c(tot.eloEnv,'#fff',800)+c(tot.eloVer,'#fff',800)+
+      '</tr></tfoot></table></div></div>'; }
+
   function relGeralHtml(){ var g=relGeralDados();
     var rows=g.lista.map(function(o){ return '<tr><td>'+esc(o.quem)+'</td>'+
       '<td style="text-align:center">'+o.novos+'</td><td style="text-align:center">'+o.comercial+'</td><td style="text-align:center">'+o.negociacao+'</td>'+
@@ -12730,7 +12751,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var rows=linhas.map(function(o){ var tp=Object.keys(o.tipos).map(function(t){return t+' ('+o.tipos[t]+')';}).join(', ');
       return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:10px;color:#fff;font-weight:600">'+esc(o.consultor)+'</td><td style="padding:10px;color:'+Co.mut+'">'+esc(o.sup)+'</td><td style="padding:10px;color:'+Co.orangeL+';font-weight:800">'+o.total+'</td><td style="padding:10px">'+o.correio+'</td><td style="padding:10px">'+o.online+'</td><td style="padding:10px;font-size:12px">'+esc(tp||'-')+'</td></tr>'; }).join('')||'<tr><td colspan="6" style="padding:22px;text-align:center;color:'+Co.mut+'">Nenhuma defesa no filtro.</td></tr>';
     var tab='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Consultor</th><th style="padding:10px">Equipe</th><th style="padding:10px">Defesas</th><th style="padding:10px">Correio</th><th style="padding:10px">Online</th><th style="padding:10px">Tipos</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'"><td style="padding:10px;color:#fff;font-weight:800">TOTAL GERAL</td><td></td><td style="padding:10px;color:'+Co.orangeL+';font-weight:900">'+arr.length+'</td><td style="padding:10px;font-weight:700">'+totCor+'</td><td style="padding:10px;font-weight:700">'+totOn+'</td><td></td></tr></tfoot></table></div></div>';
-    return filtros+blocoRelGeral()+cards+acoes+tab; }
+    return filtros+blocoRelGeral()+blocoOperadores()+cards+acoes+tab; }
   window.__gwaRel=function(k,v){ if(k==='cons')_rCons=v; else if(k==='equipe')_rEquipe=v; else if(k==='tipos'){ _rTiposAberto=true; if(v==='__todos') _rTipos=[]; else { var _p=_rTipos.indexOf(v); if(_p>=0) _rTipos.splice(_p,1); else _rTipos.push(v); } }
     else if(k==='tiposAberto'){ _rTiposAberto=!!Number(v); return; } else if(k==='envio')_rEnvio=v; else if(k==='orgao')_rOrgao=v; else if(k==='mun')_rMun=v; else if(k==='uf')_rUf=v; else if(k==='status')_rStatus=v; else if(k==='per')_rPer=v; else if(k==='ini')_rIni=v; else if(k==='fim')_rFim=v;
     else if(k==='limpar'){ _rCons='';_rEquipe='';_rTipos=[];_rTiposAberto=false;_rEnvio='';_rOrgao='';_rMun='';_rUf='';_rStatus='';_rPer='mes';_rIni='';_rFim=''; } render(); };
