@@ -13713,5 +13713,107 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',iniciar); else iniciar();
 })();
 </script>
+<script>
+/* ===== INTRANET GWA :: FORMATO DO MENU — TOPO OU LATERAL ESQUERDA ===== */
+(function(){
+  if(window.__gwaMenuFmt) return; window.__gwaMenuFmt=true;
+
+  var LARG=236;           /* largura da barra lateral */
+  var CHAVE='gwaMenuFormato';
+
+  var css=
+  /* ---------- modo lateral ---------- */
+  'html[data-gwa-menu="lateral"] .mc-header{position:fixed !important;top:0 !important;left:0 !important;'+
+    'width:'+LARG+'px !important;height:100vh !important;border-bottom:none !important;'+
+    'border-right:1px solid var(--border) !important;box-shadow:4px 0 22px rgba(0,0,0,.35) !important;overflow:hidden}'+
+  'html[data-gwa-menu="lateral"] .mc-header__inner{flex-direction:column !important;align-items:stretch !important;'+
+    'height:100% !important;max-width:none !important;padding:18px 14px 14px !important;gap:12px !important;overflow-y:auto;overflow-x:hidden}'+
+  'html[data-gwa-menu="lateral"] .mc-header__inner::-webkit-scrollbar{width:6px}'+
+  'html[data-gwa-menu="lateral"] .mc-header__inner::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:3px}'+
+
+  'html[data-gwa-menu="lateral"] .mc-logo{justify-content:center;padding:4px 0 10px;border-bottom:1px solid var(--border)}'+
+  'html[data-gwa-menu="lateral"] .mc-header__title{padding-left:0 !important;border-left:none !important;'+
+    'text-align:center;white-space:normal !important;font-size:12px;opacity:.85;display:block !important}'+
+
+  'html[data-gwa-menu="lateral"] .mc-nav{flex-direction:column !important;align-items:stretch !important;'+
+    'margin-left:0 !important;gap:3px !important;width:100%;margin-top:4px}'+
+  'html[data-gwa-menu="lateral"] .mc-nav__item{width:100%;justify-content:flex-start;text-align:left;'+
+    'padding:10px 13px !important;border-radius:11px}'+
+
+  /* blocos da direita viram rodape da barra */
+  'html[data-gwa-menu="lateral"] #apiStatus{margin:6px 0 0 !important;text-align:center}'+
+  'html[data-gwa-menu="lateral"] #searchWrap{margin:0 !important;width:100%;order:8}'+
+  'html[data-gwa-menu="lateral"] #searchToggleBtn{width:100% !important;justify-content:flex-start;gap:9px}'+
+  'html[data-gwa-menu="lateral"] #searchToggleBtn::after{content:"Pesquisar";font-size:13px;font-weight:600}'+
+  'html[data-gwa-menu="lateral"] #searchBox{right:auto !important;left:0 !important;top:auto !important;'+
+    'bottom:48px !important;width:290px !important}'+
+  'html[data-gwa-menu="lateral"] #userMenuWrap{margin-top:auto;width:100%;order:9;padding-top:10px;border-top:1px solid var(--border)}'+
+  'html[data-gwa-menu="lateral"] #userMenuTrigger{width:100%}'+
+  'html[data-gwa-menu="lateral"] .um-menu{right:auto !important;left:0 !important;top:auto !important;bottom:52px !important}'+
+
+  /* o conteudo desloca para a direita */
+  'html[data-gwa-menu="lateral"] body{padding-left:'+LARG+'px}'+
+  'html[data-gwa-menu="lateral"] .mc-main{max-width:1180px}'+
+
+  /* em tela pequena volta a ser barra de cima */
+  '@media(max-width:900px){html[data-gwa-menu="lateral"] .mc-header{position:sticky !important;width:100% !important;'+
+    'height:auto !important;border-right:none !important;border-bottom:1px solid var(--border) !important;box-shadow:var(--shadow-md) !important}'+
+   'html[data-gwa-menu="lateral"] .mc-header__inner{flex-direction:row !important;align-items:center !important;height:68px !important;padding:0 16px !important}'+
+   'html[data-gwa-menu="lateral"] .mc-nav{flex-direction:row !important;margin-left:auto !important}'+
+   'html[data-gwa-menu="lateral"] #userMenuWrap{margin-top:0;width:auto;border-top:none;padding-top:0}'+
+   'html[data-gwa-menu="lateral"] #searchWrap{width:auto}'+
+   'html[data-gwa-menu="lateral"] #searchToggleBtn::after{content:none}'+
+   'html[data-gwa-menu="lateral"] body{padding-left:0}}'+
+
+  /* ---------- escolha no menu do usuario ---------- */
+  '.gwa-fmt-box{padding:10px 14px;border-top:1px solid rgba(0,0,0,.07)}'+
+  '.gwa-fmt-tit{font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:#9ca3af;font-weight:700;margin-bottom:7px}'+
+  '.gwa-fmt-ops{display:flex;gap:7px}'+
+  '.gwa-fmt-op{flex:1;border:1px solid #e5e7eb;border-radius:10px;padding:9px 6px;text-align:center;cursor:pointer;'+
+    'font-size:11px;font-weight:600;color:#6b7280;background:#fff;transition:all .18s}'+
+  '.gwa-fmt-op:hover{border-color:#e07820;color:#c4661a}'+
+  '.gwa-fmt-op.on{background:linear-gradient(135deg,#f0943a,#c4661a);border-color:transparent;color:#fff;box-shadow:0 3px 10px rgba(196,102,26,.3)}'+
+  '.gwa-fmt-op i{display:block;font-size:15px;margin-bottom:4px}';
+
+  var st=document.createElement('style'); st.id='gwaMenuFmtCss'; st.textContent=css;
+  (document.head||document.documentElement).appendChild(st);
+
+  function atual(){ return document.documentElement.getAttribute('data-gwa-menu')==='lateral'?'lateral':'topo'; }
+
+  window.gwaMenuFormato=function(fmt,salvar){
+    if(fmt==='lateral') document.documentElement.setAttribute('data-gwa-menu','lateral');
+    else document.documentElement.removeAttribute('data-gwa-menu');
+    if(salvar!==false){ try{ localStorage.setItem(CHAVE,fmt); }catch(e){} }
+    var box=document.getElementById('gwaFmtOps');
+    if(box){ Array.prototype.forEach.call(box.querySelectorAll('.gwa-fmt-op'),function(b){
+      b.classList.toggle('on', b.getAttribute('data-fmt')===fmt); }); }
+    try{ window.dispatchEvent(new Event('resize')); }catch(e){}
+  };
+
+  function montarOpcao(){
+    var menu=document.querySelector('.um-menu');
+    if(!menu || document.getElementById('gwaFmtOps')) return;
+    var box=document.createElement('div'); box.className='gwa-fmt-box';
+    box.innerHTML='<div class="gwa-fmt-tit"><i class="fas fa-table-columns"></i> Formato do menu</div>'+
+      '<div class="gwa-fmt-ops" id="gwaFmtOps">'+
+      '<div class="gwa-fmt-op" data-fmt="topo" onclick="event.stopPropagation();gwaMenuFormato(\'topo\')"><i class="fas fa-window-maximize"></i>No topo</div>'+
+      '<div class="gwa-fmt-op" data-fmt="lateral" onclick="event.stopPropagation();gwaMenuFormato(\'lateral\')"><i class="fas fa-table-columns"></i>Na lateral</div>'+
+      '</div>';
+    menu.appendChild(box);
+    window.gwaMenuFormato(atual(), false);
+  }
+
+  function iniciar(){
+    var salvo='topo';
+    try{ salvo=localStorage.getItem(CHAVE)||'topo'; }catch(e){}
+    window.gwaMenuFormato(salvo==='lateral'?'lateral':'topo', false);
+    montarOpcao();
+    /* o menu do usuario e montado depois do login */
+    try{ new MutationObserver(function(){ montarOpcao(); })
+      .observe(document.body,{childList:true,subtree:true}); }catch(e){}
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',iniciar); else iniciar();
+})();
+</script>
 </body>
 </html>
