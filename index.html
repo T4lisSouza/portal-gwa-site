@@ -13918,5 +13918,143 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',iniciar); else iniciar();
 })();
 </script>
+<script>
+/* ===== INTRANET GWA :: LAYOUT AMPLO — aproveita a largura da tela ===== */
+(function(){
+  if(window.__gwaAmplo) return; window.__gwaAmplo=true;
+
+  var css=
+
+  /* ---------- a area de conteudo respira ---------- */
+  '.mc-main{max-width:1560px;padding-left:32px;padding-right:32px}'+
+  'html[data-gwa-menu="lateral"] .mc-main{max-width:1720px !important;padding:34px 40px 56px}'+
+  '@media(min-width:1800px){.mc-main{max-width:1680px}'+
+    'html[data-gwa-menu="lateral"] .mc-main{max-width:1860px !important;padding-left:52px;padding-right:52px}}'+
+
+  /* ---------- carrossel de destaques: a estrela da home ---------- */
+  '.gwa-carousel{height:clamp(300px,30vw,470px) !important;border-radius:22px !important;'+
+    'box-shadow:0 18px 50px rgba(0,0,0,.5) !important}'+
+  'html[data-gwa-menu="lateral"] .gwa-carousel{height:clamp(320px,27vw,500px) !important}'+
+  '.gwa-slide img,.gwa-slide picture img{width:100%;height:100%;object-fit:cover}'+
+  '.gwa-carousel__dots{margin-top:14px}'+
+
+  /* titulo e botao de dentro do slide acompanham o tamanho novo */
+  '@media(min-width:1400px){'+
+    '.gwa-slide h3,.gwa-slide .gwa-slide__title{font-size:clamp(22px,1.6vw,32px) !important;line-height:1.25 !important}'+
+    '.gwa-slide__content,.gwa-slide>div{padding:28px 34px}'+
+  '}'+
+
+  /* ---------- hero de boas-vindas ---------- */
+  '@media(min-width:1400px){.mc-hero{padding:52px 58px !important;border-radius:30px !important}'+
+    '.mc-hero__greeting{font-size:clamp(30px,2.4vw,42px) !important}}'+
+
+  /* ---------- cartoes da home: mais altos e com respiro ---------- */
+  '.mc-cards-grid{gap:22px !important}'+
+  '@media(min-width:1300px){.mc-cards-grid{gap:24px !important}'+
+    '.mc-card{border-radius:20px !important;min-height:330px;display:flex;flex-direction:column}'+
+    '.mc-card__body,.mc-card>div:nth-child(2){flex:1}}'+
+  '@media(min-width:1800px){.mc-card{min-height:370px}}'+
+
+  /* imagem dentro dos cartoes (campanhas) maior */
+  '.mc-card img{border-radius:14px}'+
+  '@media(min-width:1300px){.mc-card img{max-height:220px !important;object-fit:cover;width:100%}}'+
+
+  /* ---------- acesso rapido: botoes maiores ---------- */
+  '@media(min-width:1300px){.mc-quick-grid,.mc-acesso-grid{gap:18px !important}'+
+    '.mc-quick-item,.mc-acesso-item{padding:20px 18px !important;border-radius:18px !important}}'+
+
+  /* ---------- barra lateral um pouco mais confortavel ---------- */
+  '@media(min-width:1600px){html[data-gwa-menu="lateral"] .mc-header{width:256px !important}'+
+    'html[data-gwa-menu="lateral"] body{padding-left:256px}}'+
+
+  /* ---------- a faixa de aviso do topo nao passa por baixo da barra ---------- */
+  'html[data-gwa-menu="lateral"] #gwaAvisoSisBarra,'+
+  'html[data-gwa-menu="lateral"] .gwa-aviso-barra,'+
+  'html[data-gwa-menu="lateral"] [id*="AvisoBarra"]{left:236px !important;width:auto !important}'+
+  '@media(min-width:1600px){html[data-gwa-menu="lateral"] #gwaAvisoSisBarra,'+
+    'html[data-gwa-menu="lateral"] .gwa-aviso-barra,'+
+    'html[data-gwa-menu="lateral"] [id*="AvisoBarra"]{left:256px !important}}'+
+
+  /* ---------- transicao suave ao trocar de formato ---------- */
+  '.mc-main{transition:max-width .25s ease,padding .25s ease}'+
+  '.gwa-carousel{transition:height .25s ease}';
+
+  var st=document.createElement('style'); st.id='gwaAmploCss'; st.textContent=css;
+  (document.head||document.documentElement).appendChild(st);
+})();
+</script>
+<script>
+/* ===== INTRANET GWA :: A PRIMEIRA TELA E SEMPRE A HOME ===== */
+(function(){
+  if(window.__gwaHomeInicial) return; window.__gwaHomeInicial=true;
+
+  var interagiu=false;      /* se a pessoa ja clicou em algo, nao mexemos mais */
+  var ateQuando=Date.now()+12000;   /* janela de garantia apos abrir a intranet */
+
+  /* qualquer clique em menu/aba conta como interacao */
+  document.addEventListener('click', function(e){
+    var el=e.target&&e.target.closest?e.target.closest('.mc-nav__item,.um-item,.mc-logo,[onclick*="goTab"]'):null;
+    if(el) interagiu=true;
+  }, true);
+
+  function fecharPaineis(){
+    ['gwaDocOverlay','gwaVendasOverlay','gwaCustosOverlay','gwaPremOv','gwaMonOv'].forEach(function(id){
+      var o=document.getElementById(id);
+      if(o && o.style && o.style.display && o.style.display!=='none') o.style.display='none';
+    });
+  }
+
+  function irParaHome(){
+    try{
+      var home=document.getElementById('tab-home');
+      if(!home) return false;
+
+      /* ja esta na home? nao faz nada */
+      if(home.classList.contains('active')){ fecharPaineis(); return true; }
+
+      document.querySelectorAll('.mc-tab').forEach(function(t){ t.classList.remove('active'); });
+      document.querySelectorAll('.mc-nav__item').forEach(function(n){ n.classList.remove('active'); });
+      home.classList.add('active');
+
+      var item=document.querySelector('.mc-nav__item[onclick*="\'home\'"]') ||
+               document.querySelector('.mc-nav__item');
+      if(item) item.classList.add('active');
+
+      if(typeof renderHome==='function'){ try{ renderHome(); }catch(e){} }
+      fecharPaineis();
+      window.scrollTo(0,0);
+      return true;
+    }catch(e){ return false; }
+  }
+
+  function garantir(){
+    if(interagiu || Date.now()>ateQuando) return;
+    irParaHome();
+  }
+
+  /* 1. assim que a pagina monta */
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',garantir);
+  else garantir();
+
+  /* 2. durante a inicializacao (login, carga da API, render dos modulos) */
+  [120, 400, 900, 1800, 3000, 5000].forEach(function(ms){ setTimeout(garantir, ms); });
+
+  /* 3. quando o login termina — o menu do usuario aparece nesse momento */
+  try{
+    var obs=new MutationObserver(function(){
+      var w=document.getElementById('userMenuWrap');
+      if(w && getComputedStyle(w).display!=='none'){
+        setTimeout(garantir, 60);
+        setTimeout(function(){ obs.disconnect(); }, 4000);
+      }
+    });
+    obs.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class']});
+    setTimeout(function(){ try{ obs.disconnect(); }catch(e){} }, 12000);
+  }catch(e){}
+
+  /* para usar no console, se precisar */
+  window.gwaVoltarParaHome=function(){ interagiu=false; irParaHome(); interagiu=true; };
+})();
+</script>
 </body>
 </html>
