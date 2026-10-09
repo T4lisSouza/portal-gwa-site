@@ -14056,5 +14056,493 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   window.gwaVoltarParaHome=function(){ interagiu=false; irParaHome(); interagiu=true; };
 })();
 </script>
+<script>
+/* ===== INTRANET GWA :: ACABAMENTO VISUAL DOS PAINEIS (Vendas e Documentacao) =====
+   Só aparência: nenhuma função, cálculo ou texto é alterado aqui.
+   Funciona nos dois temas — as cores vêm de variáveis trocadas no tema claro. */
+(function(){
+  if(window.__gwaVisual) return; window.__gwaVisual=true;
+
+  var OV=['#gwaDocOverlay','#gwaVendasOverlay','#gwaCustosOverlay','#gwaPremOv'];
+  function sel(suf){ return OV.map(function(o){ return o+' '+suf; }).join(','); }
+  /* prefixa o tema em TODOS os seletores — antes so o primeiro recebia */
+  function selT(tema,suf){ return OV.map(function(o){ return 'html[data-gwa-tema="'+tema+'"] '+o+' '+suf; }).join(','); }
+
+  /* cor do numero -> [hex, rgb, hex no tema claro] */
+  var CORES=[
+    ['#3fae5a','63,174,90',  '47,140,70'],
+    ['#4a9fd5','74,159,213', '47,127,176'],
+    ['#f0943a','240,148,58', '196,102,26'],
+    ['#e07820','224,120,32', '186,95,20'],
+    ['#e5533c','229,83,60',  '198,62,42'],
+    ['#c8c8c8','200,200,200','90,97,106'],
+    ['#fff','224,120,32',    '31,36,43'],
+    ['#ffffff','224,120,32', '31,36,43']
+  ];
+
+  var css='';
+
+  /* ====================================================================
+     0. PALETA POR TEMA  (é isso que faz o claro deixar de ser um bloco branco)
+     ==================================================================== */
+  css+=':root{'+
+    '--gwaC1:#262626;--gwaC2:#181818;'+          /* cartao: topo e base do gradiente */
+    '--gwaBorda:rgba(255,255,255,.11);'+
+    '--gwaBordaForte:rgba(255,255,255,.14);'+
+    '--gwaSombra:0 14px 34px rgba(0,0,0,.4);'+
+    '--gwaSombraLeve:0 2px 10px rgba(0,0,0,.22);'+
+    '--gwaTexto:#ffffff;--gwaSub:#c8c8c8;--gwaMut:#7e838c;'+
+    '--gwaBrilho:rgba(255,255,255,.14);'+
+    '--gwaHero1:#2a2017;--gwaHero2:#151515;--gwaHeroGlow:rgba(224,120,32,.22);'+
+    '--gwaFundo1:#202020;--gwaFundo2:#161616;'+
+    '--gwaZebra:rgba(255,255,255,.025);--gwaHover:rgba(255,255,255,.04);'+
+    '--gwaTrilho:rgba(255,255,255,.055)}';
+
+  css+='html[data-gwa-tema="claro"]{'+
+    '--gwaC1:#ffffff;--gwaC2:#f7f9fc;'+
+    '--gwaBorda:rgba(17,24,39,.085);'+
+    '--gwaBordaForte:rgba(17,24,39,.16);'+
+    '--gwaSombra:0 12px 30px rgba(16,24,40,.10);'+
+    '--gwaSombraLeve:0 1px 2px rgba(16,24,40,.05),0 6px 18px rgba(16,24,40,.05);'+
+    '--gwaTexto:#1f242b;--gwaSub:#4b525c;--gwaMut:#828a96;'+
+    '--gwaBrilho:rgba(17,24,39,.07);'+
+    '--gwaHero1:#fff7ee;--gwaHero2:#ffffff;--gwaHeroGlow:rgba(240,148,58,.26);'+
+    '--gwaFundo1:#ffffff;--gwaFundo2:#f8f9fb;'+
+    '--gwaZebra:rgba(17,24,39,.025);--gwaHover:rgba(17,24,39,.035);'+
+    '--gwaTrilho:rgba(17,24,39,.07)}';
+
+  /* o fundo do painel no claro deixa de ser branco chapado */
+  css+='html[data-gwa-tema="claro"] '+OV.join(',html[data-gwa-tema="claro"] ')+
+    '{background:radial-gradient(90% 60% at 100% 0%,#fdf4ea 0%,transparent 45%),'+
+    'linear-gradient(180deg,#f6f7f9 0%,#f2f4f7 100%) !important}';
+
+  /* ====================================================================
+     1. TIPOGRAFIA
+     ==================================================================== */
+  css+=sel('*')+'{font-feature-settings:"tnum" 1}';
+  css+=sel('[style*="font-weight:900"]')+','+sel('[style*="font-weight:800"]')+
+    '{font-variant-numeric:tabular-nums;letter-spacing:-1.1px !important;line-height:1.08 !important}';
+  ['800','900'].forEach(function(w){
+    css+=sel('[style*="font-weight:'+w+'"][style*="font-size:24px"]')+','+
+         sel('[style*="font-weight:'+w+'"][style*="font-size:25px"]')+','+
+         sel('[style*="font-weight:'+w+'"][style*="font-size:26px"]')+
+         '{font-size:clamp(27px,2.2vw,36px) !important;font-weight:800 !important}';
+    css+=sel('[style*="font-weight:'+w+'"][style*="font-size:20px"]')+
+         '{font-size:clamp(23px,1.8vw,30px) !important;font-weight:800 !important}';
+    css+=sel('[style*="font-weight:'+w+'"][style*="font-size:34px"]')+
+         '{font-size:clamp(34px,3vw,48px) !important;letter-spacing:-1.8px !important}';
+  });
+  css+=sel('[style*="text-transform:uppercase"]')+'{letter-spacing:1.15px !important;font-weight:700 !important}';
+  css+=sel('[style*="font-size:10px"][style*="text-transform:uppercase"]')+','+
+       sel('[style*="font-size:11px"][style*="text-transform:uppercase"]')+
+       '{color:var(--gwaMut) !important;font-size:10.5px !important}';
+
+  /* ====================================================================
+     2. CARTOES
+     ==================================================================== */
+  var CARD='{background:linear-gradient(160deg,var(--gwaC1) 0%,var(--gwaC2) 100%) !important;'+
+           'border:1px solid var(--gwaBorda) !important;border-radius:18px !important;'+
+           'position:relative;overflow:hidden;box-shadow:var(--gwaSombraLeve);'+
+           'transition:border-color .22s ease,transform .22s ease,box-shadow .22s ease}';
+  css+=sel('[style*="background:#1c1c1c"][style*="border-radius:16px"]')+','+
+       sel('[style*="background:#1c1c1c"][style*="border-radius:14px"]')+','+
+       sel('[style*="background:#1c1c1c"][style*="border-radius:18px"]')+CARD;
+  css+=sel('[style*="background:#1c1c1c"][style*="border-radius:16px"]:hover')+','+
+       sel('[style*="background:#1c1c1c"][style*="border-radius:14px"]:hover')+
+       '{transform:translateY(-3px);box-shadow:var(--gwaSombra)}';
+  css+=sel('[style*="background:#1c1c1c"][style*="border-radius:16px"]::before')+
+       '{content:"";position:absolute;top:0;left:0;right:0;height:1px;'+
+       'background:linear-gradient(90deg,transparent,var(--gwaBrilho),transparent)}';
+
+  /* barra de cor no topo + banho da cor no fundo, conforme a cor do numero */
+  CORES.forEach(function(c){
+    ['800','900'].forEach(function(w){
+      ['16px','14px'].forEach(function(r){
+        var a='[style*="border-radius:'+r+'"]:has(> [style*="color:'+c[0]+';"][style*="font-weight:'+w+'"])';
+        css+=sel(a+'::after')+
+          '{content:"";position:absolute;top:0;left:0;right:0;height:3px;'+
+          'background:linear-gradient(90deg,rgb('+c[1]+'),rgba('+c[1]+',.22));z-index:1}';
+        css+=sel(a)+
+          '{background:linear-gradient(160deg,rgba('+c[1]+',.16) 0%,var(--gwaC2) 62%) !important}';
+        css+=sel(a+':hover')+
+          '{border-color:rgba('+c[1]+',.45) !important;box-shadow:0 14px 34px rgba('+c[1]+',.14) !important}';
+        /* no claro, o numero ganha um tom mais fechado para ler bem */
+        css+=selT('claro', a+' > [style*="color:'+c[0]+';"]')+'{color:rgb('+c[2]+') !important}';
+      });
+    });
+  });
+
+  /* ====================================================================
+     3. BLOCO DE DESTAQUE E FAIXAS
+     ==================================================================== */
+  css+=sel('[style*="linear-gradient(135deg,#1c1c1c,#0d0d0d)"]')+','+
+       sel('[style*="linear-gradient(160deg,#1c1c1c,#0d0d0d)"]')+
+       '{background:radial-gradient(120% 140% at 0% 0%,var(--gwaHeroGlow) 0%,transparent 54%),'+
+       'linear-gradient(150deg,var(--gwaHero1) 0%,var(--gwaHero2) 62%) !important;'+
+       'border-color:rgba(224,120,32,.32) !important;border-radius:22px !important;'+
+       'box-shadow:var(--gwaSombra) !important}';
+  css+=sel('[style*="grid-template-columns:repeat(auto-fit,minmax(165px"]')+
+       '{background:linear-gradient(160deg,var(--gwaFundo1),var(--gwaFundo2)) !important;'+
+       'border-color:var(--gwaBorda) !important;border-radius:20px !important;padding:17px 19px !important;'+
+       'box-shadow:var(--gwaSombraLeve)}';
+
+  /* ====================================================================
+     4. ABAS
+     ==================================================================== */
+  css+=sel('.gwaTabs')+'{gap:2px !important;border-bottom:1px solid var(--gwaBorda);padding-bottom:0 !important}';
+  css+=sel('.gwaTabs > button')+
+    '{background:transparent !important;border:none !important;border-radius:0 !important;'+
+    'color:var(--gwaMut) !important;padding:11px 15px !important;font-weight:600 !important;'+
+    'position:relative;transition:color .18s ease}';
+  css+=sel('.gwaTabs > button:hover')+'{color:var(--gwaTexto) !important}';
+  css+=sel('.gwaTabs > button[style*="f0943a,#c4661a"]')+'{color:var(--gwaTexto) !important}';
+  css+=sel('.gwaTabs > button[style*="f0943a,#c4661a"]::after')+
+    '{content:"";position:absolute;left:12px;right:12px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;'+
+    'background:linear-gradient(90deg,#f0943a,#c4661a);box-shadow:0 -2px 14px rgba(224,120,32,.5)}';
+
+  /* ====================================================================
+     5. CAMPOS E BOTOES
+     ==================================================================== */
+  css+=sel('input')+','+sel('select')+','+sel('textarea')+
+       '{border-radius:12px !important;transition:border-color .18s,box-shadow .18s,background .18s}';
+  css+=sel('input:focus')+','+sel('select:focus')+','+sel('textarea:focus')+
+       '{outline:none !important;border-color:#c4661a !important;box-shadow:0 0 0 3px rgba(224,120,32,.17) !important}';
+  css+=sel('input[type="date"]')+'{color-scheme:dark}';
+  css+=selT('claro','input[type="date"]')+'{color-scheme:light}';
+  css+=sel('button[style*="f0943a,#c4661a"]')+','+sel('button[style*="e07820,#c4661a"]')+
+       '{border-radius:12px !important;box-shadow:0 5px 18px rgba(196,102,26,.3);'+
+       'transition:transform .16s,box-shadow .16s}';
+  css+=sel('button[style*="f0943a,#c4661a"]:hover')+','+sel('button[style*="e07820,#c4661a"]:hover')+
+       '{transform:translateY(-1px);box-shadow:0 9px 26px rgba(196,102,26,.45)}';
+  css+=sel('button')+'{transition:transform .16s,border-color .18s,color .18s,background .18s}';
+  css+=sel('button:active')+'{transform:scale(.97)}';
+
+  /* ====================================================================
+     6. TABELAS
+     ==================================================================== */
+  css+=sel('thead th')+'{text-transform:uppercase;letter-spacing:1px;font-size:10px !important;'+
+       'font-weight:800 !important;color:var(--gwaMut) !important;padding:14px 10px !important}';
+  css+=sel('thead tr')+'{background:var(--gwaZebra) !important;border-bottom:1px solid rgba(224,120,32,.5) !important}';
+  css+=sel('tbody tr')+'{transition:background .15s ease}';
+  css+=sel('tbody tr:hover')+'{background:var(--gwaHover)}';
+  css+=sel('tbody td')+'{font-variant-numeric:tabular-nums}';
+  css+=sel('table')+'{border-collapse:separate !important;border-spacing:0}';
+  css+=sel('tfoot tr')+'{background:rgba(224,120,32,.08) !important}';
+
+  /* ====================================================================
+     7. BARRAS E ETIQUETAS
+     ==================================================================== */
+  css+=sel('[style*="border-radius:6px"][style*="height:9px"]')+','+
+       sel('[style*="border-radius:8px"][style*="height:12px"]')+
+       '{border-radius:20px !important;overflow:hidden;background:var(--gwaTrilho) !important}';
+  css+=sel('[style*="border-radius:6px"][style*="height:9px"] > div')+','+
+       sel('[style*="border-radius:8px"][style*="height:12px"] > div')+
+       '{border-radius:20px !important;transition:width .6s cubic-bezier(.2,1,.3,1)}';
+  css+=sel('[style*="border-radius:20px"][style*="font-size:11px"]')+','+
+       sel('[style*="border-radius:20px"][style*="font-size:10px"]')+
+       '{letter-spacing:.35px;font-weight:700}';
+
+  /* ====================================================================
+     8. CABECALHO E RESPIRO
+     ==================================================================== */
+  css+='#gwaDocHead,#gwaVendasHead,#gwaCustosHead,#gwaPremHead'+
+       '{backdrop-filter:blur(12px);border-bottom-width:1px !important;'+
+       'border-bottom-color:var(--gwaBorda) !important;'+
+       'box-shadow:0 1px 0 rgba(224,120,32,.42),0 8px 28px rgba(0,0,0,.28) !important}';
+  css+='html[data-gwa-tema="claro"] #gwaDocHead,html[data-gwa-tema="claro"] #gwaVendasHead,'+
+       'html[data-gwa-tema="claro"] #gwaCustosHead,html[data-gwa-tema="claro"] #gwaPremHead'+
+       '{background:rgba(255,255,255,.88) !important;'+
+       'box-shadow:0 1px 0 rgba(224,120,32,.5),0 6px 22px rgba(16,24,40,.07) !important}';
+  css+='#gwaDocBody,#gwaVendasBody,#gwaCustosBody,#gwaPremBody{padding-top:28px !important}';
+  css+='@media(min-width:1500px){#gwaDocBody{max-width:1480px !important}'+
+       '#gwaVendasBody,#gwaCustosBody{max-width:1420px !important}}';
+  /* ====================================================================
+     9. ESCALA DE TEXTO — o corpo dos paineis estava miudo
+     ==================================================================== */
+  var CORPO=['#gwaDocBody','#gwaVendasBody','#gwaCustosBody','#gwaPremBody'];
+  function corpo(suf){ return CORPO.map(function(o){ return o+' '+suf; }).join(','); }
+
+  css+=corpo('[style*="font-size:10px"]')+'{font-size:11px !important}';
+  css+=corpo('[style*="font-size:11px"]')+'{font-size:12.5px !important}';
+  css+=corpo('[style*="font-size:12px"]')+'{font-size:13.5px !important}';
+  css+=corpo('[style*="font-size:12.5px"]')+'{font-size:13.5px !important}';
+  css+=corpo('[style*="font-size:13px"]')+'{font-size:14px !important}';
+  css+=corpo('[style*="font-size:14px"]')+'{font-size:15px !important}';
+  css+=corpo('[style*="font-size:15px"]')+'{font-size:16px !important}';
+  /* rotulo de indicador fica so um pouco maior, para nao competir com o numero */
+  css+=corpo('[style*="text-transform:uppercase"][style*="font-size:10px"]')+','+
+       corpo('[style*="text-transform:uppercase"][style*="font-size:11px"]')+
+       '{font-size:11px !important}';
+  /* titulos de secao */
+  css+=corpo('h3')+'{font-size:17px !important}';
+  css+=corpo('h4')+'{font-size:15px !important}';
+  /* tabelas acompanham */
+  css+=corpo('table')+'{font-size:13.5px !important}';
+  css+=corpo('tbody td')+'{padding-top:11px !important;padding-bottom:11px !important}';
+  /* em telas grandes, mais um degrau */
+  css+='@media(min-width:1500px){'+
+    corpo('[style*="font-size:11px"]')+'{font-size:13px !important}'+
+    corpo('[style*="font-size:12px"]')+'{font-size:14px !important}'+
+    corpo('[style*="font-size:13px"]')+'{font-size:14.5px !important}'+
+    corpo('table')+'{font-size:14px !important}}';
+
+  css+=sel('h3')+'{letter-spacing:-.3px}';
+  css+=sel('h4')+'{letter-spacing:-.2px}';
+
+  var st=document.createElement('style'); st.id='gwaVisualCss'; st.textContent=css;
+  (document.head||document.documentElement).appendChild(st);
+})();
+</script>
+<script>
+/* ===== INTRANET GWA :: MENU LATERAL NOS PAINEIS (Vendas, Documentacao, Custos, Premiacoes) ===== */
+(function(){
+  if(window.__gwaPainelLat) return; window.__gwaPainelLat=true;
+
+  var L=240, LG=262;
+  var CHAVE='gwaPainelFormato';
+  var COL='intranet_config', ID='painel_menu_formato';
+  var _regra={travado:false,formato:'topo'};
+
+  var PAINEIS=[
+    {ov:'gwaDocOverlay',    head:'gwaDocHead',    body:'gwaDocBody',    close:'__gwaDocClose'},
+    {ov:'gwaVendasOverlay', head:'gwaVendasHead', body:'gwaVendasBody', close:'__gwaVendasClose'},
+    {ov:'gwaCustosOverlay', head:'gwaCustosHead', body:'gwaCustosBody', close:'__gwaCustosClose'},
+    {ov:'gwaPremOv',        head:'gwaPremHead',   body:'gwaPremBody',   close:'__gwaPremClose'}
+  ];
+  var R='html[data-gwa-paineis="lateral"] ';
+  function lista(prop,suf){ return PAINEIS.map(function(p){ return R+'#'+p[prop]+(suf||''); }).join(','); }
+
+  var css=
+  /* o painel vira duas colunas */
+  lista('ov')+'{flex-direction:row !important;overflow:hidden !important}'+
+
+  lista('head')+'{position:relative !important;top:auto !important;'+
+    'width:'+L+'px !important;min-width:'+L+'px !important;height:100vh !important;'+
+    'flex-direction:column !important;align-items:stretch !important;justify-content:flex-start !important;'+
+    'padding:20px 14px 16px !important;gap:13px !important;'+
+    'overflow-y:auto !important;overflow-x:hidden !important;'+
+    'border-bottom:none !important;border-right:1px solid rgba(255,255,255,.08) !important;'+
+    'box-shadow:1px 0 0 rgba(224,120,32,.35),8px 0 30px rgba(0,0,0,.45) !important}'+
+  lista('head','::-webkit-scrollbar')+'{width:6px}'+
+  lista('head','::-webkit-scrollbar-thumb')+'{background:rgba(255,255,255,.14);border-radius:3px}'+
+
+  /* identificacao no alto da barra */
+  PAINEIS.map(function(p){ return R+'#'+p.head+' > div:first-child'; }).join(',')+
+    '{flex-direction:column !important;align-items:center !important;text-align:center;'+
+    'gap:10px !important;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08)}'+
+  lista('head',' img')+'{height:38px !important;max-width:150px !important}'+
+
+  /* abas empilhadas, com o sublinhado virando marca a esquerda */
+  lista('head',' .gwaTabs')+'{flex-direction:column !important;flex-wrap:nowrap !important;'+
+    'align-items:stretch !important;width:100% !important;gap:2px !important;'+
+    'overflow:visible !important;border-bottom:none !important}'+
+  lista('head',' .gwaTabs > button')+'{width:100% !important;text-align:left !important;'+
+    'justify-content:flex-start !important;padding:11px 14px !important;border-radius:11px !important;'+
+    'font-size:13px !important;white-space:normal !important;line-height:1.35}'+
+  lista('head',' .gwaTabs > button[style*="f0943a,#c4661a"]')+'{background:rgba(224,120,32,.14) !important;color:#fff !important}'+
+  lista('head',' .gwaTabs > button[style*="f0943a,#c4661a"]::after')+'{left:0 !important;right:auto !important;'+
+    'top:9px !important;bottom:9px !important;width:3px !important;height:auto !important;border-radius:0 3px 3px 0 !important}'+
+
+  /* seletor de tipo e acoes acompanham a largura */
+  lista('head',' select')+'{width:100% !important}'+
+
+  /* fechar vai para o rodape da barra */
+  PAINEIS.map(function(p){ return R+'#'+p.head+' > button[onclick*="'+p.close+'"]'; }).join(',')+
+    '{margin-top:auto !important;width:100% !important;border-radius:11px !important}'+
+
+  /* corpo ocupa o resto e rola sozinho */
+  lista('body')+'{height:100vh !important;overflow-y:auto !important;max-width:none !important;'+
+    'margin:0 !important;padding:28px 34px 52px !important;flex:1 !important}'+
+  '@media(min-width:1600px){'+lista('head')+'{width:'+LG+'px !important;min-width:'+LG+'px !important}'+
+    lista('body')+'{padding:32px 48px 60px !important}}'+
+
+  /* tela estreita: volta a ser barra de cima */
+  '@media(max-width:768px){'+lista('ov')+'{flex-direction:column !important;overflow:auto !important}'+
+    lista('head')+'{position:sticky !important;top:0 !important;width:100% !important;min-width:0 !important;'+
+      'height:auto !important;flex-direction:row !important;flex-wrap:wrap !important;'+
+      'border-right:none !important;padding:10px 12px !important}'+
+    lista('head',' .gwaTabs')+'{flex-direction:row !important;overflow-x:auto !important}'+
+    lista('head',' .gwaTabs > button')+'{width:auto !important}'+
+    PAINEIS.map(function(p){ return R+'#'+p.head+' > button[onclick*="'+p.close+'"]'; }).join(',')+
+      '{margin-top:0 !important;width:38px !important}'+
+    lista('body')+'{height:auto !important;padding:14px 12px 40px !important}}'+
+
+  /* botoes do cabecalho */
+  '.gwaPnlBtn{width:38px;height:38px;border-radius:10px;cursor:pointer;display:inline-flex;'+
+    'align-items:center;justify-content:center;font-size:14px;border:1px solid rgba(255,255,255,.07);'+
+    'background:#242424;color:#c8c8c8;flex-shrink:0;'+
+    'transition:transform .18s,color .18s,border-color .18s,background .18s}'+
+  '.gwaPnlBtn:hover{transform:translateY(-1px);color:#f0943a;border-color:#c4661a}'+
+  '.gwaPnlBtn.ligado{background:linear-gradient(135deg,#f0943a,#c4661a);color:#fff;border-color:transparent}'+
+  '.gwaPnlBtn.bloq{opacity:.4;cursor:not-allowed}'+
+  '.gwaPnlBtn.cadeado.on{background:#2f8c46;color:#fff;border-color:transparent}'+
+  R+'.gwaPnlBtn{width:100% !important;border-radius:11px;justify-content:flex-start;gap:10px;padding:0 14px}'+
+  R+'.gwaPnlBtn::after{font-size:12.5px;font-weight:600;white-space:nowrap}'+
+  R+'.gwaPnlBtn.formato::after{content:"Menu no topo"}'+
+  R+'.gwaPnlBtn.cadeado::after{content:"Aplicar p/ todos"}'+
+  R+'.gwaPnlBtn.cadeado.on::after{content:"Travado p/ todos"}';
+
+  var st=document.createElement('style'); st.id='gwaPainelLatCss'; st.textContent=css;
+  (document.head||document.documentElement).appendChild(st);
+
+  function lateral(){ return document.documentElement.getAttribute('data-gwa-paineis')==='lateral'; }
+
+  function ehMaster(){
+    try{
+      var u=window.currentUser||(typeof getSession==='function'?getSession():null)||{};
+      return String(u.role||'').toLowerCase()==='master' ||
+             String(u.login||u.user||'').toUpperCase()==='TALIS';
+    }catch(e){ return false; } }
+
+  function api(){ return (typeof API_URL!=='undefined'?API_URL:'')+'/api/'+COL; }
+  function hdr(){ return {'Content-Type':'application/json','X-MC-Token':(typeof API_TOKEN!=='undefined'?API_TOKEN:'')}; }
+
+  window.gwaPainelFormato=function(fmt,salvar){
+    if(_regra.travado && salvar!==false && !ehMaster()){
+      alert('O formato do menu dos paineis foi definido pelo Master.'); return; }
+    if(fmt==='lateral') document.documentElement.setAttribute('data-gwa-paineis','lateral');
+    else document.documentElement.removeAttribute('data-gwa-paineis');
+    if(salvar!==false){ try{ localStorage.setItem(CHAVE,fmt); }catch(e){} }
+    pintar();
+  };
+
+  async function salvarRegra(travado,formato){
+    var corpo={id:ID,type:'painel_menu_formato',travado:!!travado,formato:formato,
+      porQuem:((window.currentUser||{}).login||''),em:Date.now()};
+    try{
+      var r=await fetch(api()+'/'+ID,{method:'PUT',headers:hdr(),body:JSON.stringify(corpo)});
+      if(!r.ok) r=await fetch(api(),{method:'POST',headers:hdr(),body:JSON.stringify(corpo)});
+      return r.ok;
+    }catch(e){ return false; } }
+
+  window.gwaPainelAplicarTodos=async function(){
+    if(!ehMaster()){ alert('Apenas o Master pode definir o formato para todos.'); return; }
+    if(_regra.travado){
+      if(!confirm('Liberar para cada pessoa escolher o formato do menu dos paineis?')) return;
+      _regra.travado=false;
+      var ok1=await salvarRegra(false,_regra.formato);
+      alert(ok1?'Liberado. Cada um escolhe o seu.':'Nao consegui salvar no servidor.');
+    } else {
+      var fmt=lateral()?'lateral':'topo';
+      if(!confirm('Aplicar o menu '+(fmt==='lateral'?'NA LATERAL':'NO TOPO')+' em Vendas e Documentacao para toda a equipe e travar?')) return;
+      _regra.travado=true; _regra.formato=fmt;
+      var ok2=await salvarRegra(true,fmt);
+      alert(ok2?('Aplicado para todos: menu '+(fmt==='lateral'?'na lateral':'no topo')+'.')
+               :'Nao consegui salvar no servidor.');
+    }
+    pintar();
+  };
+
+  async function carregarRegra(){
+    try{
+      var r=await fetch(api(),{headers:hdr()});
+      if(r.ok){ var j=await r.json();
+        var it=((j&&j.data)||[]).filter(function(x){ return x && x.id===ID; })[0];
+        if(it) _regra={travado:it.travado===true, formato:(it.formato==='lateral'?'lateral':'topo')}; }
+    }catch(e){}
+    var fmt=_regra.travado?_regra.formato
+      :(function(){ try{ return localStorage.getItem(CHAVE)||'topo'; }catch(e){ return 'topo'; } })();
+    window.gwaPainelFormato(fmt==='lateral'?'lateral':'topo', false);
+  }
+
+  function pintar(){
+    var lat=lateral(), trav=_regra.travado, master=ehMaster();
+    document.querySelectorAll('.gwaPnlBtn.formato').forEach(function(b){
+      b.innerHTML='<i class="fas fa-'+(lat?'window-maximize':'table-columns')+'"></i>';
+      b.title=lat?'Colocar o menu no topo':'Colocar o menu na lateral';
+      b.classList.toggle('ligado', lat);
+      b.classList.toggle('bloq', trav && !master); });
+    document.querySelectorAll('.gwaPnlBtn.cadeado').forEach(function(c){
+      c.classList.toggle('on', trav);
+      c.innerHTML='<i class="fas fa-'+(trav?'lock':'lock-open')+'"></i>';
+      c.title=trav?'Travado para todos — clique para liberar'
+                  :'Aplicar este formato para toda a equipe e travar'; });
+  }
+
+  function montar(){
+    var mudou=false;
+    PAINEIS.forEach(function(p){
+      var head=document.getElementById(p.head);
+      if(!head || head.querySelector('.gwaPnlBtn')) return;
+
+      var fechar=head.querySelector('button[onclick*="'+p.close+'"]');
+
+      var b=document.createElement('button');
+      b.type='button'; b.className='gwaPnlBtn formato';
+      b.onclick=function(e){ e.stopPropagation(); window.gwaPainelFormato(lateral()?'topo':'lateral'); };
+
+      var c=null;
+      if(ehMaster()){
+        c=document.createElement('button');
+        c.type='button'; c.className='gwaPnlBtn cadeado';
+        c.onclick=function(e){ e.stopPropagation(); window.gwaPainelAplicarTodos(); };
+      }
+
+      if(fechar && fechar.parentNode){
+        fechar.parentNode.insertBefore(b, fechar);
+        if(c) fechar.parentNode.insertBefore(c, fechar);
+      } else { head.appendChild(b); if(c) head.appendChild(c); }
+      mudou=true;
+    });
+    if(mudou) pintar();
+  }
+
+  var t=null;
+  function agendar(){ if(t) clearTimeout(t); t=setTimeout(montar,70); }
+
+  function iniciar(){
+    carregarRegra(); agendar();
+    try{ new MutationObserver(agendar).observe(document.body,{childList:true,subtree:true}); }catch(e){}
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',iniciar); else iniciar();
+})();
+</script>
+<script>
+/* ===== INTRANET GWA :: RODAPE DOS PAINEIS ===== */
+(function(){
+  if(window.__gwaRodape) return; window.__gwaRodape=true;
+
+  var CORPOS=['gwaDocBody','gwaVendasBody','gwaCustosBody','gwaPremBody'];
+
+  var css=
+  '.gwaRodape{margin:44px 0 6px;padding:20px 0 6px;text-align:center;'+
+    'border-top:1px solid var(--gwaBorda,rgba(255,255,255,.09))}'+
+  '.gwaRodape__linha{width:56px;height:3px;border-radius:3px;margin:0 auto 14px;'+
+    'background:linear-gradient(90deg,#f0943a,#c4661a)}'+
+  '.gwaRodape__txt{font-size:12.5px;color:var(--gwaMut,#7e838c);letter-spacing:.4px}'+
+  '.gwaRodape__nome{color:#f0943a;font-weight:800;letter-spacing:.2px}'+
+  'html[data-gwa-tema="claro"] .gwaRodape__nome{color:#c4661a}'+
+  '.gwaRodape__sub{font-size:11px;color:var(--gwaMut,#7e838c);opacity:.72;margin-top:5px}';
+
+  var st=document.createElement('style'); st.id='gwaRodapeCss'; st.textContent=css;
+  (document.head||document.documentElement).appendChild(st);
+
+  function montar(){
+    CORPOS.forEach(function(id){
+      var body=document.getElementById(id);
+      if(!body) return;
+      var atual=body.querySelector(':scope > .gwaRodape');
+      if(atual && atual===body.lastElementChild) return;   /* ja esta no fim */
+      if(atual) atual.remove();
+
+      var r=document.createElement('div');
+      r.className='gwaRodape';
+      r.innerHTML='<div class="gwaRodape__linha"></div>'+
+        '<div class="gwaRodape__txt">Desenvolvido por <span class="gwaRodape__nome">Talis Souza</span></div>'+
+        '<div class="gwaRodape__sub">GWA Consultoria &middot; Intranet</div>';
+      body.appendChild(r);
+    });
+  }
+
+  var t=null;
+  function agendar(){ if(t) clearTimeout(t); t=setTimeout(montar,120); }
+
+  function iniciar(){
+    agendar();
+    try{ new MutationObserver(agendar).observe(document.body,{childList:true,subtree:true}); }catch(e){}
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',iniciar); else iniciar();
+})();
+</script>
 </body>
 </html>
