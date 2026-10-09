@@ -13749,14 +13749,14 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     'bottom:48px !important;width:290px !important}'+
   'html[data-gwa-menu="lateral"] #userMenuWrap{margin-top:auto;width:100%;order:9;padding-top:10px;border-top:1px solid var(--border)}'+
   'html[data-gwa-menu="lateral"] #userMenuTrigger{width:100%}'+
-  'html[data-gwa-menu="lateral"] .um-menu{right:auto !important;left:0 !important;top:auto !important;bottom:52px !important}'+
+  'html[data-gwa-menu="lateral"] #userMenuDropdown,html[data-gwa-menu="lateral"] .um-menu{right:auto !important;left:0 !important;top:auto !important;bottom:52px !important}'+
 
   /* o conteudo desloca para a direita */
   'html[data-gwa-menu="lateral"] body{padding-left:'+LARG+'px}'+
   'html[data-gwa-menu="lateral"] .mc-main{max-width:1180px}'+
 
   /* em tela pequena volta a ser barra de cima */
-  '@media(max-width:900px){html[data-gwa-menu="lateral"] .mc-header{position:sticky !important;width:100% !important;'+
+  '@media(max-width:768px){html[data-gwa-menu="lateral"] .mc-header{position:sticky !important;width:100% !important;'+
     'height:auto !important;border-right:none !important;border-bottom:1px solid var(--border) !important;box-shadow:var(--shadow-md) !important}'+
    'html[data-gwa-menu="lateral"] .mc-header__inner{flex-direction:row !important;align-items:center !important;height:68px !important;padding:0 16px !important}'+
    'html[data-gwa-menu="lateral"] .mc-nav{flex-direction:row !important;margin-left:auto !important}'+
@@ -13773,14 +13773,77 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     'font-size:11px;font-weight:600;color:#6b7280;background:#fff;transition:all .18s}'+
   '.gwa-fmt-op:hover{border-color:#e07820;color:#c4661a}'+
   '.gwa-fmt-op.on{background:linear-gradient(135deg,#f0943a,#c4661a);border-color:transparent;color:#fff;box-shadow:0 3px 10px rgba(196,102,26,.3)}'+
-  '.gwa-fmt-op i{display:block;font-size:15px;margin-bottom:4px}';
+  '.gwa-fmt-op i{display:block;font-size:15px;margin-bottom:4px}'+
+  '.gwa-fmt-op.travado{opacity:.45;cursor:not-allowed}'+
+  '.gwa-fmt-master{margin-top:8px;width:100%;border:none;border-radius:9px;padding:8px;cursor:pointer;'+
+    'font-size:11px;font-weight:700;color:#fff;background:linear-gradient(135deg,#f0943a,#c4661a)}'+
+  '.gwa-fmt-master.solto{background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb}'+
+  '.gwa-fmt-aviso{margin-top:7px;font-size:10.5px;color:#9ca3af;line-height:1.45}';
 
   var st=document.createElement('style'); st.id='gwaMenuFmtCss'; st.textContent=css;
   (document.head||document.documentElement).appendChild(st);
 
   function atual(){ return document.documentElement.getAttribute('data-gwa-menu')==='lateral'?'lateral':'topo'; }
 
+  /* ---------- regra definida pelo Master para toda a intranet ---------- */
+  var COL_CFG='intranet_config', ID_CFG='menu_formato';
+  var _regra={travado:false,formato:'topo'};
+
+  function ehMaster(){
+    try{
+      var u=window.currentUser||(typeof getSession==='function'?getSession():null)||{};
+      var l=String(u.login||u.user||u.email||'').toUpperCase();
+      var r=String(u.role||'').toLowerCase();
+      return r==='master' || l==='TALIS';
+    }catch(e){ return false; } }
+
+  function apiCfg(){ return (typeof API_URL!=='undefined'?API_URL:'')+'/api/'+COL_CFG; }
+  function hdrCfg(){ return {'Content-Type':'application/json','X-MC-Token':(typeof API_TOKEN!=='undefined'?API_TOKEN:'')}; }
+
+  async function carregarRegra(){
+    try{
+      var r=await fetch(apiCfg(),{headers:hdrCfg()});
+      if(!r.ok) return;
+      var j=await r.json();
+      var it=((j&&j.data)||[]).filter(function(x){ return x && x.id===ID_CFG; })[0];
+      if(it){ _regra={travado:it.travado===true, formato:(it.formato==='lateral'?'lateral':'topo')}; }
+    }catch(e){}
+    if(_regra.travado){ window.gwaMenuFormato(_regra.formato,false); }
+    montarOpcao(true);
+  }
+
+  async function salvarRegra(travado,formato){
+    var corpo={id:ID_CFG,type:'menu_formato',travado:!!travado,formato:formato,
+      porQuem:((window.currentUser||{}).login||''),em:Date.now()};
+    try{
+      var r=await fetch(apiCfg()+'/'+ID_CFG,{method:'PUT',headers:hdrCfg(),body:JSON.stringify(corpo)});
+      if(!r.ok){ r=await fetch(apiCfg(),{method:'POST',headers:hdrCfg(),body:JSON.stringify(corpo)}); }
+      return r.ok;
+    }catch(e){ return false; } }
+
+  window.gwaMenuAplicarTodos=async function(){
+    if(!ehMaster()){ alert('Apenas o Master pode definir o formato para todos.'); return; }
+    if(_regra.travado){
+      if(!confirm('Liberar para cada pessoa escolher o formato do menu?')) return;
+      _regra.travado=false;
+      var ok1=await salvarRegra(false,_regra.formato);
+      alert(ok1?'Liberado. Cada um escolhe o seu formato.':'Nao consegui salvar no servidor.');
+    } else {
+      var fmt=atual();
+      if(!confirm('Aplicar o formato "'+(fmt==='lateral'?'Na lateral':'No topo')+'" para TODA a intranet e travar a escolha?\n\nNinguem mais podera trocar, so voce.')) return;
+      _regra.travado=true; _regra.formato=fmt;
+      var ok2=await salvarRegra(true,fmt);
+      alert(ok2?('Aplicado para todos. O menu agora fica '+(fmt==='lateral'?'na lateral':'no topo')+' para toda a equipe.')
+               :'Nao consegui salvar no servidor.');
+    }
+    montarOpcao(true);
+  };
+
   window.gwaMenuFormato=function(fmt,salvar){
+    /* quando o Master travou, so ele pode mudar */
+    if(_regra && _regra.travado && salvar!==false && !ehMaster()){
+      alert('O formato do menu foi definido pelo Master e esta travado.');
+      return; }
     if(fmt==='lateral') document.documentElement.setAttribute('data-gwa-menu','lateral');
     else document.documentElement.removeAttribute('data-gwa-menu');
     if(salvar!==false){ try{ localStorage.setItem(CHAVE,fmt); }catch(e){} }
@@ -13790,17 +13853,56 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     try{ window.dispatchEvent(new Event('resize')); }catch(e){}
   };
 
-  function montarOpcao(){
-    var menu=document.querySelector('.um-menu');
-    if(!menu || document.getElementById('gwaFmtOps')) return;
+  function montarOpcao(repintar){
+    if(document.getElementById('gwaFmtOps')){ if(repintar) pintarEstado(); return; }
+    var menu=document.getElementById('userMenuDropdown') || document.querySelector('.um-menu');
+    if(!menu) return;
+
     var box=document.createElement('div'); box.className='gwa-fmt-box';
     box.innerHTML='<div class="gwa-fmt-tit"><i class="fas fa-table-columns"></i> Formato do menu</div>'+
       '<div class="gwa-fmt-ops" id="gwaFmtOps">'+
-      '<div class="gwa-fmt-op" data-fmt="topo" onclick="event.stopPropagation();gwaMenuFormato(\'topo\')"><i class="fas fa-window-maximize"></i>No topo</div>'+
-      '<div class="gwa-fmt-op" data-fmt="lateral" onclick="event.stopPropagation();gwaMenuFormato(\'lateral\')"><i class="fas fa-table-columns"></i>Na lateral</div>'+
+      '<div class="gwa-fmt-op" data-fmt="topo" onclick="event.stopPropagation();window.gwaMenuFormato(\'topo\')"><i class="fas fa-window-maximize"></i>No topo</div>'+
+      '<div class="gwa-fmt-op" data-fmt="lateral" onclick="event.stopPropagation();window.gwaMenuFormato(\'lateral\')"><i class="fas fa-table-columns"></i>Na lateral</div>'+
       '</div>';
-    menu.appendChild(box);
+
+    /* entra logo acima do "Sair" */
+    var sair=menu.querySelector('.um-item--logout');
+    var divisor=sair?sair.previousElementSibling:null;
+    var ref=(divisor&&divisor.classList&&divisor.classList.contains('um-divider'))?divisor:sair;
+    if(ref) menu.insertBefore(box, ref); else menu.appendChild(box);
+
     window.gwaMenuFormato(atual(), false);
+    pintarEstado();
+  }
+
+  function pintarEstado(){
+    var ops=document.getElementById('gwaFmtOps'); if(!ops) return;
+    var box=ops.parentNode;
+
+    Array.prototype.forEach.call(ops.querySelectorAll('.gwa-fmt-op'),function(b){
+      b.classList.toggle('travado', _regra.travado && !ehMaster()); });
+
+    var antigo=box.querySelector('.gwa-fmt-master'); if(antigo) antigo.remove();
+    var aviso=box.querySelector('.gwa-fmt-aviso'); if(aviso) aviso.remove();
+
+    if(ehMaster()){
+      var b=document.createElement('button');
+      b.className='gwa-fmt-master'+(_regra.travado?' solto':'');
+      b.innerHTML=_regra.travado
+        ? '<i class="fas fa-unlock"></i> Liberar escolha para todos'
+        : '<i class="fas fa-lock"></i> Aplicar para todos e travar';
+      b.onclick=function(e){ e.stopPropagation(); window.gwaMenuAplicarTodos(); };
+      box.appendChild(b);
+      var a=document.createElement('div'); a.className='gwa-fmt-aviso';
+      a.textContent=_regra.travado
+        ? 'Travado: todos estao usando o formato "'+(_regra.formato==='lateral'?'Na lateral':'No topo')+'".'
+        : 'Escolha o formato acima e aplique para toda a equipe.';
+      box.appendChild(a);
+    } else if(_regra.travado){
+      var a2=document.createElement('div'); a2.className='gwa-fmt-aviso';
+      a2.innerHTML='<i class="fas fa-lock"></i> Formato definido pelo Master.';
+      box.appendChild(a2);
+    }
   }
 
   function iniciar(){
@@ -13808,6 +13910,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     try{ salvo=localStorage.getItem(CHAVE)||'topo'; }catch(e){}
     window.gwaMenuFormato(salvo==='lateral'?'lateral':'topo', false);
     montarOpcao();
+    carregarRegra();
     /* o menu do usuario e montado depois do login */
     try{ new MutationObserver(function(){ montarOpcao(); })
       .observe(document.body,{childList:true,subtree:true}); }catch(e){}
