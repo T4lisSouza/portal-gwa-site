@@ -13366,6 +13366,73 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         .catch(function(){}); }catch(e){} }
     return novo; }
 
+  /* ================= COMPLETAR O CADASTRO COM O QUE JA EXISTE =================
+     O cliente quase sempre ja tem nome, CPF, CNH, telefone, cidade e UF
+     espalhados nas defesas, documentacoes e elogios dele. Aqui a ficha puxa
+     esses dados sozinha. Vale para TODO cliente, nao so para quem veio da
+     planilha rotativa. Nunca sobrescreve o que ja esta preenchido. */
+  var _cadCompletado={};
+
+  function primeiroValor(r,chaves){
+    for(var i=0;i<chaves.length;i++){
+      var v=r && r[chaves[i]];
+      if(v!=null && String(v).trim()) return String(v).trim();
+    }
+    return ''; }
+
+  function registrosDoCliente(ch){
+    var its=[];
+    ORDEM.forEach(function(t){ (_regs[t]||[]).forEach(function(r){
+      if(chaveCli(r)===ch) its.push({t:t,r:r,ts:Number(r.atualizadoEm||r.ts||0)}); }); });
+    its.sort(function(a,b){ return b.ts-a.ts; });     /* o mais recente manda */
+    return its; }
+
+  function completarCadastro(ch){
+    if(!ch) return null;
+    var atual=_cliDados[ch]||{};
+    var novo=Object.assign({id:ch}, atual);
+    var mudou=false;
+    function po(k,v){ v=String(v==null?'':v).trim();
+      if(v && !String(novo[k]||'').trim()){ novo[k]=v; mudou=true; } }
+
+    var its=registrosDoCliente(ch);
+
+    /* 1. o que o proprio registro guarda sobre a pessoa */
+    its.forEach(function(x){ var r=x.r;
+      po('nome', r.nome);
+      po('cpf', soDigitos(r.cpf));
+      po('cnh', soDigitos(primeiroValor(r,['cnh','registro','numeroCnh','registroCnh'])));
+      po('telefone', primeiroValor(r,['telefone','celular','fone','whatsapp','zap']));
+      po('whatsapp', primeiroValor(r,['whatsapp','zap','telefone','celular']));
+      po('email', primeiroValor(r,['email','mail','eMail']));
+      po('cep', primeiroValor(r,['cep']));
+      po('endereco', primeiroValor(r,['endereco','logradouro','rua']));
+      po('bairro', primeiroValor(r,['bairro']));
+      po('cidade', primeiroValor(r,['cidade','municipioCnh']));
+      po('uf', primeiroValor(r,['ufCliente','estado']));
+    });
+
+    /* 2. so depois a cidade/UF que veio do orgao de destino da defesa */
+    its.forEach(function(x){ if(x.t!=='defesa') return;
+      po('cidade', x.r.municipio);
+      po('uf', x.r.uf); });
+
+    if(!mudou) return _cliDados[ch]||null;
+
+    novo.atualizadoEm=Date.now();
+    novo.atualizadoPor=novo.atualizadoPor||'dados dos registros';
+    _cliDados[ch]=novo;
+    try{ fetch(base()+'/api/doc_clientes/'+encodeURIComponent(ch),{method:'PUT',headers:H(),body:JSON.stringify(novo)})
+      .then(function(r){ if(!r.ok) return fetch(base()+'/api/doc_clientes',{method:'POST',headers:H(),body:JSON.stringify(novo)}); })
+      .catch(function(){}); }catch(e){}
+    return novo; }
+
+  /* roda uma vez por cliente a cada abertura da ficha */
+  function completarUmaVez(ch){
+    if(!ch || _cadCompletado[ch]) return;
+    _cadCompletado[ch]=true;
+    completarCadastro(ch); }
+
   window.__gwaNovoPerfil=function(id){ var n=(_novos||[]).filter(function(x){return x.id===id;})[0]; if(!n) return;
     var ch=chaveDoNovo(n); if(!ch){ alert('Este card nao tem nome nem CPF.'); return; }
     _novoVinculo=id; _preCliente={nome:nomeNovo(n),cpf:n.cpf||''}; _cliBase={nome:nomeNovo(n),cpf:n.cpf||'',telefone:n.telefone||''};
@@ -13500,7 +13567,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       obs:g('cdObs'), atualizadoEm:Date.now(), atualizadoPor:loginU(curU()) });
     try{ var r=await fetch(base()+'/api/doc_clientes/'+encodeURIComponent(ch),{method:'PUT',headers:H(),body:JSON.stringify(d)});
       if(!r.ok){ r=await fetch(base()+'/api/doc_clientes',{method:'POST',headers:H(),body:JSON.stringify(d)}); }
-      if(r.ok){ _cliDados[ch]=d; alert('Dados do cliente salvos.'); render(); } else alert('Falha ao salvar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
+      if(r.ok){ _cliDados[ch]=d; _cadCompletado[ch]=true; alert('Dados do cliente salvos.'); render(); } else alert('Falha ao salvar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
 
   function campoCli(id,label,val,ph){ return '<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:4px">'+esc(label)+'</label><input id="'+id+'" value="'+esc(val||'')+'" placeholder="'+esc(ph||'')+'" style="width:100%;box-sizing:border-box;padding:9px 11px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff;font-size:13px"></div>'; }
   function bloco(titulo,sub,inner,icone){ return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:14px"><div style="margin-bottom:12px"><div style="color:#fff;font-weight:700;font-size:14px"><i class="fas '+(icone||'fa-circle')+'" style="color:'+Co.orange+';margin-right:7px"></i>'+esc(titulo)+'</div>'+(sub?('<div style="font-size:11px;color:'+Co.mut+';margin-top:2px">'+esc(sub)+'</div>'):'')+'</div>'+inner+'</div>'; }
@@ -13522,7 +13589,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       if(!ja) lista.push(canonConsultor(nm)); });
     return lista; }
 
-  function viewFicha(){ var ch=_cliAberto; var idx=indiceClientes(); var c=idx[ch]; var d=dadosCli(ch);
+  function viewFicha(){ var ch=_cliAberto; completarUmaVez(ch);
+    var idx=indiceClientes(); var c=idx[ch]; var d=dadosCli(ch);
     /* cliente que ainda nao tem nenhum registro (veio da fila de novos clientes) */
     if(!c && !d.id){ var _nv=(_novos||[]).filter(function(x){ return chaveDoNovo(x)===ch; })[0];
       if(_nv && !_cliBase) _cliBase={nome:nomeNovo(_nv),cpf:_nv.cpf||'',telefone:_nv.telefone||''}; }
@@ -13578,7 +13646,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         '<div style="display:flex;gap:9px;flex-wrap:wrap">'+itO.map(function(k){
           return '<div style="background:'+Co.card2+';border:1px solid '+Co.line+';border-radius:10px;padding:8px 12px"><div style="font-size:10px;color:'+Co.mut+';text-transform:uppercase">'+esc(k[0])+'</div><div style="font-size:13px;color:#fff;font-weight:600">'+esc(k[1])+'</div></div>'; }).join('')+'</div></div>'; }
     /* dados cadastrais */
-    var dados=bloco('Dados pessoais e de contato','O que veio da planilha rotativa ja vem preenchido — complete o resto','<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:11px">'+
+    var dados=bloco('Dados pessoais e de contato','Preenchido sozinho com o que ja existe nas defesas, documentacoes e na planilha rotativa — complete o resto e salve','<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:11px">'+
       campoCli('cdNome','Nome completo',nome)+campoCli('cdCpf','CPF',cpf)+
       campoCli('cdCnh','CNH / registro',d.cnh)+
       campoCli('cdTel','Telefone',d.telefone)+campoCli('cdZap','WhatsApp',d.whatsapp,'55119...')+
