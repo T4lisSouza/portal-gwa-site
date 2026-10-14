@@ -845,6 +845,17 @@ a{text-decoration:none;color:inherit}button{cursor:pointer;border:none;backgroun
               <div><label style="display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:5px">Pontos / Destaque</label><input id="admDestPts" placeholder="ex: 1.200 pts" style="width:100%;padding:8px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px;color:#111827;background:#fff;font-family:inherit"/></div>
               <div><label style="display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:5px">Foto URL (Google Drive ou link direto)</label><input id="admDestFoto" placeholder="https://drive.google.com/..." style="width:100%;padding:8px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px;color:#111827;background:#fff;font-family:inherit"/></div>
             </div>
+            <div style="margin-bottom:10px">
+              <label style="display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:5px">Frase de reconhecimento</label>
+              <div style="display:flex;gap:8px">
+                <input id="admDestFrase" placeholder="uma frase bonita para esta pessoa"
+                       style="flex:1;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;font-size:13px;color:#374151">
+                <button type="button" onclick="gwaDestSortearFrase()" title="Sugerir outra frase"
+                        style="background:#fff;border:1px solid #FF8000;color:#c4661a;border-radius:10px;padding:0 14px;cursor:pointer;font-weight:700">
+                  <i class="fas fa-wand-magic-sparkles"></i></button>
+              </div>
+              <small style="font-size:11px;color:#6b7280;display:block;margin-top:5px">Vem preenchida com uma frase ainda não usada. Pode trocar ou escrever a sua.</small>
+            </div>
             <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px;padding:12px;background:#f9fafb;border:1px dashed #e5e7eb;border-radius:12px">
               <img id="admDestPrev" alt="" style="display:none;width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid #FF8000">
               <div style="flex:1;min-width:220px">
@@ -3809,11 +3820,11 @@ function renderAdmDestaques() {
   if(rl) rl.innerHTML = (st.ranking||[]).length ? `
     <div style="overflow-x:auto">
     <table class="mc-admin-table" style="margin-top:10px">
-      <thead><tr><th>#</th><th>Foto</th><th>Nome</th><th>Departamento</th><th>Pontos</th><th>Ações</th></tr></thead>
+      <thead><tr><th>#</th><th>Foto</th><th>Nome</th><th>Departamento</th><th>Pontos</th><th>Frase</th><th>Ações</th></tr></thead>
       <tbody>${st.ranking.map((r,i)=>{
         const photoUrl = destGetPhotoUrl(r.foto);
         const thumb = photoUrl ? `<img src="${photoUrl}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:3px solid #FF8000;box-shadow:0 2px 8px rgba(0,0,0,.18)" onerror="this.style.display='none'">` : `<div style="width:56px;height:56px;border-radius:50%;background:#FF8000;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px">${r.nome[0].toUpperCase()}</div>`;
-        return `<tr><td>${i+1}</td><td>${thumb}</td><td>${r.nome}</td><td>${r.dept||'-'}</td><td>${r.pts||'-'}</td><td><button onclick="destRemove('ranking','${r.id}')" class="mc-btn mc-btn--danger mc-btn--sm">Remover</button></td></tr>`;
+        return `<tr><td>${i+1}</td><td>${thumb}</td><td>${r.nome}</td><td>${r.dept||'-'}</td><td>${r.pts||'-'}</td><td style="font-size:12px;color:#6b7280;max-width:250px">${r.frase||'—'}</td><td><button onclick="destRemove('ranking','${r.id}')" class="mc-btn mc-btn--danger mc-btn--sm">Remover</button></td></tr>`;
       }).join('')}</tbody>
     </table></div>` : '<p style="color:#9ca3af;font-size:13px;margin-top:8px">Nenhum item no ranking.</p>';
   const pl = document.getElementById('admDestPremList');
@@ -3863,7 +3874,11 @@ function admAddDestaque(tipo) {
     const dept = document.getElementById('admDestDept').value.trim();
     if(!nome) return toast('Nome obrigatório','error');
     if(!dept) return toast('Selecione o departamento','error');
-    st.ranking.push({id:newId,nome,pts,foto,dept});
+    var frase=(document.getElementById('admDestFrase')||{}).value||'';
+    frase=String(frase).trim() || (typeof gwaDestFraseNova==='function'?gwaDestFraseNova():'');
+    st.ranking.push({id:newId,nome,pts,foto,dept,frase:frase});
+    var cf=document.getElementById('admDestFrase');
+    if(cf) cf.value=(typeof gwaDestFraseNova==='function'?gwaDestFraseNova():'');
     document.getElementById('admDestNome').value='';
     document.getElementById('admDestPts').value='';
     document.getElementById('admDestFoto').value='';
@@ -14164,7 +14179,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     '--gwaBordaForte:rgba(255,255,255,.14);'+
     '--gwaSombra:0 14px 34px rgba(0,0,0,.4);'+
     '--gwaSombraLeve:0 2px 10px rgba(0,0,0,.22);'+
-    '--gwaTexto:#ffffff;--gwaSub:#c8c8c8;--gwaMut:#7e838c;'+
+    '--gwaTexto:#ffffff;--gwaSub:#d4d8de;--gwaMut:#949aa4;--gwaAba:#c3c9d2;'+
     '--gwaBrilho:rgba(255,255,255,.14);'+
     '--gwaHero1:#2a2017;--gwaHero2:#151515;--gwaHeroGlow:rgba(224,120,32,.22);'+
     '--gwaFundo1:#202020;--gwaFundo2:#161616;'+
@@ -14177,7 +14192,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     '--gwaBordaForte:rgba(17,24,39,.16);'+
     '--gwaSombra:0 12px 30px rgba(16,24,40,.10);'+
     '--gwaSombraLeve:0 1px 2px rgba(16,24,40,.05),0 6px 18px rgba(16,24,40,.05);'+
-    '--gwaTexto:#1f242b;--gwaSub:#4b525c;--gwaMut:#828a96;'+
+    '--gwaTexto:#141922;--gwaSub:#3f4651;--gwaMut:#6e7682;--gwaAba:#39414c;'+
     '--gwaBrilho:rgba(17,24,39,.07);'+
     '--gwaHero1:#fff7ee;--gwaHero2:#ffffff;--gwaHeroGlow:rgba(240,148,58,.26);'+
     '--gwaFundo1:#ffffff;--gwaFundo2:#f8f9fb;'+
@@ -14208,7 +14223,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   css+=sel('[style*="text-transform:uppercase"]')+'{letter-spacing:1.15px !important;font-weight:700 !important}';
   css+=sel('[style*="font-size:10px"][style*="text-transform:uppercase"]')+','+
        sel('[style*="font-size:11px"][style*="text-transform:uppercase"]')+
-       '{color:var(--gwaMut) !important;font-size:10.5px !important}';
+       '{color:var(--gwaMut) !important;font-size:11px !important}';
 
   /* ====================================================================
      2. CARTOES
@@ -14265,9 +14280,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   css+=sel('.gwaTabs')+'{gap:2px !important;border-bottom:1px solid var(--gwaBorda);padding-bottom:0 !important}';
   css+=sel('.gwaTabs > button')+
     '{background:transparent !important;border:none !important;border-radius:0 !important;'+
-    'color:var(--gwaMut) !important;padding:11px 15px !important;font-weight:600 !important;'+
-    'position:relative;transition:color .18s ease}';
-  css+=sel('.gwaTabs > button:hover')+'{color:var(--gwaTexto) !important}';
+    'color:var(--gwaAba) !important;padding:11px 15px !important;font-weight:650 !important;'+
+    'position:relative;transition:color .18s ease,background .18s ease}';
+  css+=sel('.gwaTabs > button:hover')+
+    '{color:var(--gwaTexto) !important;background:var(--gwaHover) !important}';
+  css+=sel('.gwaTabs > button i')+'{opacity:.95}';
   css+=sel('.gwaTabs > button[style*="f0943a,#c4661a"]')+'{color:var(--gwaTexto) !important}';
   css+=sel('.gwaTabs > button[style*="f0943a,#c4661a"]::after')+
     '{content:"";position:absolute;left:12px;right:12px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;'+
@@ -14411,7 +14428,9 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     'overflow:visible !important;border-bottom:none !important}'+
   lista('head',' .gwaTabs > button')+'{width:100% !important;text-align:left !important;'+
     'justify-content:flex-start !important;padding:11px 14px !important;border-radius:11px !important;'+
-    'font-size:13px !important;white-space:normal !important;line-height:1.35}'+
+    'font-size:13.5px !important;white-space:normal !important;line-height:1.35;'+
+    'color:#c3c9d2 !important;font-weight:650 !important}'+
+  lista('head',' .gwaTabs > button:hover')+'{background:rgba(255,255,255,.07) !important;color:#fff !important}'+
   lista('head',' .gwaTabs > button[style*="f0943a,#c4661a"]')+'{background:rgba(224,120,32,.14) !important;color:#fff !important}'+
   lista('head',' .gwaTabs > button[style*="f0943a,#c4661a"]::after')+'{left:0 !important;right:auto !important;'+
     'top:9px !important;bottom:9px !important;width:3px !important;height:auto !important;border-radius:0 3px 3px 0 !important}'+
@@ -14696,15 +14715,15 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     'linear-gradient(135deg,#241a10 0%,#121212 68%)}'+
   '.gwaDestSlide__brilho{position:absolute;inset:-40% -10% auto auto;width:62%;height:180%;'+
     'background:radial-gradient(circle,rgba(240,148,58,.18),transparent 62%);filter:blur(10px);pointer-events:none}'+
-  '.gwaDestSlide__wrap{position:relative;display:flex;align-items:center;gap:30px;'+
-    'padding:26px 38px;width:100%;max-width:980px}'+
-  '.gwaDestSlide__foto{width:150px;height:150px;border-radius:50%;object-fit:cover;flex-shrink:0;'+
-    'border:4px solid #FF8000;box-shadow:0 0 0 7px rgba(255,128,0,.14),0 16px 40px rgba(0,0,0,.5);'+
+  '.gwaDestSlide__wrap{position:relative;display:flex;align-items:center;gap:clamp(24px,3vw,44px);'+
+    'padding:26px 44px;width:100%;max-width:1060px}'+
+  '.gwaDestSlide__foto{width:clamp(170px,19vw,260px);height:clamp(170px,19vw,260px);border-radius:50%;object-fit:cover;flex-shrink:0;'+
+    'border:5px solid #FF8000;box-shadow:0 0 0 9px rgba(255,128,0,.15),0 20px 50px rgba(0,0,0,.55);'+
     'animation:gwaDestEntra .7s cubic-bezier(.2,1.1,.3,1) both}'+
-  '.gwaDestSlide__ini{width:150px;height:150px;border-radius:50%;flex-shrink:0;display:flex;'+
-    'align-items:center;justify-content:center;font:900 52px system-ui;color:#fff;'+
+  '.gwaDestSlide__ini{width:clamp(170px,19vw,260px);height:clamp(170px,19vw,260px);border-radius:50%;flex-shrink:0;display:flex;'+
+    'align-items:center;justify-content:center;font:900 clamp(56px,6vw,84px) system-ui;color:#fff;'+
     'background:linear-gradient(135deg,#f0943a,#c4661a);'+
-    'border:4px solid #FF8000;box-shadow:0 0 0 7px rgba(255,128,0,.14),0 16px 40px rgba(0,0,0,.5);'+
+    'border:5px solid #FF8000;box-shadow:0 0 0 9px rgba(255,128,0,.15),0 20px 50px rgba(0,0,0,.55);'+
     'animation:gwaDestEntra .7s cubic-bezier(.2,1.1,.3,1) both}'+
   '.gwaDestSlide__txt{min-width:0;animation:gwaDestSobe .7s .1s cubic-bezier(.2,1,.3,1) both}'+
   '.gwaDestSlide__tag{display:inline-flex;align-items:center;gap:7px;background:rgba(255,128,0,.17);'+
@@ -14713,29 +14732,67 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   '.gwaDestSlide__nome{color:#fff;font:800 clamp(26px,3vw,40px)/1.1 system-ui;letter-spacing:-1px;margin:12px 0 6px}'+
   '.gwaDestSlide__dept{color:#f0943a;font:700 14px system-ui;letter-spacing:.4px}'+
   '.gwaDestSlide__pts{color:#d6d6d6;font:600 14px system-ui;margin-top:9px;display:flex;align-items:center;gap:8px}'+
+  '.gwaDestSlide__frase{color:#e9e2d8;font:italic 600 clamp(13px,1.25vw,16px)/1.55 Georgia,serif;'+
+    'margin-top:12px;max-width:520px;border-left:3px solid rgba(255,128,0,.55);padding-left:13px}'+
   '.gwaDestSlide__medalha{position:absolute;top:18px;right:24px;font-size:40px;opacity:.9;'+
     'filter:drop-shadow(0 6px 14px rgba(0,0,0,.5));animation:gwaDestGira 3.4s ease-in-out infinite}'+
   '@keyframes gwaDestEntra{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:scale(1)}}'+
   '@keyframes gwaDestSobe{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}'+
   '@keyframes gwaDestGira{0%,100%{transform:rotate(-7deg) translateY(0)}50%{transform:rotate(7deg) translateY(-6px)}}'+
+  '.gwaDestSlide__chuva{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}'+
+  '.gwaDestSlide__cai{position:absolute;top:-12%;will-change:transform,opacity;animation:gwaCai linear infinite}'+
+  '.gwaDestSlide__conf{position:absolute;top:-10%;width:8px;height:13px;border-radius:2px;opacity:.9;animation:gwaCaiConf linear infinite}'+
+  '@keyframes gwaCai{0%{transform:translateY(-10%) rotate(0);opacity:0}'+
+    '8%{opacity:.95}80%{opacity:.85}100%{transform:translateY(680%) rotate(300deg);opacity:0}}'+
+  '@keyframes gwaCaiConf{0%{transform:translateY(-10%) rotate(0);opacity:1}'+
+    '100%{transform:translateY(720%) rotate(680deg);opacity:.1}}'+
+  '.gwaDestSlide__wrap{z-index:1}'+
   '@media(max-width:700px){.gwaDestSlide__wrap{flex-direction:column;text-align:center;gap:16px;padding:20px}'+
-    '.gwaDestSlide__foto,.gwaDestSlide__ini{width:104px;height:104px;font-size:36px}'+
+    '.gwaDestSlide__foto,.gwaDestSlide__ini{width:128px !important;height:128px !important;font-size:42px !important}'+
     '.gwaDestSlide__medalha{font-size:28px;top:12px;right:14px}}';
 
   var st=document.createElement('style'); st.id='gwaDestSlideCss'; st.textContent=css;
   (document.head||document.documentElement).appendChild(st);
 
   var MEDALHAS=['🥇','🥈','🥉'];
+  var CORES_CONF=['#f0943a','#c4661a','#e07820','#ffffff','#ffd166','#3fae5a'];
+
+  /* Comercial segue a ordem com medalhas; os outros departamentos usam trofeu,
+     porque pode haver mais de um primeiro lugar e quantos destaques forem precisos. */
+  function simbolo(d, posComercial){
+    if(typeof gwaDestSimbolo==='function') return gwaDestSimbolo(d, posComercial);
+    var dept=String(d&&d.dept||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+    if(dept.indexOf('COMERCIAL')>=0) return MEDALHAS[posComercial]||'🏅';
+    return '🏆';
+  }
+
+  function chuva(){
+    var html='';
+    for(var i=0;i<9;i++){
+      var ico=(i%3===0)?'🏆':((i%3===1)?'🏅':'⭐');
+      html+='<div class="gwaDestSlide__cai" style="left:'+(4+Math.random()*92).toFixed(1)+'%;'+
+        'font-size:'+(14+Math.random()*16).toFixed(0)+'px;'+
+        'animation-duration:'+(7+Math.random()*6).toFixed(1)+'s;'+
+        'animation-delay:'+(Math.random()*7).toFixed(1)+'s;opacity:.85">'+ico+'</div>';
+    }
+    for(var k=0;k<22;k++){
+      html+='<div class="gwaDestSlide__conf" style="left:'+(Math.random()*100).toFixed(1)+'%;'+
+        'background:'+CORES_CONF[k%CORES_CONF.length]+';'+
+        'animation-duration:'+(5+Math.random()*5).toFixed(1)+'s;'+
+        'animation-delay:'+(Math.random()*6).toFixed(1)+'s"></div>';
+    }
+    return '<div class="gwaDestSlide__chuva">'+html+'</div>';
+  }
 
   function slideDestaque(d, pos){
     var foto = (typeof destGetPhotoUrl==='function') ? destGetPhotoUrl(d.foto||'') : (d.foto||'');
     var ini  = String(d.nome||'?').trim().charAt(0).toUpperCase();
-    var medalha = MEDALHAS[pos] || '⭐';
+    var medalha = simbolo(d, pos);
     var retrato = foto
       ? '<img class="gwaDestSlide__foto" src="'+foto+'" alt="'+(d.nome||'')+'" onerror="this.outerHTML=\'<div class=&quot;gwaDestSlide__ini&quot;>'+ini+'</div>\'">'
       : '<div class="gwaDestSlide__ini">'+ini+'</div>';
     return '<div class="gwaDestSlide">'+
-      '<div class="gwaDestSlide__brilho"></div>'+
+      '<div class="gwaDestSlide__brilho"></div>'+chuva()+
       '<div class="gwaDestSlide__medalha">'+medalha+'</div>'+
       '<div class="gwaDestSlide__wrap">'+retrato+
         '<div class="gwaDestSlide__txt">'+
@@ -14743,6 +14800,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
           '<div class="gwaDestSlide__nome">'+(d.nome||'')+'</div>'+
           (d.dept?'<div class="gwaDestSlide__dept">'+d.dept+'</div>':'')+
           (d.pts?'<div class="gwaDestSlide__pts"><i class="fas fa-trophy" style="color:#FF8000"></i> '+d.pts+'</div>':'')+
+          (d.frase?'<div class="gwaDestSlide__frase">“'+d.frase+'”</div>':'')+
         '</div>'+
       '</div></div>';
   }
@@ -14757,7 +14815,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       original.apply(this,arguments);
       try{
         var st=(typeof destLoad==='function')?destLoad():null;
-        var lista=(st&&st.ranking)?st.ranking.slice(0,3):[];
+        var lista=(st&&st.ranking)?st.ranking.slice(0,12):[];
         if(!lista.length) return;
 
         var track=document.getElementById('carouselTrack');
@@ -14766,7 +14824,13 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         /* se so tinha a tela de "nada publicado", limpa antes */
         if(!window.carouselItems || !carouselItems.length) track.innerHTML='';
 
-        track.insertAdjacentHTML('afterbegin', lista.map(slideDestaque).join(''));
+        var nCom=-1;
+        var html=lista.map(function(d){
+          var dept=String(d&&d.dept||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+          var p = dept.indexOf('COMERCIAL')>=0 ? (++nCom) : 0;
+          return slideDestaque(d, p);
+        }).join('');
+        track.insertAdjacentHTML('afterbegin', html);
 
         window.carouselItems = lista.map(function(d){ return {type:'destaque', nome:d.nome}; })
                                 .concat(window.carouselItems||[]);
@@ -15084,6 +15148,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     it.className='um-item'; it.id='umAgendaItem';
     it.innerHTML='<i class="fas fa-calendar-days"></i> Agenda';
     it.onclick=function(){ try{ closeUserMenu(); }catch(e){} gwaAbrirAgenda(); };
+    /* mantido tambem no menu, como atalho rapido */
     var acad=menu.querySelector('.um-item--acad');
     if(acad) menu.insertBefore(it, acad); else menu.appendChild(it);
   }
@@ -15091,6 +15156,419 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function agendar(){ if(t) clearTimeout(t); t=setTimeout(montarAtalho,120); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',agendar); else agendar();
   try{ new MutationObserver(agendar).observe(document.documentElement,{childList:true,subtree:true}); }catch(e){}
+})();
+</script>
+<script>
+/* ===== INTRANET GWA :: AGENDA COMO ABA DE VENDAS E DOCUMENTACAO ===== */
+(function(){
+  if(window.__gwaAgAba) return; window.__gwaAgAba=true;
+
+  var ALVOS=[
+    {head:'gwaDocHead',    close:'__gwaDocClose'},
+    {head:'gwaVendasHead', close:'__gwaVendasClose'}
+  ];
+
+  var css=
+  '.gwaAgAba{padding:11px 15px;border:none;background:transparent;color:#c3c9d2;'+
+    'font-size:13px;font-weight:650;cursor:pointer;position:relative;border-radius:0;'+
+    'transition:color .18s ease,background .18s ease;white-space:nowrap}'+
+  '.gwaAgAba:hover{color:#fff;background:rgba(255,255,255,.05)}'+
+  'html[data-gwa-paineis="lateral"] .gwaAgAba{width:100%;text-align:left;padding:11px 14px;'+
+    'border-radius:11px;font-size:13.5px}'+
+  'html[data-gwa-tema="claro"] .gwaAgAba{color:#39414c}'+
+  'html[data-gwa-tema="claro"] .gwaAgAba:hover{color:#141922;background:rgba(17,24,39,.05)}';
+
+  var st=document.createElement('style'); st.id='gwaAgAbaCss'; st.textContent=css;
+  (document.head||document.documentElement).appendChild(st);
+
+  function montar(){
+    ALVOS.forEach(function(a){
+      var head=document.getElementById(a.head);
+      if(!head) return;
+      var tabs=head.querySelector('.gwaTabs');
+      if(!tabs || tabs.querySelector('.gwaAgAba')) return;
+
+      var b=document.createElement('button');
+      b.type='button'; b.className='gwaAgAba';
+      b.innerHTML='<i class="fas fa-calendar-days"></i> Agenda';
+      b.title='Agenda da equipe';
+      b.onclick=function(e){ e.stopPropagation();
+        if(typeof gwaAbrirAgenda==='function') gwaAbrirAgenda();
+        else alert('A agenda ainda esta carregando.'); };
+      tabs.appendChild(b);
+    });
+  }
+
+  var t=null;
+  function agendar(){ if(t) clearTimeout(t); t=setTimeout(montar,90); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',agendar); else agendar();
+  try{ new MutationObserver(agendar).observe(document.body,{childList:true,subtree:true}); }catch(e){}
+})();
+</script>
+<script>
+/* ===== INTRANET GWA :: PERFIL DE ANALISE DO CONSULTOR (para gestores) ===== */
+(function(){
+  if(window.__gwaPerfilCons) return; window.__gwaPerfilCons=true;
+
+  var Co={bgA:'#0d0d0d',bgB:'#161616',card:'#1c1c1c',card2:'#242424',line:'rgba(255,255,255,.07)',
+          orange:'#e07820',orangeD:'#c4661a',orangeL:'#f0943a',sub:'#d4d8de',mut:'#949aa4',
+          green:'#3fae5a',red:'#e5533c',blue:'#4a9fd5',gradO:'linear-gradient(135deg,#f0943a,#c4661a)'};
+  var LOGO='https://drive.google.com/thumbnail?id=1erF3Vfah-MgTbl2QNLph7oyfIqENLn9m&sz=w240';
+  var MES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  var _login='', _per='mes', _vendas=null, _agenda=null, _carregando=false;
+
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function base(){ return (typeof API_URL!=='undefined')?API_URL:''; }
+  function H(){ return {'Content-Type':'application/json','X-MC-Token':(typeof API_TOKEN!=='undefined'?API_TOKEN:'')}; }
+  function cur(){ return window.currentUser||(typeof getSession==='function'?getSession():{})||{}; }
+  function login(u){ return String((u&&(u.login||u.user||u.email||u.nome))||'').toUpperCase(); }
+  function ehGestor(){ var r=String((cur()||{}).role||'').toLowerCase();
+    return login(cur())==='TALIS' || ['master','admin','gestor','supervisor'].indexOf(r)>=0; }
+  function usuarios(){ try{ if(typeof getUsers==='function'){ var g=getUsers(); if(g&&g.length) return g; } }catch(e){}
+    return window._usersCache||[]; }
+  function usuario(l){ var us=usuarios();
+    for(var i=0;i<us.length;i++){ if(login(us[i])===String(l).toUpperCase()) return us[i]; } return null; }
+  function nomeDe(l){ var u=usuario(l); return u?(u.nome||u.login):l; }
+  function money(n){ n=Number(n)||0; try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+    catch(e){ return 'R$ '+n.toFixed(2); } }
+  function iso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+  /* ---------- dados ---------- */
+  async function carregar(){
+    _carregando=true;
+    try{ var r=await fetch(base()+'/api/vendas',{headers:H()});
+      if(r.ok){ var j=await r.json(); _vendas=(j&&j.data)||[]; } }catch(e){ _vendas=_vendas||[]; }
+    try{ var r2=await fetch(base()+'/api/agenda',{headers:H()});
+      if(r2.ok){ var j2=await r2.json(); _agenda=((j2&&j2.data)||[]).filter(function(x){return x&&x.removido!==true;}); } }catch(e){ _agenda=_agenda||[]; }
+    _carregando=false;
+  }
+
+  function dataVenda(v){
+    var s=String(v&&(v.dataVenda||v.data)||'');
+    var m=s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if(m) return new Date(+m[3],+m[2]-1,+m[1],12,0,0);
+    m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(m) return new Date(+m[1],+m[2]-1,+m[3],12,0,0);
+    return v&&v.ts?new Date(v.ts):null;
+  }
+  function periodo(){
+    var h=new Date(), ini, fim=new Date(h.getFullYear(),h.getMonth(),h.getDate(),23,59,59);
+    if(_per==='mes'){ ini=new Date(h.getFullYear(),h.getMonth(),1); }
+    else if(_per==='mesant'){ ini=new Date(h.getFullYear(),h.getMonth()-1,1); fim=new Date(h.getFullYear(),h.getMonth(),0,23,59,59); }
+    else if(_per==='d90'){ ini=new Date(h.getTime()-90*864e5); }
+    else if(_per==='ano'){ ini=new Date(h.getFullYear(),0,1); }
+    else { ini=null; }
+    return {ini:ini,fim:fim};
+  }
+  function minhasVendas(){
+    var p=periodo(), L=String(_login).toUpperCase();
+    return (_vendas||[]).filter(function(v){
+      if(String(v.consultor||'').toUpperCase()!==L) return false;
+      if(!p.ini) return true;
+      var d=dataVenda(v); if(!d) return false;
+      return d>=p.ini && d<=p.fim;
+    });
+  }
+
+  /* ---------- componentes ---------- */
+  function kpi(lbl,val,sub,cor){
+    return '<div style="flex:1 1 170px;min-width:170px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px">'+
+      '<div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:1px;font-weight:700">'+lbl+'</div>'+
+      '<div style="font-size:24px;font-weight:800;color:'+(cor||'#fff')+';margin-top:6px">'+val+'</div>'+
+      (sub?('<div style="font-size:11px;color:'+Co.mut+';margin-top:3px">'+sub+'</div>'):'')+'</div>';
+  }
+  function barras(titulo,dados,cor){
+    if(!dados.length) return '';
+    var max=Math.max.apply(null,dados.map(function(d){return d.v;}))||1;
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;flex:1 1 320px;min-width:300px">'+
+      '<h4 style="margin:0 0 14px;color:#fff;font-size:14px">'+esc(titulo)+'</h4>'+
+      dados.map(function(d){ var pc=Math.round(d.v/max*100);
+        return '<div style="margin-bottom:11px"><div style="display:flex;justify-content:space-between;font-size:12.5px;color:'+Co.sub+';margin-bottom:4px">'+
+          '<span>'+esc(d.k)+'</span><b style="color:#fff">'+esc(d.t||String(d.v))+'</b></div>'+
+          '<div style="height:9px;border-radius:20px;background:rgba(255,255,255,.055);overflow:hidden">'+
+          '<div style="width:'+pc+'%;height:100%;border-radius:20px;background:'+(cor||Co.gradO)+'"></div></div></div>'; }).join('')+
+      '</div>';
+  }
+
+  /* ---------- tela ---------- */
+  function painel(){ if(document.getElementById('gwaPcOv')) return;
+    var o=document.createElement('div'); o.id='gwaPcOv';
+    o.style.cssText='position:fixed;inset:0;z-index:99993;background:linear-gradient(180deg,'+Co.bgA+','+Co.bgB+');display:none;flex-direction:column;overflow:auto;font-family:inherit';
+    o.innerHTML='<div id="gwaPcHead" style="position:sticky;top:0;background:'+Co.bgA+';border-bottom:3px solid '+Co.orangeD+';color:#fff;padding:14px max(22px,calc((100% - 1280px) / 2));display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;z-index:3;box-shadow:0 4px 18px rgba(0,0,0,.4)"></div>'+
+      '<div id="gwaPcBody" style="padding:22px;max-width:1280px;margin:0 auto;width:100%;box-sizing:border-box"></div>';
+    document.body.appendChild(o);
+  }
+
+  window.gwaAbrirPerfilConsultor=function(l){
+    if(!ehGestor()){ alert('Area restrita a supervisores, gestores e Master.'); return; }
+    painel();
+    _login=String(l||'').toUpperCase();
+    document.getElementById('gwaPcOv').style.display='flex';
+    if(!_vendas && !_carregando) carregar().then(desenhar); else desenhar();
+  };
+  window.__gwaPcClose=function(){ var o=document.getElementById('gwaPcOv'); if(o) o.style.display='none'; };
+  window.__gwaPcQuem=function(v){ _login=String(v||'').toUpperCase(); desenhar(); };
+  window.__gwaPcPer=function(v){ _per=v; desenhar(); };
+  window.__gwaPcAgenda=function(){
+    if(typeof gwaAbrirAgenda==='function'){ gwaAbrirAgenda();
+      setTimeout(function(){ if(typeof __gwaAgQuem==='function') __gwaAgQuem(_login); },260); }
+  };
+  window.__gwaPcNovoCompromisso=function(){
+    if(typeof gwaAbrirAgenda!=='function'){ alert('Agenda indisponivel.'); return; }
+    gwaAbrirAgenda();
+    setTimeout(function(){
+      if(typeof __gwaAgQuem==='function') __gwaAgQuem(_login);
+      if(typeof __gwaAgNovo==='function'){ __gwaAgNovo();
+        setTimeout(function(){ var p=document.getElementById('agPara'); if(p) p.value=_login; },120); }
+    },300);
+  };
+
+  function desenhar(){
+    painel();
+    var head=document.getElementById('gwaPcHead'), body=document.getElementById('gwaPcBody');
+    if(!head||!body) return;
+
+    var pessoas=usuarios().slice().sort(function(a,b){ return String(a.nome||a.login).localeCompare(String(b.nome||b.login)); });
+    if(!_login && pessoas.length) _login=login(pessoas[0]);
+
+    head.innerHTML='<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">'+
+      '<img src="'+LOGO+'" alt="GWA" style="height:42px;width:auto;max-width:120px;object-fit:contain">'+
+      '<div><div style="font-size:18px;font-weight:800">Perfil do consultor</div>'+
+      '<div style="font-size:11px;color:'+Co.mut+';letter-spacing:1px;text-transform:uppercase">analise de desempenho</div></div></div>'+
+      '<button onclick="__gwaPcClose()" style="width:38px;height:38px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:'+Co.sub+';cursor:pointer">✕</button>';
+
+    if(_carregando || !_vendas){
+      body.innerHTML='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:40px;text-align:center;color:'+Co.mut+'"><i class="fas fa-spinner fa-spin"></i> carregando os dados...</div>';
+      return;
+    }
+
+    var nome=nomeDe(_login);
+    var ini=(String(nome).trim().split(/\s+/).slice(0,2).map(function(x){return x[0];}).join('')||'?').toUpperCase();
+    var vs=minhasVendas();
+    var bruto=vs.reduce(function(a,v){ return a+(Number(v.valorPago)||0); },0);
+    var liq=vs.reduce(function(a,v){ return a+(Number(v.liquido)||0); },0);
+    var ticket=vs.length?liq/vs.length:0;
+
+    /* agenda do consultor */
+    var hoje=iso(new Date());
+    var ag=(_agenda||[]).filter(function(x){ return String(x.para||'').toUpperCase()===_login; });
+    var agHoje=ag.filter(function(x){ return x.data===hoje; });
+    var agAbertos=ag.filter(function(x){ return x.status!=='feito' && x.data>=hoje; })
+      .sort(function(a,b){ return String(a.data+a.hora).localeCompare(String(b.data+b.hora)); }).slice(0,6);
+    var agFeitos=ag.filter(function(x){ return x.status==='feito'; }).length;
+
+    var selPessoa='<select onchange="__gwaPcQuem(this.value)" style="padding:10px 14px;border-radius:12px;border:1px solid '+Co.orangeD+';background:'+Co.card2+';color:#fff;font-weight:700;font-size:14px">'+
+      pessoas.map(function(u){ var L=login(u);
+        return '<option value="'+esc(L)+'"'+(_login===L?' selected':'')+'>'+esc(u.nome||u.login)+'</option>'; }).join('')+'</select>';
+    var selPer='<select onchange="__gwaPcPer(this.value)" style="padding:10px 14px;border-radius:12px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;font-weight:600;font-size:14px">'+
+      [['mes','Mes atual'],['mesant','Mes anterior'],['d90','Ultimos 90 dias'],['ano','Ano atual'],['tudo','Tudo']].map(function(o){
+        return '<option value="'+o[0]+'"'+(_per===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('')+'</select>';
+
+    var capa='<div style="background:radial-gradient(120% 140% at 0% 0%,rgba(224,120,32,.22) 0%,transparent 54%),linear-gradient(150deg,#2a2017 0%,#151515 62%);'+
+      'border:1px solid rgba(224,120,32,.32);border-radius:22px;padding:22px;margin-bottom:16px;display:flex;gap:18px;flex-wrap:wrap;align-items:center">'+
+      '<div style="width:64px;height:64px;border-radius:18px;background:'+Co.gradO+';display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:#fff;flex-shrink:0">'+esc(ini)+'</div>'+
+      '<div style="flex:1;min-width:210px">'+
+        '<div style="font-size:11px;color:'+Co.orange+';text-transform:uppercase;letter-spacing:1px;font-weight:700">Consultor</div>'+
+        '<div style="font-size:22px;font-weight:800;color:#fff;margin-top:2px">'+esc(nome)+'</div>'+
+        '<div style="font-size:12.5px;color:'+Co.mut+';margin-top:3px">'+esc(_login)+'</div></div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+selPessoa+selPer+'</div>'+
+      '</div>';
+
+    var kpis='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
+      kpi('Faturamento liquido',money(liq),'no periodo',Co.green)+
+      kpi('Valor bruto',money(bruto),null,Co.orangeL)+
+      kpi('Contratos',String(vs.length),'vendas fechadas')+
+      kpi('Ticket medio',money(ticket),null,Co.blue)+
+      '</div>';
+
+    /* evolucao por mes */
+    var porMes={};
+    (_vendas||[]).forEach(function(v){
+      if(String(v.consultor||'').toUpperCase()!==_login) return;
+      var d=dataVenda(v); if(!d) return;
+      var k=MES[d.getMonth()].slice(0,3)+'/'+String(d.getFullYear()).slice(2);
+      porMes[k]=(porMes[k]||0)+(Number(v.liquido)||0);
+    });
+    var evol=Object.keys(porMes).slice(-6).map(function(k){ return {k:k,v:porMes[k],t:money(porMes[k])}; });
+
+    /* formas de pagamento */
+    var porForma={};
+    vs.forEach(function(v){ var f=String(v.forma||'outro'); porForma[f]=(porForma[f]||0)+1; });
+    var formas=Object.keys(porForma).sort(function(a,b){ return porForma[b]-porForma[a]; })
+      .map(function(k){ return {k:k, v:porForma[k], t:porForma[k]+' venda(s)'}; });
+
+    var graficos='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
+      barras('Faturamento por mes',evol)+
+      barras('Formas de pagamento',formas,'linear-gradient(90deg,#4a9fd5,#2d6fa0)')+
+      '</div>';
+
+    var agBox='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;flex:1 1 340px;min-width:320px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
+        '<h4 style="margin:0;color:#fff;font-size:14px"><i class="fas fa-calendar-days" style="color:'+Co.orange+'"></i> Agenda</h4>'+
+        '<div style="display:flex;gap:7px;flex-wrap:wrap">'+
+          '<button onclick="__gwaPcNovoCompromisso()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12.5px"><i class="fas fa-plus"></i> Lancar</button>'+
+          '<button onclick="__gwaPcAgenda()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:10px;padding:8px 14px;cursor:pointer;font-size:12.5px">Ver completa</button>'+
+        '</div></div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
+        '<div style="flex:1;min-width:92px;background:'+Co.card2+';border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:1px">Hoje</div><div style="font-size:20px;font-weight:800;color:'+Co.orangeL+'">'+agHoje.length+'</div></div>'+
+        '<div style="flex:1;min-width:92px;background:'+Co.card2+';border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:1px">Em aberto</div><div style="font-size:20px;font-weight:800;color:#fff">'+ag.filter(function(x){return x.status!=='feito';}).length+'</div></div>'+
+        '<div style="flex:1;min-width:92px;background:'+Co.card2+';border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:1px">Concluidos</div><div style="font-size:20px;font-weight:800;color:'+Co.green+'">'+agFeitos+'</div></div>'+
+      '</div>'+
+      (agAbertos.length
+        ? agAbertos.map(function(it){
+            var p=String(it.data||'').split('-');
+            return '<div style="display:flex;gap:11px;align-items:center;padding:9px 0;border-top:1px solid '+Co.line+'">'+
+              '<div style="flex:0 0 52px;text-align:center;background:'+Co.card2+';border-radius:9px;padding:5px 0">'+
+                '<div style="font-size:15px;font-weight:800;color:'+Co.orangeL+'">'+(p[2]||'')+'</div>'+
+                '<div style="font-size:9px;color:'+Co.mut+';text-transform:uppercase">'+(MES[(+p[1]||1)-1]||'').slice(0,3)+'</div></div>'+
+              '<div style="flex:1;min-width:0"><div style="font-size:13.5px;color:#fff;font-weight:600">'+esc(it.titulo||'')+'</div>'+
+              '<div style="font-size:11.5px;color:'+Co.mut+'">'+(it.hora?esc(it.hora)+' · ':'')+esc(it.tipo||'')+'</div></div></div>'; }).join('')
+        : '<div style="font-size:12.5px;color:'+Co.mut+';padding:12px 0;text-align:center">Nada marcado por enquanto.</div>')+
+      '</div>';
+
+    var ultimas=vs.slice().sort(function(a,b){ var da=dataVenda(a),db=dataVenda(b);
+      return (db?db.getTime():0)-(da?da.getTime():0); }).slice(0,8);
+    var vendasBox='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;flex:1 1 380px;min-width:330px">'+
+      '<h4 style="margin:0 0 12px;color:#fff;font-size:14px"><i class="fas fa-receipt" style="color:'+Co.orange+'"></i> Ultimas vendas</h4>'+
+      (ultimas.length
+        ? '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px">'+
+          '<thead><tr style="text-align:left;color:'+Co.mut+'"><th style="padding:9px 8px">Data</th><th style="padding:9px 8px">Cliente</th><th style="padding:9px 8px;text-align:right">Liquido</th></tr></thead><tbody>'+
+          ultimas.map(function(v){ return '<tr style="border-top:1px solid '+Co.line+'">'+
+            '<td style="padding:9px 8px">'+esc(v.dataVenda||'')+'</td>'+
+            '<td style="padding:9px 8px;color:#fff">'+esc(v.cliente||'')+'</td>'+
+            '<td style="padding:9px 8px;text-align:right;color:'+Co.green+';font-weight:700">'+money(v.liquido)+'</td></tr>'; }).join('')+
+          '</tbody></table></div>'
+        : '<div style="font-size:12.5px;color:'+Co.mut+';padding:12px 0;text-align:center">Nenhuma venda no periodo.</div>')+
+      '</div>';
+
+    body.innerHTML=capa+kpis+graficos+
+      '<div style="display:flex;gap:14px;flex-wrap:wrap">'+agBox+vendasBox+'</div>';
+  }
+
+  /* ---------- aba nos paineis (so para gestores) ---------- */
+  var css='.gwaPcAba{padding:11px 15px;border:none;background:transparent;color:#c3c9d2;font-size:13px;'+
+    'font-weight:650;cursor:pointer;position:relative;border-radius:0;white-space:nowrap;'+
+    'transition:color .18s ease,background .18s ease}'+
+    '.gwaPcAba:hover{color:#fff;background:rgba(255,255,255,.05)}'+
+    'html[data-gwa-paineis="lateral"] .gwaPcAba{width:100%;text-align:left;padding:11px 14px;border-radius:11px;font-size:13.5px}'+
+    'html[data-gwa-tema="claro"] .gwaPcAba{color:#39414c}'+
+    'html[data-gwa-tema="claro"] .gwaPcAba:hover{color:#141922;background:rgba(17,24,39,.05)}';
+  var st=document.createElement('style'); st.id='gwaPcCss'; st.textContent=css;
+  (document.head||document.documentElement).appendChild(st);
+
+  function montarAba(){
+    if(!ehGestor()) return;
+    ['gwaVendasHead','gwaDocHead'].forEach(function(id){
+      var head=document.getElementById(id); if(!head) return;
+      var tabs=head.querySelector('.gwaTabs'); if(!tabs || tabs.querySelector('.gwaPcAba')) return;
+      var b=document.createElement('button');
+      b.type='button'; b.className='gwaPcAba';
+      b.innerHTML='<i class="fas fa-user-tie"></i> Perfil do consultor';
+      b.onclick=function(e){ e.stopPropagation(); gwaAbrirPerfilConsultor(_login); };
+      tabs.appendChild(b);
+    });
+  }
+  var t=null;
+  function agendar(){ if(t) clearTimeout(t); t=setTimeout(montarAba,110); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',agendar); else agendar();
+  try{ new MutationObserver(agendar).observe(document.body,{childList:true,subtree:true}); }catch(e){}
+})();
+</script>
+<script>
+/* ===== INTRANET GWA :: FRASES E SIMBOLOS DOS DESTAQUES ===== */
+(function(){
+  if(window.__gwaDestFrases) return; window.__gwaDestFrases=true;
+
+  /* Comercial usa medalha por posicao; os demais usam trofeu,
+     porque pode haver mais de um primeiro lugar e quantos forem precisos. */
+  function usaMedalha(dept){
+    var d=String(dept||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
+    return d.indexOf('COMERCIAL')>=0;
+  }
+  window.gwaDestSimbolo=function(d, posNoComercial){
+    if(usaMedalha(d && d.dept)){
+      var m=['🥇','🥈','🥉'];
+      return m[posNoComercial] || '🏅';
+    }
+    return '🏆';
+  };
+
+  /* ---------- banco de frases ---------- */
+  var FRASES=[
+    'Transforma esforço em resultado todos os dias.',
+    'Faz acontecer quando os outros ainda estão pensando.',
+    'Entrega com capricho e não abre mão da qualidade.',
+    'É daquelas pessoas que puxam o time para cima.',
+    'Não conta tempo: conta resultado.',
+    'Mostra que constância vale mais do que sorte.',
+    'Fecha com elegância e atende com alma.',
+    'Levanta a régua da equipe sem precisar falar alto.',
+    'Prova que atenção aos detalhes vira venda.',
+    'Está sempre um passo à frente do problema.',
+    'Faz do cliente um parceiro, não um número.',
+    'Lidera pelo exemplo e inspira pelo resultado.',
+    'A persistência tem nome e tem sobrenome.',
+    'Tranquilidade para resolver, firmeza para entregar.',
+    'Não desiste no primeiro não — e por isso chega ao sim.',
+    'Organização e foco que o time inteiro admira.',
+    'Entrega hoje o que prometeu ontem.',
+    'Trabalha com a precisão de quem gosta do que faz.',
+    'Resolve o difícil com naturalidade.',
+    'Fecha o mês com a serenidade de quem se preparou.',
+    'Dedicação que aparece em cada número.',
+    'Atende como gostaria de ser atendido.',
+    'Disciplina silenciosa, resultado barulhento.',
+    'Faz o simples com excelência, todos os dias.',
+    'Assume o desafio antes mesmo de ser pedido.',
+    'Referência quando o assunto é compromisso.',
+    'Ritmo próprio, resultado consistente.',
+    'Cuida de cada caso como se fosse o único.',
+    'Soma onde está e deixa saudade quando falta.',
+    'Prova que preparo encontra oportunidade.',
+    'Com paciência e técnica, destrava qualquer caso.',
+    'Quem acompanha aprende; quem recebe agradece.',
+    'Faz o time inteiro jogar melhor.',
+    'A calma de quem domina o que faz.',
+    'Resultado que nasce de método, não de acaso.',
+    'Chega cedo no problema e sai na frente na solução.',
+    'Capricho que o cliente percebe e comenta.',
+    'Entrega consistente, mês após mês.',
+    'Transforma retorno difícil em cliente fiel.',
+    'Trabalha com orgulho, e isso se vê no resultado.'
+  ];
+
+  function usadas(){
+    var st=(typeof destLoad==='function')?destLoad():null;
+    var u={};
+    if(st){ ['ranking','premiados','staff'].forEach(function(k){
+      (st[k]||[]).forEach(function(x){ if(x && x.frase) u[String(x.frase).trim()]=true; }); }); }
+    return u;
+  }
+
+  /* sorteia uma frase que ainda nao esta em uso */
+  window.gwaDestFraseNova=function(){
+    var u=usadas();
+    var livres=FRASES.filter(function(f){ return !u[f]; });
+    var fonte=livres.length?livres:FRASES;          /* se acabarem, recomeca */
+    return fonte[Math.floor(Math.random()*fonte.length)];
+  };
+
+  window.gwaDestSortearFrase=function(){
+    var c=document.getElementById('admDestFrase');
+    if(c){ c.value=gwaDestFraseNova(); c.focus(); }
+  };
+
+  /* deixa o campo preenchido assim que a area de destaques aparece */
+  function preencher(){
+    var c=document.getElementById('admDestFrase');
+    if(c && !c.value.trim()) c.value=gwaDestFraseNova();
+  }
+  var t=null;
+  function agendar(){ if(t) clearTimeout(t); t=setTimeout(preencher,150); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',agendar); else agendar();
+  try{ new MutationObserver(agendar).observe(document.body,{childList:true,subtree:true}); }catch(e){}
 })();
 </script>
 </body>
