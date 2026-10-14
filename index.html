@@ -15253,23 +15253,78 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function iso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function norm(s){ return String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().trim(); }
 
-  /* ---------- departamento ---------- */
-  function deptDe(u){
-    if(!u) return '';
-    var d=u.depts||u.departamentos||u.departamento||u.dept||'';
-    if(Array.isArray(d)) d=d.join(' ');
-    return norm(d);
+  /* ---------- departamento ----------
+     O departamento do vendedor e definido em Vendas > Ajustes (deptVendas).
+     So depois disso olhamos o cadastro de usuario. */
+  var AREAS=['COMERCIAL','NEGOCIACAO','DOCUMENTACAO','RH','TI','TREINAMENTOS',
+             'FINANCEIRO','MARKETING','ADMINISTRATIVO','JURIDICO','OPERACOES'];
+
+  function areasDe(l){
+    var L=String(l||'').toUpperCase();
+    var achadas={};
+
+    /* 1. o que o modulo de Vendas definiu para esta pessoa */
+    var ov=_cfg && _cfg.deptVendas && _cfg.deptVendas[L];
+    if(ov) achadas[norm(ov)]=1;
+
+    /* 2. o cadastro do usuario */
+    var u=usuario(L);
+    if(u){
+      var d=u.depts||u.departamentos||u.departments||u.departamento||u.dept||'';
+      if(Array.isArray(d)) d=d.join(' ');
+      var t=norm(d);
+      if(t.indexOf('TODOS')>=0 || t.indexOf('TODAS')>=0 || t==='ALL') return {TODOS:1};
+      AREAS.forEach(function(a){ if(t.indexOf(a)>=0) achadas[a]=1; });
+      /* texto livre que nao bate com a lista ainda conta como area */
+      if(!Object.keys(achadas).length && t) achadas[t]=1;
+    }
+    /* cadastro sem departamento vale como "todos", igual ao resto do sistema */
+    if(!Object.keys(achadas).length) return {TODOS:1};
+    return achadas;
   }
-  function meuDept(){ return deptDe(usuario(meu())); }
-  /* Master ve todos; os demais gestores so veem o proprio departamento */
+  function minhasAreas(){ return areasDe(meu()); }
+
+  /* Master ve todos. Os demais gestores veem quem divide area com eles. */
   function podeVer(l){
     if(ehMaster()) return true;
-    if(String(l).toUpperCase()===meu()) return true;
+    var L=String(l).toUpperCase();
+    if(L===meu()) return true;
     if(!ehGestor()) return false;
-    var md=meuDept(); if(!md) return true;
-    var od=deptDe(usuario(l));
-    if(!od) return false;
-    return md.split(/\s+/).some(function(p){ return p && od.indexOf(p)>=0; });
+
+    if(ehMasterDe(L)) return false;
+
+    var minhas=Object.keys(minhasAreas());
+    var dele=Object.keys(areasDe(L));
+    var euTodos=minhas.indexOf('TODOS')>=0, eleTodos=dele.indexOf('TODOS')>=0;
+
+    /* outro gestor so entra na lista se dividir um departamento certo comigo */
+    if(ehGestorDe(L)){
+      if(euTodos || eleTodos) return false;
+      return minhas.some(function(a){ return dele.indexOf(a)>=0; });
+    }
+
+    /* consultor: quem cuida de "todos os departamentos" ve todo mundo,
+       e quem ainda nao tem departamento aparece para o gestor acertar */
+    if(euTodos || eleTodos) return true;
+    return minhas.some(function(a){ return dele.indexOf(a)>=0; });
+  }
+  var NOME_AREA={COMERCIAL:'Comercial',NEGOCIACAO:'Negocia\u00e7\u00e3o',DOCUMENTACAO:'Documenta\u00e7\u00e3o',
+    RH:'RH',FINANCEIRO:'Financeiro',TI:'TI',MARKETING:'Marketing',ADMINISTRATIVO:'Administrativo',
+    JURIDICO:'Jur\u00eddico',OPERACOES:'Opera\u00e7\u00f5es'};
+  function rotuloArea(l){
+    if(String(l).toUpperCase()===meu() && ehMaster()) return 'toda a empresa';
+    var a=Object.keys(areasDe(l)).filter(function(x){ return x!=='TODOS'; });
+    if(!a.length) return 'todos os departamentos';
+    return a.map(function(x){ return NOME_AREA[x] || (x.charAt(0)+x.slice(1).toLowerCase()); }).join(', ');
+  }
+  /* o Master cuida da empresa toda: nao entra na equipe dos outros gestores */
+  function ehMasterDe(l){
+    var u=usuario(l);
+    return String(l).toUpperCase()==='TALIS' || String((u&&u.role)||'').toLowerCase()==='master';
+  }
+  function ehGestorDe(l){
+    var u=usuario(l), r=String((u&&u.role)||'').toLowerCase();
+    return ehMasterDe(l) || ['admin','gestor','supervisor'].indexOf(r)>=0;
   }
   function equipe(){
     return usuarios().filter(function(u){ return podeVer(login(u)); })
@@ -15441,7 +15496,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       'border:1px solid rgba(224,120,32,.32);border-radius:22px;padding:22px;margin-bottom:16px">'+
       '<div style="font-size:11px;color:'+Co.orange+';text-transform:uppercase;letter-spacing:1px;font-weight:700">Analise de desempenho</div>'+
       '<div style="font-size:22px;font-weight:800;color:#fff;margin:4px 0 6px">Escolha quem voce quer acompanhar</div>'+
-      '<div style="font-size:13px;color:'+Co.mut+'">'+lista.length+' pessoa(s) na sua area'+(ehMaster()?' (voce ve toda a empresa)':'')+'</div>'+
+      '<div style="font-size:13px;color:'+Co.mut+'">'+lista.length+' pessoa(s) &middot; '+
+        (ehMaster()?'voce ve toda a empresa':('sua area: '+esc(rotuloArea(meu()))))+'</div>'+
       '<div style="position:relative;margin-top:14px;max-width:420px">'+
         '<i class="fas fa-magnifying-glass" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:'+Co.orange+'"></i>'+
         '<input id="pcBusca" value="'+esc(_busca)+'" oninput="__gwaPcBusca(this.value)" placeholder="procurar pelo nome..." '+
@@ -15457,8 +15513,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       var liq=soma(vs,'liquido'), meta=metaDe(L);
       var pct=meta?Math.min(100,Math.round(liq/meta*100)):0;
       var c=comparativo(L);
-      var dept=(u.depts||u.departamentos||u.departamento||u.dept||'');
-      if(Array.isArray(dept)) dept=dept.join(', ');
+      var dept=rotuloArea(L);
       return '<div onclick="__gwaPcAbrir(&#39;'+esc(L)+'&#39;)" style="cursor:pointer;flex:1 1 300px;min-width:280px;background:linear-gradient(160deg,#262626,#181818);'+
         'border:1px solid '+Co.line+';border-radius:18px;padding:17px;transition:transform .2s,border-color .2s,box-shadow .2s" '+
         'onmouseover="this.style.transform=&#39;translateY(-3px)&#39;;this.style.borderColor=&#39;rgba(224,120,32,.45)&#39;;this.style.boxShadow=&#39;0 14px 32px rgba(0,0,0,.4)&#39;" '+
@@ -15466,7 +15521,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         '<div style="display:flex;gap:13px;align-items:center;margin-bottom:12px">'+
           '<div style="width:50px;height:50px;border-radius:15px;background:'+Co.gradO+';display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff;font-size:18px;flex-shrink:0">'+esc(ini)+'</div>'+
           '<div style="flex:1;min-width:0"><div style="color:#fff;font-weight:700;font-size:15px">'+esc(nome)+'</div>'+
-          '<div style="font-size:11.5px;color:'+Co.mut+'">'+esc(dept||'—')+'</div></div>'+
+          '<div style="font-size:11.5px;color:'+Co.mut+'">'+esc(dept)+'</div></div>'+
           '<i class="fas fa-chevron-right" style="color:'+Co.orangeL+'"></i></div>'+
         '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
           '<div style="flex:1;min-width:110px"><div style="font-size:10px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:1px">No mes</div>'+
