@@ -11230,18 +11230,43 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return r; }
   /* Um registro de defesa pode guardar varias defesas (Defesa 1, Defesa 2, Defesa 3...).
      O cliente continua em uma linha so, mas cada defesa conta como uma defesa. */
+  function protocolosDe(d,r){
+    var p=(d&&d.protocolos)||[];
+    if(typeof p==='string') p=[p];
+    p=(p||[]).join('|').split(/\s*[|;]\s*/);
+    p=p.map(function(x){ return String(x==null?'':x).trim(); }).filter(Boolean);
+    if(!p.length && r){ p=String(r.protocolosTxt||r.protocolo||'').split(/\s*[|;]\s*/)
+      .map(function(x){ return String(x).trim(); }).filter(Boolean); }
+    return p;
+  }
   function listaDefesas(r){
     if(r && r.defesas && r.defesas.length) return r.defesas;
     var t=canonTipos(r && r.tipoDefesa);
     if(t.length) return t.map(function(x){ return {tipo:x,protocolos:(r&&r.protocolo)?[r.protocolo]:[]}; });
     return [{tipo:(r&&r.tipoDefesa)||'',protocolos:[]}];
   }
-  function qtdDefesas(r){ return listaDefesas(r).length; }
-  /* uma entrada por defesa, repetindo o tipo quando ele aparece mais de uma vez */
+  /* Cada protocolo (AIT) lancado e uma defesa. Um bloco sem protocolo vale 1. */
+  function qtdDefesas(r){
+    var l=listaDefesas(r), n=0, usouTxt=false;
+    l.forEach(function(d){
+      var p=(d&&d.protocolos)?protocolosDe(d,null):[];
+      if(!p.length && l.length===1){ p=protocolosDe(d,r); usouTxt=true; }
+      n+=Math.max(1,p.length);
+    });
+    return Math.max(1,n);
+  }
+  /* uma entrada por defesa (por protocolo), repetindo o tipo */
   function tiposComRepeticao(r){
-    return listaDefesas(r).map(function(d){
+    var l=listaDefesas(r), out=[];
+    l.forEach(function(d){
       var c=canonTipos(d&&d.tipo);
-      return c.length?c[0]:((d&&d.tipo&&String(d.tipo).trim())||'(nao informado)'); });
+      var tp=c.length?c[0]:((d&&d.tipo&&String(d.tipo).trim())||'(nao informado)');
+      var p=(d&&d.protocolos)?protocolosDe(d,null):[];
+      if(!p.length && l.length===1) p=protocolosDe(d,r);
+      var q=Math.max(1,p.length);
+      for(var i=0;i<q;i++) out.push(tp);
+    });
+    return out.length?out:['(nao informado)'];
   }
   function somaDefesas(arr){ return (arr||[]).reduce(function(a,r){ return a+qtdDefesas(r); },0); }
   function tiposDoRegistro(r){ if(r&&r.defesas&&r.defesas.length){ var l=[]; r.defesas.forEach(function(d){ (canonTipos(d.tipo)||[]).forEach(function(x){ if(l.indexOf(x)<0)l.push(x); }); }); if(l.length) return l; }
@@ -13109,7 +13134,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       if(!o.cpf && soDigitos(r.cpf)) o.cpf=r.cpf;
       var c=consultorDe(r); if(c && o.consultores.indexOf(c)<0) o.consultores.push(c);
       if(String(r.objeto||'').trim()) o.rastreios++;
-      o.n[t]=(o.n[t]||0)+1;
+      o.n[t]=(o.n[t]||0)+((t==='defesa')?qtdDefesas(r):1);
       o.itens.push({tipo:t,reg:r,d:parseData(dataDe(t,r)),ts:Number(r.atualizadoEm||r.ts||0)});
       o.ultima=Math.max(o.ultima,Number(r.atualizadoEm||r.ts||0)); }); });
     return m; }
@@ -15984,9 +16009,13 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return '';
   }
 
+  function baseTrein(){
+    try{ if(typeof DB!=='undefined' && DB && DB.treinamentos) return DB.treinamentos; }catch(e){}
+    try{ if(window.DB && window.DB.treinamentos) return window.DB.treinamentos; }catch(e){}
+    return [];
+  }
   function ultimos(){
-    var arr=(window.DB&&DB.treinamentos)?DB.treinamentos.slice():[];
-    return arr.sort(function(a,b){ return (b.ts||0)-(a.ts||0); }).slice(0,QTD);
+    return baseTrein().slice().sort(function(a,b){ return (b.ts||0)-(a.ts||0); }).slice(0,QTD);
   }
 
   window.__gwaTreinAbrir=function(i){
@@ -16053,7 +16082,12 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   };
 
   /* redesenha quando a home aparece / quando chegam treinamentos novos */
-  function talvez(){ if(document.getElementById('homeTraining') && !document.getElementById('gwaTreinPalco')) window.renderHomeTraining(); }
+  var _n=-1;
+  function talvez(){
+    if(!document.getElementById('homeTraining')) return;
+    var q=baseTrein().length;
+    if(!document.getElementById('gwaTreinPalco') || q!==_n){ _n=q; window.renderHomeTraining(); }
+  }
   var tt=null;
   function agendar(){ if(tt) clearTimeout(tt); tt=setTimeout(talvez,150); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',agendar); else agendar();
