@@ -16379,7 +16379,19 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function podeConfigurar(){ return ehMaster() || ((_cfg.gestores||[]).indexOf(meu())>=0); }
   /* quem pode aplicar monitoria: gestor com departamento, ou liberado pelo Master */
   function podeMonitorar(){ return ehGestor() || ((_cfg.monitores||[]).indexOf(meu())>=0); }
-  function podeNps(){ return podeMonitorar() || ((_cfg.avaliadoresNps||[]).indexOf(meu())>=0); }
+  /* quem o Master liberou para ver as respostas de NPS dos consultores */
+  function podeVerNps(m){
+    if(ehMaster()) return true;
+    if(m && String(m.consultor||'').toUpperCase()===meu()) return true;   /* a própria resposta */
+    return (_cfg.verNps||[]).indexOf(meu())>=0;
+  }
+  /* o NPS é do consultor avaliado: ele avalia o monitor e o feedback */
+  function podeResponderNps(m){
+    if(!m || !(_cfg.nps&&_cfg.nps.ativo)) return false;
+    if(m.status!=='finalizada') return false;
+    var souOAvaliado=(String(m.consultor||'').toUpperCase()===meu());
+    return souOAvaliado || ehMaster() || ((_cfg.avaliadoresNps||[]).indexOf(meu())>=0);
+  }
 
   /* ---------------- formulario padrao ---------------- */
   var ESCALA_PADRAO=[
@@ -16399,8 +16411,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     {id:'q7', texto:'Tratamento de objeções',                     peso:10, obrig:true,  critico:false, dica:'Ouviu a objeção inteira e respondeu com segurança?'},
     {id:'q8', texto:'Encerramento e direcionamento',                        peso:10, obrig:true,  critico:false, dica:'Combinou o próximo passo, com data e responsável?'}
   ];
+  /* Quem responde o NPS é o CONSULTOR, avaliando o monitor e o feedback. */
   var NPS_PADRAO=[
-    {id:'n1', texto:'Qual é a probabilidade de você recomendar a qualidade deste atendimento?'}
+    {id:'n1', texto:'Qual é a probabilidade de você recomendar a forma como esta monitoria foi conduzida?'},
+    {id:'n2', texto:'O quanto este feedback te ajudou a melhorar no próximo atendimento?'}
   ];
   var CANAIS=['Telefone','WhatsApp','Presencial','E-mail','Chat','Vídeo','Outro'];
 
@@ -16411,7 +16425,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
               negociacao:{nome:'Negociação', perguntas:PERG_PADRAO.map(function(q){ return Object.assign({},q); })} },
       nps:{ ativo:true, perguntas:NPS_PADRAO.map(function(x){ return Object.assign({},x); }) },
       criticoZera:false,
-      gestores:[], monitores:[], avaliadoresNps:[],
+      gestores:[], monitores:[], avaliadoresNps:[], verNps:[],
       verConsultor:true,            /* o consultor ve as monitorias finalizadas dele */
       hist:[] };
   }
@@ -16465,6 +16479,9 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   }
   function corNps(v){ return v>=75?Co.green:(v>=50?'#8bc34a':(v>=0?Co.amarelo:Co.red)); }
   function corNota(v){ return v>=90?Co.green:(v>=75?'#8bc34a':(v>=60?Co.amarelo:Co.red)); }
+  var ROT_DEPT={comercial:'Comercial',negociacao:'Negociação',documentacao:'Documentação'};
+  function rotDept(d){ d=String(d||'').toLowerCase();
+    return ROT_DEPT[d] || (d?(d.charAt(0).toUpperCase()+d.slice(1)):'—'); }
   function faixaNota(v){ return v>=90?'Excelente':(v>=75?'Bom':(v>=60?'Regular':'Crítico')); }
 
   /* ---------------- API ---------------- */
@@ -16491,7 +16508,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     Object.keys(base_.forms).forEach(function(k){ if(!c.forms[k]) c.forms[k]=base_.forms[k]; });
     c.nps=it.nps||base_.nps;
     c.hist=it.hist||[];
-    ['gestores','monitores','avaliadoresNps'].forEach(function(k){ if(!Array.isArray(c[k])) c[k]=[]; });
+    ['gestores','monitores','avaliadoresNps','verNps'].forEach(function(k){ if(!Array.isArray(c[k])) c[k]=[]; });
     return c;
   }
   async function salvarCfg(oque){
@@ -16699,6 +16716,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var its=[['lista','Monitorias','fa-headset']];
     if(_alvo) its.push(['consultor','Perfil de qualidade','fa-user-check']);
     if(ehGestor()||podeMonitorar()) its.push(['dash','Dashboard','fa-chart-pie']);
+    if(ehGestor()||podeMonitorar()) its.push(['rel','Relatórios','fa-file-arrow-down']);
     if(podeConfigurar()) its.push(['form','Formulário','fa-sliders']);
     return '<div class="gwaTabs" style="display:flex;gap:4px;flex-wrap:wrap">'+its.map(function(t){
       var on=(_view===t[0])||(_view==='aplicar'&&t[0]==='lista')||(_view==='ver'&&t[0]==='lista');
@@ -16726,6 +16744,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(_view==='aplicar') h=viewAplicar();
     else if(_view==='ver') h=viewVer();
     else if(_view==='dash') h=viewDash();
+    else if(_view==='rel') h=viewRel();
     else if(_view==='form') h=viewForm();
     else if(_view==='consultor') h=viewConsultor(_alvo);
     else h=viewLista();
@@ -16797,6 +16816,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="display:flex;gap:6px;margin-left:auto">'+
         btn('<i class="fas fa-eye"></i> Abrir','__gwaMonAbrir(&#39;'+esc(m.id)+'&#39;)','sec')+
         ((m.status==='rascunho'&&(String(m.monitor||'').toUpperCase()===meu()||ehMaster()))?btn('<i class="fas fa-pen"></i>','__gwaMonEditar(&#39;'+esc(m.id)+'&#39;)','ghost'):'')+
+        (ehMaster()?btn('<i class="fas fa-trash"></i>','__gwaMonExcluir(&#39;'+esc(m.id)+'&#39;)','red'):'')+
       '</div></div>';
   }
 
@@ -16809,7 +16829,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var topo='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
       card('Monitorias no filtro',todas.length,fin.length+' finalizada(s)',Co.orangeL)+
       card('Média de qualidade',med==null?'—':n1(med),med==null?'sem nota ainda':faixaNota(med),med==null?Co.mut:corNota(med))+
-      card('NPS',nps?((nps.nps>0?'+':'')+nps.nps):'—',nps?(nps.respostas+' resposta(s)'):'sem avaliação',nps?corNps(nps.nps):Co.mut)+
+      (podeVerNps()?card('NPS do monitor',nps?((nps.nps>0?'+':'')+nps.nps):'—',nps?(nps.respostas+' resposta(s) de consultores'):'sem avaliação',nps?corNps(nps.nps):Co.mut):'')+
       card('Feedback sem ciência',semCiencia,semCiencia?'aguardando o consultor':'tudo em dia',semCiencia?Co.orangeL:Co.green)+'</div>';
 
     var acao=podeMonitorar()?('<div style="margin-bottom:16px">'+btn('<i class="fas fa-plus"></i> Nova monitoria','__gwaMonNova()')+'</div>'):'';
@@ -16877,10 +16897,25 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     r.opt=(r.opt===opt)?'':opt;
     desenhaPerguntas(); recalcAoVivo();
   };
-  window.__gwaMonNps=function(qid,v){
-    if(!_edit) return;
-    _edit.nps=_edit.nps||{};
-    if(String(_edit.nps[qid])===String(v)) delete _edit.nps[qid]; else _edit.nps[qid]=Number(v);
+  /* o consultor avalia o monitor e o feedback na própria monitoria */
+  window.__gwaMonNpsResp=async function(id,qid,v){
+    var m=(_mons||[]).filter(function(x){return x.id===id;})[0]; if(!m) return;
+    if(!podeResponderNps(m)){ alert('Esta avalia\u00e7\u00e3o \u00e9 do consultor que recebeu a monitoria.'); return; }
+    m.nps=m.nps||{};
+    if(String(m.nps[qid])===String(v)) delete m.nps[qid]; else m.nps[qid]=Number(v);
+    m.npsPor=meu(); m.npsPorNome=meuNome(); m.npsEm=Date.now();
+    desenhar();
+    var ok=await salvarMon(m);
+    if(!ok) alert('N\u00e3o consegui guardar a sua avalia\u00e7\u00e3o.');
+  };
+  window.__gwaMonNpsComentario=async function(id){
+    var m=(_mons||[]).filter(function(x){return x.id===id;})[0]; if(!m) return;
+    if(!podeResponderNps(m)){ alert('Esta avalia\u00e7\u00e3o \u00e9 do consultor que recebeu a monitoria.'); return; }
+    var t=prompt('Quer deixar um recado para o monitor? (opcional)', String(m.npsComentario||''));
+    if(t===null) return;
+    m.npsComentario=String(t||''); m.npsPor=meu(); m.npsPorNome=meuNome(); m.npsEm=Date.now();
+    var ok=await salvarMon(m);
+    alert(ok?'Obrigado pela avalia\u00e7\u00e3o!':'N\u00e3o consegui guardar.');
     desenhar();
   };
 
@@ -16973,7 +17008,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div id="notaInfo"></div></div>'+
       '<div style="text-align:right"><div style="font-size:11px;color:'+Co.mut+'">Consultor</div>'+
       '<div style="font-size:16px;font-weight:800;color:#fff">'+esc(nomeDe(_edit.consultor))+'</div>'+
-      '<div style="font-size:11px;color:'+Co.mut+'">'+esc(_edit.dept)+' · formulário '+esc(formDe(_edit.dept).nome)+'</div></div></div>';
+      '<div style="font-size:11px;color:'+Co.mut+'">'+esc(rotDept(_edit.dept))+' · formulário '+esc(formDe(_edit.dept).nome)+'</div></div></div>';
 
     var corpo='';
     if(_passo===1){
@@ -16982,7 +17017,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">'+
         '<div><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">Consultor avaliado</label>'+
         '<select onchange="__gwaMonTrocaConsultor(this.value)" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff">'+
-        cs.map(function(u){ var L=login(u); return '<option value="'+esc(L)+'"'+(L===_edit.consultor?' selected':'')+'>'+esc(u.nome||u.login)+' · '+esc(deptDe(L))+'</option>'; }).join('')+'</select></div>'+
+        cs.map(function(u){ var L=login(u); return '<option value="'+esc(L)+'"'+(L===_edit.consultor?' selected':'')+'>'+esc(u.nome||u.login)+' · '+esc(rotDept(deptDe(L)))+'</option>'; }).join('')+'</select></div>'+
         inp('atData','Data do atendimento',_edit.atendimento.data,'','date')+
         inp('atHora','Horário',_edit.atendimento.hora,'','time')+
         sel('atCanal','Canal de atendimento',CANAIS,_edit.atendimento.canal)+
@@ -17013,24 +17048,9 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
           '<div style="font-size:12px;font-weight:800;color:'+cor+';margin-bottom:8px"><i class="fas '+ic+'"></i> '+t+'</div>'+
           arr.map(function(x){ return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;color:'+Co.sub+';padding:4px 0"><span>'+esc(x.q.texto)+'</span><b style="color:'+corNota(x.pts)+'">'+x.pts+'</b></div>'; }).join('')+'</div>';
       }
-      var npsBox='';
-      if(_cfg.nps&&_cfg.nps.ativo&&podeNps()){
-        npsBox=sec('Satisfação (NPS)','fa-face-smile',
-          '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px">'+
-          '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:12px">Indicador separado da nota técnica. Preencha apenas quando houver a resposta de quem foi atendido.</div>'+
-          (_cfg.nps.perguntas||[]).map(function(q){
-            var v=(_edit.nps||{})[q.id];
-            var bolas='';
-            for(var i=0;i<=10;i++){
-              var on=(String(v)===String(i));
-              var cor=(i>=9)?Co.green:((i>=7)?Co.amarelo:Co.red);
-              bolas+='<button onclick="__gwaMonNps(&#39;'+esc(q.id)+'&#39;,'+i+')" style="width:38px;height:38px;border-radius:10px;cursor:pointer;font-weight:800;font-size:13px;border:1px solid '+(on?cor:Co.line)+';background:'+(on?cor:Co.bgA)+';color:'+(on?'#fff':Co.sub)+'">'+i+'</button>';
-            }
-            return '<div style="margin-bottom:12px"><div style="font-size:13px;color:#fff;font-weight:600;margin-bottom:8px">'+esc(q.texto)+'</div>'+
-              '<div style="display:flex;gap:5px;flex-wrap:wrap">'+bolas+'</div>'+
-              '<div style="font-size:11px;color:'+Co.mut+';margin-top:6px">0 a 6 detrator · 7 e 8 neutro · 9 e 10 promotor</div></div>';
-          }).join('')+'</div>');
-      }
+      /* o NPS não fica aqui: quem responde é o consultor, depois de receber o feedback */
+      var npsBox=(_cfg.nps&&_cfg.nps.ativo)?('<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-left:4px solid '+Co.roxo+';border-radius:14px;padding:13px 17px;margin-bottom:18px;font-size:12.5px;color:'+Co.sub+'">'+
+        '<i class="fas fa-face-smile" style="color:'+Co.roxo+'"></i> Depois que você finalizar e aplicar o feedback, <b>o consultor</b> avalia esta monitoria e o seu feedback numa escala de 0 a 10. É de lá que sai o NPS — ele não tem nada a ver com a nota técnica acima.</div>'):'';
       corpo=sec('Resumo da avaliação','fa-clipboard-check',
         '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px">'+
         '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'+listinha('Melhores critérios',melhores,Co.green,'fa-arrow-trend-up')+listinha('Precisam melhorar',piores,Co.red,'fa-arrow-trend-down')+'</div>'+
@@ -17239,11 +17259,30 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     desenhar();
   };
   window.__gwaMonExcluir=async function(id){
-    if(!ehMaster()){ alert('Apenas o Master pode excluir.'); return; }
-    if(!confirm('Excluir esta monitoria definitivamente?')) return;
-    try{ await fetch(base()+'/api/'+COL_MON+'/'+encodeURIComponent(id),{method:'DELETE',headers:H()}); }catch(e){}
+    if(!ehMaster()){ alert('Apenas o Master pode excluir uma monitoria.'); return; }
+    var m=(_mons||[]).filter(function(x){return x.id===id;})[0];
+    if(!m){ alert('Monitoria n\u00e3o encontrada.'); return; }
+    var txt='EXCLUIR MONITORIA\n\n'+
+      'Consultor: '+nomeDe(m.consultor)+'\n'+
+      'Atendimento: '+brData(m.atendimento&&m.atendimento.data)+'\n'+
+      'Nota: '+n1(m.nota)+'\n'+
+      'Monitor: '+nomeDe(m.monitor)+'\n\n'+
+      'Isso apaga a avalia\u00e7\u00e3o, o feedback, a ci\u00eancia e os anexos dela. N\u00e3o d\u00e1 para desfazer.';
+    if(!confirm(txt)) return;
+    /* apaga tambem os anexos guardados */
+    var anx=(m.anexos||[]).filter(function(a){ return a && a.id && !a.link; });
+    for(var i=0;i<anx.length;i++){
+      try{ await fetch(base()+'/api/'+COL_ANX+'/'+encodeURIComponent(anx[i].id),{method:'DELETE',headers:H()}); }catch(e){}
+    }
+    var ok=false;
+    try{ var r=await fetch(base()+'/api/'+COL_MON+'/'+encodeURIComponent(id),{method:'DELETE',headers:H()}); ok=r.ok; }catch(e){}
+    if(!ok){   /* se a API n\u00e3o deixar apagar, marca como removida */
+      m.removido=true; m.removidoEm=Date.now(); m.removidoPor=meu();
+      try{ await salvarMon(m); }catch(e){}
+    }
     _mons=(_mons||[]).filter(function(x){ return x.id!==id; });
-    _view='lista'; desenhar();
+    _view='lista'; _verId=''; desenhar();
+    alert('Monitoria exclu\u00edda.');
   };
   function confete(){
     try{
@@ -17280,7 +17319,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="font-size:12.5px;color:'+Co.mut+';margin-top:5px">'+
         brData(at.data)+(at.hora?(' às '+esc(at.hora)):'')+(at.canal?(' · '+esc(at.canal)):'')+
         (at.cliente?(' · cliente: '+esc(at.cliente)):'')+(at.ref?(' · ref.: '+esc(at.ref)):'')+'</div>'+
-      '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px">monitor: <b style="color:'+Co.sub+'">'+esc(nomeDe(m.monitor))+'</b> · '+esc(m.dept||'')+'</div>'+
+      '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px">monitor: <b style="color:'+Co.sub+'">'+esc(nomeDe(m.monitor))+'</b> · '+esc(rotDept(m.dept))+'</div>'+
       '<div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap">'+statusChip(m)+
         (m.resultado&&m.resultado.zerouPor?chip('<i class="fas fa-triangle-exclamation"></i> zerada por item crítico',Co.red):'')+'</div>'+
       '</div>'+
@@ -17318,16 +17357,50 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       blocoTexto('Oportunidades de melhoria',m.oportunidades,Co.orangeL,'fa-arrow-trend-up')+
       blocoTexto('Recomendação do monitor',m.recomendacao,Co.blue,'fa-lightbulb')+'</div>';
 
-    var npsB='';
-    if(m.nps&&Object.keys(m.nps).length){
-      var n=npsDe([m]);
-      npsB=sec('Satisfação (NPS) deste atendimento','fa-face-smile',
-        '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px;display:flex;gap:16px;flex-wrap:wrap;align-items:center">'+
-        '<div style="font-size:34px;font-weight:900;color:'+corNps(n.nps)+'">'+(n.nps>0?'+':'')+n.nps+'</div>'+
-        '<div style="font-size:12.5px;color:'+Co.mut+'">nota dada: <b style="color:#fff">'+n1(n.media)+'</b> de 10<br>'+
-        n.promotores+' promotor(es) · '+n.neutros+' neutro(s) · '+n.detratores+' detrator(es)</div>'+
-        '<div style="font-size:11.5px;color:'+Co.mut+';flex:1;min-width:200px">Este número é a satisfação de quem foi atendido. A nota técnica da monitoria é a de cima, calculada pelos critérios.</div></div>');
-    }
+    /* ---- avaliação do consultor sobre o monitor e o feedback (NPS) ---- */
+    var npsB=(function(){
+      if(!(_cfg.nps&&_cfg.nps.ativo)) return '';
+      var perguntas=_cfg.nps.perguntas||[];
+      var respondeu=m.nps&&Object.keys(m.nps).length;
+      var podeResp=podeResponderNps(m);
+      if(!respondeu && !podeResp) return '';
+      if(respondeu && !podeResp && !podeVerNps(m)) return '';   /* resposta restrita */
+      var n=respondeu?npsDe([m]):null;
+
+      var linhas=perguntas.map(function(q){
+        var v=(m.nps||{})[q.id];
+        var bolas='';
+        for(var i2=0;i2<=10;i2++){
+          var on=(String(v)===String(i2));
+          var cor=(i2>=9)?Co.green:((i2>=7)?Co.amarelo:Co.red);
+          bolas+= podeResp
+            ? ('<button onclick="__gwaMonNpsResp(&#39;'+esc(m.id)+'&#39;,&#39;'+esc(q.id)+'&#39;,'+i2+')" style="width:36px;height:36px;border-radius:10px;cursor:pointer;font-weight:800;font-size:13px;border:1px solid '+(on?cor:Co.line)+';background:'+(on?cor:Co.bgA)+';color:'+(on?'#fff':Co.sub)+'">'+i2+'</button>')
+            : ('<span style="width:36px;height:36px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;border:1px solid '+(on?cor:Co.line)+';background:'+(on?cor:Co.bgA)+';color:'+(on?'#fff':Co.mut)+'">'+i2+'</span>');
+        }
+        return '<div style="margin-bottom:13px"><div style="font-size:13px;color:#fff;font-weight:600;margin-bottom:8px">'+esc(q.texto)+'</div>'+
+          '<div style="display:flex;gap:5px;flex-wrap:wrap">'+bolas+'</div></div>';
+      }).join('');
+
+      var resumo = n
+        ? ('<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding-top:12px;margin-top:4px;border-top:1px solid '+Co.line+'">'+
+           '<div style="font-size:30px;font-weight:900;color:'+corNps(n.nps)+'">'+(n.nps>0?'+':'')+n.nps+'</div>'+
+           '<div style="font-size:12.5px;color:'+Co.mut+'">média dada: <b style="color:#fff">'+n1(n.media)+'</b> de 10'+
+           (m.npsPorNome?('<br>respondido por '+esc(m.npsPorNome)+(m.npsEm?(' em '+quando(m.npsEm)):'')):'')+'</div>'+
+           (m.npsComentario?('<div style="flex:1;min-width:200px;font-size:12.5px;color:'+Co.sub+';background:'+Co.card2+';border-radius:10px;padding:9px 12px;white-space:pre-wrap">"'+esc(m.npsComentario)+'"</div>'):'')+
+           '</div>')
+        : '';
+
+      return sec('O consultor avalia a monitoria e o feedback','fa-face-smile',
+        '<div style="background:'+Co.card+';border:1px solid '+(podeResp?Co.roxo:Co.line)+';border-radius:16px;padding:16px 18px">'+
+        '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:13px">'+
+        (podeResp
+          ? 'De 0 a 10, como foi para você receber esta monitoria e este feedback? É anônimo para a equipe — serve para medir a qualidade do trabalho do monitor, e <b>não</b> mexe na sua nota técnica.'
+          : 'Avaliação feita pelo consultor sobre a conduta do monitor e a utilidade do feedback. Não tem relação com a nota técnica da monitoria.')+
+        '</div>'+linhas+
+        '<div style="font-size:11px;color:'+Co.mut+';margin-top:-4px;margin-bottom:10px">0 a 6 detrator · 7 e 8 neutro · 9 e 10 promotor</div>'+
+        (podeResp?('<div>'+btn((m.npsComentario?'<i class="fas fa-pen"></i> Editar recado':'<i class="fas fa-comment"></i> Deixar um recado para o monitor'),'__gwaMonNpsComentario(&#39;'+esc(m.id)+'&#39;)','sec')+'</div>'):'')+
+        resumo+'</div>');
+    })();
 
     var anx='';
     if((m.anexos||[]).length){
@@ -17406,7 +17479,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="flex:1;min-width:220px">'+
       '<div style="font-size:10.5px;color:'+Co.orange+';text-transform:uppercase;letter-spacing:1px;font-weight:800">Qualidade do atendimento</div>'+
       '<div style="font-size:23px;font-weight:900;color:#fff;margin-top:2px">'+esc(nomeDe(L))+'</div>'+
-      '<div style="font-size:12.5px;color:'+Co.mut+';margin-top:4px">'+esc(deptDe(L)||'sem departamento')+' · '+fin.length+' monitoria(s) finalizada(s)</div>'+
+      '<div style="font-size:12.5px;color:'+Co.mut+';margin-top:4px">'+esc(deptDe(L)?rotDept(deptDe(L)):'sem departamento')+' · '+fin.length+' monitoria(s) finalizada(s)</div>'+
       (delta!=null?('<div style="margin-top:9px;font-size:13px;font-weight:800;color:'+(delta>=0?Co.green:Co.red)+'">'+
         '<i class="fas fa-arrow-'+(delta>=0?'up':'down')+'"></i> '+(delta>=0?'+':'')+n1(delta)+' pontos em relação a '+MES[mes===0?11:mes-1]+'</div>')
         :'<div style="margin-top:9px;font-size:12px;color:'+Co.mut+'">sem comparação com o mês anterior ainda</div>')+
@@ -17422,7 +17495,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       card('Média histórica',mTudo==null?'—':n1(mTudo),'desde o início',mTudo==null?Co.mut:corNota(mTudo))+
       card('Última monitoria',ultima?n1(ultima.nota):'—',ultima?brData(ultima.atendimento&&ultima.atendimento.data):'nenhuma',ultima?corNota(ultima.nota):Co.mut)+
       card('Monitorias',fin.length,(visiveis.length-fin.length)?((visiveis.length-fin.length)+' em aberto'):'todas finalizadas',Co.blue)+
-      card('NPS',nps?((nps.nps>0?'+':'')+nps.nps):'—',nps?(nps.respostas+' resposta(s) de satisfação'):'sem avaliação do cliente',nps?corNps(nps.nps):Co.mut)+
+      ((podeVerNps()||L===meu())?card('NPS que ele deu',nps?((nps.nps>0?'+':'')+nps.nps):'—',nps?(nps.respostas+' avaliação(ões) das monitorias'):'ainda não avaliou',nps?corNps(nps.nps):Co.mut):'')+
       '</div>';
 
     /* evolucao dos ultimos 12 meses */
@@ -17477,7 +17550,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     fin.forEach(function(m){ var d=m.dept||deptDe(m.consultor)||'sem departamento';
       var o=pd[d]||(pd[d]={d:d,soma:0,n:0}); o.soma+=Number(m.nota)||0; o.n++; });
     var deps=Object.keys(pd).map(function(k){ var o=pd[k];
-      return {k:(o.d.charAt(0).toUpperCase()+o.d.slice(1)), v:Math.round(o.soma/o.n*10)/10, n:o.n}; })
+      return {k:rotDept(o.d), v:Math.round(o.soma/o.n*10)/10, n:o.n}; })
       .sort(function(a,b){ return b.v-a.v; });
 
     /* por consultor */
@@ -17485,7 +17558,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     fin.forEach(function(m){ var L=String(m.consultor||'').toUpperCase();
       var o=pc[L]||(pc[L]={L:L,soma:0,n:0}); o.soma+=Number(m.nota)||0; o.n++; });
     var ranking=Object.keys(pc).map(function(k){ var o=pc[k];
-      return {L:o.L, nome:nomeDe(o.L), dept:deptDe(o.L), media:Math.round(o.soma/o.n*10)/10, n:o.n}; })
+      return {L:o.L, nome:nomeDe(o.L), dept:rotDept(deptDe(o.L)), media:Math.round(o.soma/o.n*10)/10, n:o.n}; })
       .sort(function(a,b){ return b.media-a.media; });
 
     /* por avaliador */
@@ -17515,7 +17588,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var cards='<div style="display:flex;gap:13px;flex-wrap:wrap;margin-bottom:18px">'+
       card('Monitorias',todas.length,fin.length+' finalizada(s)',Co.orangeL)+
       card('Média geral',med==null?'—':n1(med),med==null?'sem nota':faixaNota(med),med==null?Co.mut:corNota(med))+
-      card('NPS',nps?((nps.nps>0?'+':'')+nps.nps):'—',nps?(nps.respostas+' resposta(s)'):'sem avaliação',nps?corNps(nps.nps):Co.mut)+
+      (podeVerNps()?card('NPS do monitor',nps?((nps.nps>0?'+':'')+nps.nps):'—',nps?(nps.respostas+' resposta(s)'):'sem avaliação',nps?corNps(nps.nps):Co.mut):'')+
       card('Consultores avaliados',ranking.length,consultoresVisiveis().length+' no seu acesso',Co.blue)+
       card('Sem ciência',semCiencia.length,semCiencia.length?'cobrar o consultor':'tudo em dia',semCiencia.length?Co.orangeL:Co.green)+
       card('Planos atrasados',atrasados.length,atrasados.length?'prazo vencido':'nenhum',atrasados.length?Co.red:Co.green)+
@@ -17553,7 +17626,20 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         '</tbody></table></div></div>'
       : '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:30px;text-align:center;color:'+Co.mut+'">Nenhuma monitoria finalizada no filtro.</div>');
 
+    /* NPS por monitor: e o consultor quem avalia o monitor */
+    var npsMon=[];
+    if(podeVerNps()){
+      var pn={};
+      fin.forEach(function(m){ if(!(m.nps&&Object.keys(m.nps).length)) return;
+        var L=String(m.monitor||'').toUpperCase();
+        (pn[L]=pn[L]||[]).push(m); });
+      npsMon=Object.keys(pn).map(function(k){ var n=npsDe(pn[k]);
+        return {k:nomeDe(k), v:n.nps+100, txt:(n.nps>0?'+':'')+n.nps+' ('+n.respostas+')', cor:corNps(n.nps)}; })
+        .sort(function(a,b){ return b.v-a.v; });
+    }
+
     var graficos='<div style="display:flex;gap:13px;flex-wrap:wrap;margin-bottom:18px">'+
+      (npsMon.length?barras('NPS por monitor (como os consultores avaliam)',npsMon,null,200):'')+
       (crit.length?barras('Critérios com menor nota (média 0-100)',crit,null,100):'')+
       (opo.length?barras('Falhas mais apontadas',opo):'')+
       (avaliadores.length?barras('Monitorias por avaliador',avaliadores,'linear-gradient(135deg,#9b7bd4,#6d4fae)'):'')+'</div>';
@@ -17649,8 +17735,23 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px">'+
       txa('cfgGestores','Podem editar o formulário',(_cfg.gestores||[]).join('\n'),'LOGIN por linha',70)+
       txa('cfgMonitores','Podem aplicar monitoria',(_cfg.monitores||[]).join('\n'),'LOGIN por linha',70)+
-      txa('cfgNpsQuem','Podem registrar NPS',(_cfg.avaliadoresNps||[]).join('\n'),'LOGIN por linha',70)+
+      txa('cfgNpsQuem','Podem responder o NPS no lugar do consultor',(_cfg.avaliadoresNps||[]).join('\n'),'LOGIN por linha',70)+
       '</div>'+
+      '<div style="margin-top:14px;background:'+Co.card2+';border:1px solid '+Co.roxo+';border-radius:13px;padding:14px 16px">'+
+      '<div style="font-size:12.5px;font-weight:800;color:'+Co.roxo+';margin-bottom:5px"><i class="fas fa-eye"></i> Quem pode ver as respostas de NPS dos consultores</div>'+
+      '<div style="font-size:11.5px;color:'+Co.mut+';margin-bottom:10px">O consultor avalia o monitor e o feedback. Essa resposta \u00e9 sens\u00edvel: marque abaixo quem pode enxergar. O Master sempre v\u00ea, e cada consultor sempre v\u00ea a pr\u00f3pria resposta.</div>'+
+      (function(){
+        var liberados=_cfg.verNps||[];
+        var gente=usuarios().filter(function(u){ var L=login(u); return L && L!=='TALIS' && String(u.role||'').toLowerCase()!=='master'; })
+          .sort(function(a,b){ return String(a.nome||a.login).localeCompare(String(b.nome||b.login)); });
+        if(!gente.length) return '<div style="font-size:12px;color:'+Co.mut+'">Nenhum usu\u00e1rio cadastrado.</div>';
+        return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px">'+
+          gente.map(function(u){ var L=login(u); var on=liberados.indexOf(L)>=0;
+            return '<label style="display:flex;align-items:center;gap:9px;background:'+(on?'rgba(155,123,212,.14)':Co.bgA)+';border:1px solid '+(on?Co.roxo:Co.line)+';border-radius:10px;padding:9px 12px;cursor:pointer;font-size:12.5px;color:'+(on?'#fff':Co.sub)+'">'+
+              '<input type="checkbox" class="npsVer" value="'+esc(L)+'"'+(on?' checked':'')+' style="width:16px;height:16px;accent-color:'+Co.roxo+';cursor:pointer">'+
+              '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u.nome||u.login)+'</span>'+
+              '<span style="font-size:10px;color:'+Co.mut+'">'+esc(deptDe(L)||'')+'</span></label>'; }).join('')+'</div>';
+      })()+'</div>'+
       '<label style="display:flex;align-items:center;gap:9px;font-size:13px;color:'+Co.sub+';cursor:pointer;margin-top:12px">'+
       '<input type="checkbox" id="cfgVerCons"'+(_cfg.verConsultor!==false?' checked':'')+' style="width:17px;height:17px;accent-color:'+Co.orange+'"> '+
       'O consultor pode ver as próprias monitorias finalizadas</label></div>'):'';
@@ -17725,6 +17826,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       if(document.getElementById('cfgGestores')) _cfg.gestores=logins('cfgGestores');
       if(document.getElementById('cfgMonitores')) _cfg.monitores=logins('cfgMonitores');
       if(document.getElementById('cfgNpsQuem')) _cfg.avaliadoresNps=logins('cfgNpsQuem');
+      var cbs=document.querySelectorAll('.npsVer');
+      if(cbs.length){ var vn=[];
+        Array.prototype.forEach.call(cbs,function(c){ if(c.checked) vn.push(String(c.value||'').toUpperCase()); });
+        _cfg.verNps=vn; }
       var vc=document.getElementById('cfgVerCons'); if(vc) _cfg.verConsultor=!!vc.checked;
     }
   }
@@ -17806,6 +17911,401 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     desenhar();
   };
 
+  /* ================= RELATORIOS ================= */
+  var _relTipo='geral';
+  window.__gwaMonRelTipo=function(t){ _relTipo=t; desenhar(); };
+
+  function dadosRel(){
+    var todas=aplicaFiltros(visiveisParaMim());
+    var fin=finalizadas(todas);
+    var porCons={}, porMon={}, porDept={};
+    fin.forEach(function(m){
+      var L=String(m.consultor||'').toUpperCase();
+      var o=porCons[L]||(porCons[L]={L:L,nome:nomeDe(L),dept:rotDept(deptDe(L)||m.dept),n:0,soma:0,melhor:null,pior:null,ultima:null});
+      o.n++; o.soma+=Number(m.nota)||0;
+      if(o.melhor==null||m.nota>o.melhor) o.melhor=m.nota;
+      if(o.pior==null||m.nota<o.pior) o.pior=m.nota;
+      if(!o.ultima) o.ultima=m;
+      var M=String(m.monitor||'').toUpperCase();
+      var p=porMon[M]||(porMon[M]={L:M,nome:nomeDe(M),n:0,soma:0,nps:[]});
+      p.n++; p.soma+=Number(m.nota)||0;
+      if(m.nps&&Object.keys(m.nps).length) p.nps.push(m);
+      var d=m.dept||deptDe(m.consultor)||'(sem)';
+      var q=porDept[d]||(porDept[d]={d:rotDept(d),n:0,soma:0}); q.n++; q.soma+=Number(m.nota)||0;
+    });
+    function lista(obj,chave){
+      return Object.keys(obj).map(function(k){ var o=obj[k];
+        o.media=o.n?Math.round(o.soma/o.n*10)/10:0; return o; })
+        .sort(function(a,b){ return b.media-a.media; });
+    }
+    return { todas:todas, fin:fin, media:mediaDe(fin), nps:npsDe(fin),
+             consultores:lista(porCons), monitores:lista(porMon), depts:lista(porDept),
+             criterios:porCriterio(fin), falhas:contarTextos(fin,'oportunidades'),
+             fortes:contarTextos(fin,'pontosFortes'),
+             semCiencia:todas.filter(function(m){ return m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em); }),
+             atrasados:todas.filter(function(m){ return m.feedback&&m.feedback.aplicado&&atrasado(m.feedback.prazo,m.ciencia); }) };
+  }
+  function periodoTxt(){
+    if(_fDe&&_fAte) return 'de '+brData(_fDe)+' a '+brData(_fAte);
+    if(_fDe) return 'a partir de '+brData(_fDe);
+    if(_fAte) return 'até '+brData(_fAte);
+    return 'todo o período';
+  }
+
+  function viewRel(){
+    if(!(ehGestor()||podeMonitorar())) return '<div style="padding:20px;color:'+Co.red+'">Acesso restrito.</div>';
+    var g=dadosRel();
+    var tipos=[['geral','Visão geral','fa-chart-pie'],['consultor','Por consultor','fa-user-check'],
+               ['monitor','Por monitor','fa-user-shield'],['criterio','Por critério','fa-list-check'],
+               ['detalhe','Monitoria a monitoria','fa-table-list']];
+    if(podeVerNps()) tipos.push(['nps','Respostas de NPS','fa-face-smile']);
+
+    var escolha='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px">'+tipos.map(function(t){
+      var on=(_relTipo===t[0]);
+      return '<button onclick="__gwaMonRelTipo(&#39;'+t[0]+'&#39;)" style="padding:10px 16px;border-radius:12px;cursor:pointer;font-weight:700;font-size:13px;border:1px solid '+(on?'transparent':Co.line)+';background:'+(on?Co.gradO:Co.card)+';color:'+(on?'#fff':Co.sub)+'"><i class="fas '+t[2]+'" style="margin-right:7px"></i>'+t[1]+'</button>'; }).join('')+'</div>';
+
+    var capa='<div style="background:linear-gradient(135deg,'+Co.card+','+Co.bgA+');border:1px solid '+Co.orangeD+';border-radius:18px;padding:20px;margin-bottom:16px;display:flex;gap:18px;flex-wrap:wrap;align-items:center">'+
+      '<img src="'+LOGO+'" alt="GWA" style="height:44px;width:auto;object-fit:contain">'+
+      '<div style="flex:1;min-width:200px">'+
+      '<div style="font-size:10.5px;color:'+Co.orange+';text-transform:uppercase;letter-spacing:1.2px;font-weight:800">Relatório de qualidade</div>'+
+      '<div style="font-size:21px;font-weight:900;color:#fff">'+esc((tipos.filter(function(t){return t[0]===_relTipo;})[0]||tipos[0])[1])+'</div>'+
+      '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px">'+esc(periodoTxt())+' · '+g.fin.length+' monitoria(s) finalizada(s) · '+g.consultores.length+' consultor(es)</div></div>'+
+      '<div style="display:flex;gap:9px;flex-wrap:wrap">'+
+      btn('<i class="fas fa-file-excel"></i> Excel','__gwaMonRelExcel()','sec')+
+      btn('<i class="fas fa-file-pdf"></i> PDF','__gwaMonRelPdf()')+
+      '</div></div>';
+
+    var resumo='<div style="display:flex;gap:13px;flex-wrap:wrap;margin-bottom:18px">'+
+      card('Monitorias',g.fin.length,g.todas.length+' no total',Co.orangeL)+
+      card('Média geral',g.media==null?'—':n1(g.media),g.media==null?'sem nota':faixaNota(g.media),g.media==null?Co.mut:corNota(g.media))+
+      card('Melhor média',g.consultores.length?n1(g.consultores[0].media):'—',g.consultores.length?esc(g.consultores[0].nome):'',Co.green)+
+      card('Menor média',g.consultores.length?n1(g.consultores[g.consultores.length-1].media):'—',g.consultores.length?esc(g.consultores[g.consultores.length-1].nome):'',Co.red)+
+      (podeVerNps()?card('NPS do monitor',g.nps?((g.nps.nps>0?'+':'')+g.nps.nps):'—',g.nps?(g.nps.respostas+' resposta(s)'):'sem avaliação',g.nps?corNps(g.nps.nps):Co.mut):'')+
+      card('Pendências',g.semCiencia.length+g.atrasados.length,g.semCiencia.length+' sem ciência · '+g.atrasados.length+' atrasado(s)',(g.semCiencia.length+g.atrasados.length)?Co.orangeL:Co.green)+
+      '</div>';
+
+    function tabela(cabecalho,linhas,vazio){
+      if(!linhas) return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:30px;text-align:center;color:'+Co.mut+'">'+(vazio||'Nada no filtro.')+'</div>';
+      return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto">'+
+        '<table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px">'+
+        '<thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'">'+cabecalho+'</tr></thead>'+
+        '<tbody>'+linhas+'</tbody></table></div></div>';
+    }
+    function th(t,al){ return '<th style="padding:11px 10px;text-align:'+(al||'left')+';font-size:11px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+t+'</th>'; }
+    function td(t,al,cor,peso){ return '<td style="padding:10px;text-align:'+(al||'left')+';color:'+(cor||Co.sub)+';font-weight:'+(peso||400)+'">'+t+'</td>'; }
+    function barrinha(v){ return '<div style="height:7px;border-radius:20px;background:rgba(255,255,255,.055);overflow:hidden;min-width:90px"><div style="height:100%;width:'+Math.max(2,Math.round(v))+'%;background:'+corNota(v)+'"></div></div>'; }
+
+    var corpo='';
+    if(_relTipo==='geral'){
+      var pts=[]; var hj=new Date();
+      for(var i=11;i>=0;i--){ var d=new Date(hj.getFullYear(),hj.getMonth()-i,1);
+        var mm=noMes(g.fin,d.getFullYear(),d.getMonth());
+        pts.push({k:MESc[d.getMonth()],v:mediaDe(mm)||0,n:mm.length}); }
+      corpo=sec('Evolução','fa-chart-column',evolucao('Média de qualidade por mês',pts,esc(periodoTxt())))+
+        sec('Por departamento','fa-scale-balanced','<div style="display:flex;gap:13px;flex-wrap:wrap">'+
+          (g.depts.length?g.depts.map(function(d){
+            return '<div style="flex:1 1 220px;min-width:200px;background:'+Co.card+';border:1px solid '+Co.line+';border-top:4px solid '+corNota(d.media)+';border-radius:16px;padding:16px 18px;text-align:center">'+
+              '<div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px;font-weight:700">'+esc(d.d)+'</div>'+
+              '<div style="font-size:33px;font-weight:900;color:'+corNota(d.media)+';line-height:1.15">'+n1(d.media)+'</div>'+
+              '<div style="font-size:11.5px;color:'+Co.mut+'">'+d.n+' monitoria(s)</div></div>'; }).join('')
+            :'<div style="color:'+Co.mut+';font-size:12.5px">Sem dados no filtro.</div>')+'</div>')+
+        '<div style="display:flex;gap:13px;flex-wrap:wrap;margin-bottom:18px">'+
+          (g.criterios.length?barras('Critérios com menor nota',g.criterios.slice(0,6).map(function(c){ return {k:c.texto,v:c.media,txt:n1(c.media),cor:corNota(c.media)}; }),null,100):'')+
+          (g.falhas.length?barras('Falhas mais apontadas',g.falhas.slice(0,6).map(function(x){ return {k:x.k,v:x.v,txt:x.v+'x',cor:Co.orangeL}; })):'')+
+          (g.fortes.length?barras('Pontos fortes mais citados',g.fortes.slice(0,6).map(function(x){ return {k:x.k,v:x.v,txt:x.v+'x',cor:Co.green}; })):'')+
+        '</div>';
+    }
+    else if(_relTipo==='consultor'){
+      corpo=sec('Desempenho por consultor','fa-user-check',
+        tabela(th('#','center')+th('Consultor')+th('Departamento')+th('Monitorias','center')+th('Média','center')+th('Melhor','center')+th('Pior','center')+th('Situação')+th('Desempenho'),
+          g.consultores.length?g.consultores.map(function(o,i){
+            return '<tr style="border-bottom:1px solid '+Co.line+'">'+
+              td((i+1)+'º','center',i===0?Co.orangeL:Co.mut,800)+
+              td(esc(o.nome),'left','#fff',600)+td(esc(o.dept||'—'))+
+              td(o.n,'center')+td(n1(o.media),'center',corNota(o.media),900)+
+              td(n1(o.melhor),'center',Co.green)+td(n1(o.pior),'center',Co.red)+
+              td(faixaNota(o.media),'left',corNota(o.media),700)+
+              td(barrinha(o.media))+'</tr>'; }).join(''):'', 'Nenhuma monitoria finalizada no filtro.'));
+    }
+    else if(_relTipo==='monitor'){
+      corpo=sec('Produção por monitor','fa-user-shield',
+        tabela(th('Monitor')+th('Monitorias','center')+th('Média aplicada','center')+(podeVerNps()?th('NPS recebido','center')+th('Respostas','center'):''),
+          g.monitores.length?g.monitores.map(function(o){
+            var n=o.nps.length?npsDe(o.nps):null;
+            return '<tr style="border-bottom:1px solid '+Co.line+'">'+
+              td(esc(o.nome),'left','#fff',600)+td(o.n,'center')+
+              td(n1(o.media),'center',corNota(o.media),800)+
+              (podeVerNps()?(td(n?((n.nps>0?'+':'')+n.nps):'—','center',n?corNps(n.nps):Co.mut,800)+td(n?n.respostas:0,'center')):'')+
+              '</tr>'; }).join(''):'', 'Nenhum monitor no filtro.')+
+        (podeVerNps()?'<div style="font-size:11.5px;color:'+Co.mut+';margin-top:9px"><i class="fas fa-circle-info"></i> O NPS recebido é como os consultores avaliaram a conduta do monitor e a utilidade do feedback.</div>':''));
+    }
+    else if(_relTipo==='criterio'){
+      corpo=sec('Desempenho por critério','fa-list-check',
+        tabela(th('Critério')+th('Avaliações','center')+th('Média','center')+th('Situação')+th('Desempenho'),
+          g.criterios.length?g.criterios.map(function(c){
+            return '<tr style="border-bottom:1px solid '+Co.line+'">'+
+              td(esc(c.texto),'left','#fff',600)+td(c.n,'center')+
+              td(n1(c.media),'center',corNota(c.media),900)+
+              td(faixaNota(c.media),'left',corNota(c.media),700)+
+              td(barrinha(c.media))+'</tr>'; }).join(''):'', 'Sem critérios avaliados no filtro.'));
+    }
+    else if(_relTipo==='nps'){
+      if(!podeVerNps()) corpo='<div style="padding:20px;color:'+Co.red+'">Você não tem acesso às respostas de NPS.</div>';
+      else {
+        var comNps=g.fin.filter(function(m){ return m.nps&&Object.keys(m.nps).length; });
+        var perg=(_cfg.nps&&_cfg.nps.perguntas)||[];
+        corpo=sec('O que os consultores responderam','fa-face-smile',
+          (g.nps?('<div style="display:flex;gap:13px;flex-wrap:wrap;margin-bottom:14px">'+
+            card('NPS',(g.nps.nps>0?'+':'')+g.nps.nps,faixaNps(g.nps.nps),corNps(g.nps.nps))+
+            card('Promotores',g.nps.promotores,'notas 9 e 10',Co.green)+
+            card('Neutros',g.nps.neutros,'notas 7 e 8',Co.amarelo)+
+            card('Detratores',g.nps.detratores,'notas 0 a 6',Co.red)+
+            card('Média das notas',n1(g.nps.media),'de 0 a 10',Co.blue)+'</div>'):'')+
+          tabela(th('Data')+th('Consultor')+th('Monitor')+perg.map(function(q,i){ return th('P'+(i+1),'center'); }).join('')+th('Recado'),
+            comNps.length?comNps.map(function(m){
+              return '<tr style="border-bottom:1px solid '+Co.line+'">'+
+                td(brData(m.atendimento&&m.atendimento.data))+
+                td(esc(nomeDe(m.consultor)),'left','#fff',600)+
+                td(esc(nomeDe(m.monitor)))+
+                perg.map(function(q){ var v=(m.nps||{})[q.id];
+                  var cor=(v==null)?Co.mut:((v>=9)?Co.green:((v>=7)?Co.amarelo:Co.red));
+                  return td(v==null?'—':v,'center',cor,800); }).join('')+
+                td(esc(m.npsComentario||''),'left',Co.sub)+'</tr>'; }).join(''):'',
+            'Nenhum consultor avaliou as monitorias deste filtro ainda.')+
+          '<div style="font-size:11.5px;color:'+Co.mut+';margin-top:9px">'+
+            perg.map(function(q,i){ return '<div>P'+(i+1)+': '+esc(q.texto)+'</div>'; }).join('')+'</div>');
+      }
+    }
+    else {
+      corpo=sec('Monitoria a monitoria','fa-table-list',
+        tabela(th('Data')+th('Consultor')+th('Departamento')+th('Monitor')+th('Canal')+th('Nota','center')+th('Situação')+th('Feedback')+th('Ciência'),
+          g.todas.length?g.todas.map(function(m){
+            var cie=(m.ciencia&&m.ciencia.em);
+            return '<tr style="border-bottom:1px solid '+Co.line+'">'+
+              td(brData(m.atendimento&&m.atendimento.data))+
+              td(esc(nomeDe(m.consultor)),'left','#fff',600)+
+              td(esc(rotDept(m.dept||deptDe(m.consultor))))+
+              td(esc(nomeDe(m.monitor)))+
+              td(esc((m.atendimento&&m.atendimento.canal)||'—'))+
+              td(m.status==='finalizada'?n1(m.nota):'—','center',m.status==='finalizada'?corNota(m.nota):Co.mut,900)+
+              td(m.status==='finalizada'?'Finalizada':(m.status==='revisao'?'Em revisão':'Rascunho'),'left',m.status==='finalizada'?Co.green:Co.amarelo,700)+
+              td((m.feedback&&m.feedback.aplicado)?'aplicado':'—')+
+              td(cie?brData(new Date(m.ciencia.em).toISOString().slice(0,10)):((m.feedback&&m.feedback.aplicado)?'pendente':'—'),'left',cie?Co.green:((m.feedback&&m.feedback.aplicado)?Co.orangeL:Co.mut),700)+
+              '</tr>'; }).join(''):'', 'Nenhuma monitoria no filtro.'));
+    }
+    return capa+caixaFiltros()+escolha+resumo+corpo;
+  }
+  function faixaNps(v){ return v>=75?'Excelente':(v>=50?'Muito bom':(v>=0?'Razoável':'Crítico')); }
+
+  /* ---- download em Excel (.xls que o Excel abre com as cores) ---- */
+  function xlsCabecalho(titulo){
+    return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">'+
+      '<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'+
+      '<x:Name>'+esc(titulo).slice(0,28)+'</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>'+
+      '</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->'+
+      '<style>td,th{border:1px solid #d9d9d9;padding:6px 8px;font-family:Calibri,Arial;font-size:11pt;vertical-align:middle}'+
+      'th{background:#c4661a;color:#fff;font-weight:bold;text-align:left}'+
+      '.tit{font-size:16pt;font-weight:bold;color:#c4661a;border:none}'+
+      '.sub{font-size:10pt;color:#666;border:none}'+
+      '.sec{background:#f3e6d8;color:#8a4712;font-weight:bold}'+
+      '.num{text-align:center}.verde{color:#2e7d32;font-weight:bold}.verm{color:#c62828;font-weight:bold}'+
+      '.amar{color:#b58900;font-weight:bold}.azul{color:#1565c0;font-weight:bold}'+
+      '</style></head><body>';
+  }
+  function classeNota(v){ v=Number(v)||0; return v>=90?'verde':(v>=75?'azul':(v>=60?'amar':'verm')); }
+  function baixar(nome,conteudo,tipo){
+    try{
+      var b=new Blob(['﻿'+conteudo],{type:tipo});
+      var a=document.createElement('a');
+      a.href=URL.createObjectURL(b); a.download=nome;
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ try{ URL.revokeObjectURL(a.href); a.remove(); }catch(e){} },1500);
+    }catch(e){ alert('Não consegui gerar o arquivo: '+(e&&e.message||e)); }
+  }
+  window.__gwaMonRelExcel=function(){
+    var g=dadosRel();
+    var h=xlsCabecalho('Qualidade GWA');
+    h+='<table><tr><td colspan="9" class="tit">RELATÓRIO DE MONITORIA E QUALIDADE — GWA Consultoria</td></tr>'+
+       '<tr><td colspan="9" class="sub">'+esc(periodoTxt())+' · emitido em '+new Date().toLocaleString('pt-BR')+' por '+esc(meuNome())+'</td></tr>'+
+       '<tr><td colspan="9" class="sub"></td></tr></table>';
+
+    h+='<table><tr><th colspan="2">Resumo</th></tr>'+
+      '<tr><td>Monitorias finalizadas</td><td class="num">'+g.fin.length+'</td></tr>'+
+      '<tr><td>Monitorias no total (com rascunhos)</td><td class="num">'+g.todas.length+'</td></tr>'+
+      '<tr><td>Média geral de qualidade</td><td class="num '+classeNota(g.media||0)+'">'+(g.media==null?'-':n1(g.media))+'</td></tr>'+
+      '<tr><td>Consultores avaliados</td><td class="num">'+g.consultores.length+'</td></tr>'+
+      (podeVerNps()?('<tr><td>NPS dado pelos consultores ao monitor</td><td class="num">'+(g.nps?((g.nps.nps>0?'+':'')+g.nps.nps):'-')+'</td></tr>'):'')+
+      '<tr><td>Feedbacks sem ciência</td><td class="num">'+g.semCiencia.length+'</td></tr>'+
+      '<tr><td>Planos de ação atrasados</td><td class="num">'+g.atrasados.length+'</td></tr>'+
+      '</table><br>';
+
+    h+='<table><tr><th colspan="7">Por consultor</th></tr>'+
+      '<tr><th>#</th><th>Consultor</th><th>Departamento</th><th>Monitorias</th><th>Média</th><th>Melhor</th><th>Pior</th></tr>'+
+      g.consultores.map(function(o,i){
+        return '<tr><td class="num">'+(i+1)+'</td><td>'+esc(o.nome)+'</td><td>'+esc(o.dept||'')+'</td>'+
+          '<td class="num">'+o.n+'</td><td class="num '+classeNota(o.media)+'">'+n1(o.media)+'</td>'+
+          '<td class="num">'+n1(o.melhor)+'</td><td class="num">'+n1(o.pior)+'</td></tr>'; }).join('')+
+      '</table><br>';
+
+    h+='<table><tr><th colspan="'+(podeVerNps()?5:3)+'">Por monitor</th></tr>'+
+      '<tr><th>Monitor</th><th>Monitorias</th><th>Média aplicada</th>'+(podeVerNps()?'<th>NPS recebido</th><th>Respostas</th>':'')+'</tr>'+
+      g.monitores.map(function(o){ var n=o.nps.length?npsDe(o.nps):null;
+        return '<tr><td>'+esc(o.nome)+'</td><td class="num">'+o.n+'</td>'+
+          '<td class="num '+classeNota(o.media)+'">'+n1(o.media)+'</td>'+
+          (podeVerNps()?('<td class="num">'+(n?((n.nps>0?'+':'')+n.nps):'-')+'</td><td class="num">'+(n?n.respostas:0)+'</td>'):'')+
+          '</tr>'; }).join('')+'</table><br>';
+
+    h+='<table><tr><th colspan="3">Por critério</th></tr>'+
+      '<tr><th>Critério</th><th>Avaliações</th><th>Média</th></tr>'+
+      g.criterios.map(function(c){
+        return '<tr><td>'+esc(c.texto)+'</td><td class="num">'+c.n+'</td>'+
+          '<td class="num '+classeNota(c.media)+'">'+n1(c.media)+'</td></tr>'; }).join('')+
+      '</table><br>';
+
+    var perg=(_cfg.nps&&_cfg.nps.perguntas)||[];
+    h+='<table><tr><th colspan="'+(9+(podeVerNps()?perg.length+1:0))+'">Monitoria a monitoria</th></tr>'+
+      '<tr><th>Data</th><th>Hora</th><th>Consultor</th><th>Departamento</th><th>Monitor</th><th>Canal</th><th>Cliente</th><th>Nota</th><th>Situação</th>'+
+      (podeVerNps()?(perg.map(function(q,i){ return '<th>NPS P'+(i+1)+'</th>'; }).join('')+'<th>Recado do consultor</th>'):'')+'</tr>'+
+      g.todas.map(function(m){ var at=m.atendimento||{};
+        return '<tr><td>'+brData(at.data)+'</td><td class="num">'+esc(at.hora||'')+'</td>'+
+          '<td>'+esc(nomeDe(m.consultor))+'</td><td>'+esc(rotDept(m.dept||deptDe(m.consultor)))+'</td>'+
+          '<td>'+esc(nomeDe(m.monitor))+'</td><td>'+esc(at.canal||'')+'</td><td>'+esc(at.cliente||'')+'</td>'+
+          '<td class="num '+classeNota(m.nota)+'">'+(m.status==='finalizada'?n1(m.nota):'-')+'</td>'+
+          '<td>'+(m.status==='finalizada'?'Finalizada':(m.status==='revisao'?'Em revisão':'Rascunho'))+'</td>'+
+          (podeVerNps()?(perg.map(function(q){ var v=(m.nps||{})[q.id]; return '<td class="num">'+(v==null?'-':v)+'</td>'; }).join('')+
+                        '<td>'+esc(m.npsComentario||'')+'</td>'):'')+
+          '</tr>'; }).join('')+'</table>';
+
+    if(podeVerNps() && perg.length){
+      h+='<br><table><tr><th colspan="2">Perguntas de NPS</th></tr>'+
+        perg.map(function(q,i){ return '<tr><td>P'+(i+1)+'</td><td>'+esc(q.texto)+'</td></tr>'; }).join('')+'</table>';
+    }
+    h+='</body></html>';
+    var nome='monitoria_qualidade_'+hoje()+'.xls';
+    baixar(nome,h,'application/vnd.ms-excel;charset=utf-8');
+  };
+
+  /* ---- relatorio em PDF ---- */
+  window.__gwaMonRelPdf=function(){
+    var g=dadosRel();
+    var perg=(_cfg.nps&&_cfg.nps.perguntas)||[];
+    function cn(v){ v=Number(v)||0; return v>=90?'#2e7d32':(v>=75?'#1565c0':(v>=60?'#b58900':'#c62828')); }
+    function barra(v,cor){ return '<div class="bar"><span style="width:'+Math.max(2,Math.round(v))+'%;background:'+(cor||cn(v))+'"></span></div>'; }
+
+    var pts=[], hj=new Date();
+    for(var i=11;i>=0;i--){ var d=new Date(hj.getFullYear(),hj.getMonth()-i,1);
+      var mm=noMes(g.fin,d.getFullYear(),d.getMonth());
+      pts.push({k:MESc[d.getMonth()],v:mediaDe(mm)||0,n:mm.length}); }
+    var grafico='<div class="graf">'+pts.map(function(p){
+      var alt=p.n?Math.max(4,Math.round(p.v/100*104)):3;
+      return '<div class="col"><b style="color:'+(p.n?cn(p.v):'#bbb')+'">'+(p.n?n1(p.v):'-')+'</b>'+
+        '<i style="height:'+alt+'px;background:'+(p.n?cn(p.v):'#eee')+'"></i><u>'+p.k+'</u></div>'; }).join('')+'</div>';
+
+    var html='<!doctype html><html><head><meta charset="utf-8"><title>Relatório de Qualidade GWA</title><style>'+
+      '@page{margin:16mm 12mm}'+
+      'body{font-family:Calibri,Arial,Helvetica,sans-serif;color:#1f2430;margin:0}'+
+      '.capa{display:flex;align-items:center;gap:16px;border-bottom:4px solid #c4661a;padding-bottom:14px;margin-bottom:6px}'+
+      '.capa img{height:52px}'+
+      'h1{color:#c4661a;font-size:21px;margin:0}'+
+      '.sub{color:#6b7280;font-size:12px;margin-top:2px}'+
+      'h2{font-size:15px;margin:22px 0 8px;padding-left:10px;border-left:5px solid #c4661a;color:#1f2430;page-break-after:avoid}'+
+      '.kpis{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}'+
+      '.kpi{flex:1 1 150px;border:1px solid #e6e8ec;border-radius:10px;padding:11px 13px;background:#fbfbfc}'+
+      '.kpi .t{font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:#8b93a1;font-weight:bold}'+
+      '.kpi .v{font-size:24px;font-weight:bold;line-height:1.2}'+
+      '.kpi .s{font-size:10.5px;color:#8b93a1}'+
+      'table{width:100%;border-collapse:collapse;font-size:11px;margin-top:6px}'+
+      'th{background:#c4661a;color:#fff;text-align:left;padding:7px 8px;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px}'+
+      'td{border-bottom:1px solid #eceef1;padding:6px 8px}'+
+      'tr:nth-child(even) td{background:#fafbfc}'+
+      '.c{text-align:center}.b{font-weight:bold}'+
+      '.bar{height:7px;background:#eef0f3;border-radius:20px;overflow:hidden;min-width:70px}'+
+      '.bar span{display:block;height:100%;border-radius:20px}'+
+      '.graf{display:flex;gap:6px;align-items:flex-end;height:130px;margin-top:8px;border-bottom:1px solid #e6e8ec;padding-bottom:4px}'+
+      '.col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px}'+
+      '.col b{font-size:9px}.col i{display:block;width:100%;max-width:38px;border-radius:5px 5px 2px 2px}'+
+      '.col u{font-size:9px;color:#8b93a1;text-decoration:none}'+
+      '.rod{margin-top:26px;border-top:1px solid #e6e8ec;padding-top:8px;text-align:center;color:#9aa1ad;font-size:9.5px}'+
+      '.quebra{page-break-before:always}'+
+      '</style></head><body>'+
+      '<div class="capa"><img src="'+LOGO+'"><div><h1>Relatório de Monitoria e Qualidade</h1>'+
+      '<div class="sub">GWA Consultoria · '+esc(periodoTxt())+'</div>'+
+      '<div class="sub">emitido em '+new Date().toLocaleString('pt-BR')+' por '+esc(meuNome())+'</div></div></div>'+
+
+      '<div class="kpis">'+
+      '<div class="kpi"><div class="t">Monitorias</div><div class="v" style="color:#c4661a">'+g.fin.length+'</div><div class="s">finalizadas</div></div>'+
+      '<div class="kpi"><div class="t">Média geral</div><div class="v" style="color:'+cn(g.media||0)+'">'+(g.media==null?'-':n1(g.media))+'</div><div class="s">'+(g.media==null?'sem nota':faixaNota(g.media))+'</div></div>'+
+      '<div class="kpi"><div class="t">Consultores</div><div class="v" style="color:#1565c0">'+g.consultores.length+'</div><div class="s">avaliados</div></div>'+
+      (podeVerNps()?('<div class="kpi"><div class="t">NPS do monitor</div><div class="v" style="color:'+(g.nps?corNps(g.nps.nps):'#8b93a1')+'">'+(g.nps?((g.nps.nps>0?'+':'')+g.nps.nps):'-')+'</div><div class="s">'+(g.nps?(g.nps.respostas+' resposta(s)'):'sem avaliação')+'</div></div>'):'')+
+      '<div class="kpi"><div class="t">Pendências</div><div class="v" style="color:'+((g.semCiencia.length+g.atrasados.length)?'#c4661a':'#2e7d32')+'">'+(g.semCiencia.length+g.atrasados.length)+'</div><div class="s">'+g.semCiencia.length+' sem ciência</div></div>'+
+      '</div>'+
+
+      '<h2>Evolução da qualidade</h2>'+grafico+
+
+      '<h2>Por departamento</h2>'+
+      (g.depts.length?('<table><tr><th>Departamento</th><th class="c">Monitorias</th><th class="c">Média</th><th>Desempenho</th></tr>'+
+        g.depts.map(function(d){ return '<tr><td class="b">'+esc(d.d)+'</td><td class="c">'+d.n+'</td>'+
+          '<td class="c b" style="color:'+cn(d.media)+'">'+n1(d.media)+'</td><td>'+barra(d.media)+'</td></tr>'; }).join('')+'</table>')
+        :'<p style="font-size:11px;color:#8b93a1">Sem dados no período.</p>')+
+
+      '<h2>Desempenho por consultor</h2>'+
+      (g.consultores.length?('<table><tr><th class="c">#</th><th>Consultor</th><th>Departamento</th><th class="c">Monitorias</th><th class="c">Média</th><th class="c">Melhor</th><th class="c">Pior</th><th>Desempenho</th></tr>'+
+        g.consultores.map(function(o,i){ return '<tr><td class="c b">'+(i+1)+'º</td><td class="b">'+esc(o.nome)+'</td><td>'+esc(o.dept||'')+'</td>'+
+          '<td class="c">'+o.n+'</td><td class="c b" style="color:'+cn(o.media)+'">'+n1(o.media)+'</td>'+
+          '<td class="c" style="color:#2e7d32">'+n1(o.melhor)+'</td><td class="c" style="color:#c62828">'+n1(o.pior)+'</td>'+
+          '<td>'+barra(o.media)+'</td></tr>'; }).join('')+'</table>')
+        :'<p style="font-size:11px;color:#8b93a1">Nenhuma monitoria finalizada.</p>')+
+
+      '<h2>Por monitor</h2>'+
+      (g.monitores.length?('<table><tr><th>Monitor</th><th class="c">Monitorias</th><th class="c">Média aplicada</th>'+
+        (podeVerNps()?'<th class="c">NPS recebido</th><th class="c">Respostas</th>':'')+'</tr>'+
+        g.monitores.map(function(o){ var n=o.nps.length?npsDe(o.nps):null;
+          return '<tr><td class="b">'+esc(o.nome)+'</td><td class="c">'+o.n+'</td>'+
+            '<td class="c b" style="color:'+cn(o.media)+'">'+n1(o.media)+'</td>'+
+            (podeVerNps()?('<td class="c b" style="color:'+(n?corNps(n.nps):'#8b93a1')+'">'+(n?((n.nps>0?'+':'')+n.nps):'-')+'</td><td class="c">'+(n?n.respostas:0)+'</td>'):'')+
+            '</tr>'; }).join('')+'</table>')
+        :'')+
+
+      '<div class="quebra"></div>'+
+      '<h2>Desempenho por critério</h2>'+
+      (g.criterios.length?('<table><tr><th>Critério</th><th class="c">Avaliações</th><th class="c">Média</th><th>Desempenho</th></tr>'+
+        g.criterios.map(function(c){ return '<tr><td>'+esc(c.texto)+'</td><td class="c">'+c.n+'</td>'+
+          '<td class="c b" style="color:'+cn(c.media)+'">'+n1(c.media)+'</td><td>'+barra(c.media)+'</td></tr>'; }).join('')+'</table>')
+        :'')+
+
+      (g.falhas.length?('<h2>Falhas mais apontadas</h2><table><tr><th>Oportunidade de melhoria</th><th class="c">Vezes</th></tr>'+
+        g.falhas.slice(0,12).map(function(x){ return '<tr><td>'+esc(x.k)+'</td><td class="c b">'+x.v+'</td></tr>'; }).join('')+'</table>'):'')+
+
+      (g.fortes.length?('<h2>Pontos fortes mais citados</h2><table><tr><th>Ponto positivo</th><th class="c">Vezes</th></tr>'+
+        g.fortes.slice(0,12).map(function(x){ return '<tr><td>'+esc(x.k)+'</td><td class="c b">'+x.v+'</td></tr>'; }).join('')+'</table>'):'')+
+
+      ((podeVerNps()&&g.nps)?('<h2>Como os consultores avaliaram as monitorias</h2>'+
+        '<p style="font-size:11px;color:#6b7280;margin:4px 0 8px">O consultor avalia a conduta do monitor e a utilidade do feedback, de 0 a 10. Este indicador não tem relação com a nota técnica.</p>'+
+        '<table><tr><th class="c">NPS</th><th class="c">Promotores</th><th class="c">Neutros</th><th class="c">Detratores</th><th class="c">Média das notas</th></tr>'+
+        '<tr><td class="c b" style="font-size:16px;color:'+corNps(g.nps.nps)+'">'+(g.nps.nps>0?'+':'')+g.nps.nps+'</td>'+
+        '<td class="c" style="color:#2e7d32">'+g.nps.promotores+'</td><td class="c" style="color:#b58900">'+g.nps.neutros+'</td>'+
+        '<td class="c" style="color:#c62828">'+g.nps.detratores+'</td><td class="c b">'+n1(g.nps.media)+'</td></tr></table>'):'')+
+
+      '<div class="quebra"></div>'+
+      '<h2>Monitoria a monitoria</h2>'+
+      '<table><tr><th>Data</th><th>Consultor</th><th>Monitor</th><th>Canal</th><th class="c">Nota</th><th>Situação</th><th>Ciência</th></tr>'+
+      (g.todas.length?g.todas.map(function(m){ var at=m.atendimento||{}; var cie=(m.ciencia&&m.ciencia.em);
+        return '<tr><td>'+brData(at.data)+'</td><td class="b">'+esc(nomeDe(m.consultor))+'</td>'+
+          '<td>'+esc(nomeDe(m.monitor))+'</td><td>'+esc(at.canal||'')+'</td>'+
+          '<td class="c b" style="color:'+cn(m.nota)+'">'+(m.status==='finalizada'?n1(m.nota):'-')+'</td>'+
+          '<td>'+(m.status==='finalizada'?'Finalizada':(m.status==='revisao'?'Em revisão':'Rascunho'))+'</td>'+
+          '<td>'+(cie?'dada':((m.feedback&&m.feedback.aplicado)?'pendente':'-'))+'</td></tr>'; }).join('')
+        :'<tr><td colspan="7" class="c" style="color:#8b93a1">Nenhuma monitoria no período.</td></tr>')+'</table>'+
+
+      '<div class="rod">Documento gerado pela Intranet GWA · Monitoria e Qualidade · Desenvolvido por Talis Souza</div>'+
+      '<scr'+'ipt>setTimeout(function(){window.print();},500);</scr'+'ipt></body></html>';
+
+    try{ var w=window.open('','_blank');
+      if(w){ w.document.write(html); w.document.close(); }
+      else { var b=new Blob([html],{type:'text/html'}); window.open(URL.createObjectURL(b),'_blank'); }
+    }catch(e){ alert('Não consegui abrir o relatório: '+(e&&e.message||e)); }
+  };
+
   /* ================= PDF DA MONITORIA ================= */
   window.__gwaMonPdf=function(id){
     var m=(_mons||[]).filter(function(x){return x.id===id;})[0]; if(!m) return;
@@ -17834,7 +18334,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div class="sub">GWA Consultoria · emitido em '+new Date().toLocaleString('pt-BR')+'</div></div></div>'+
       '<div class="nota"><b>'+n1(m.nota)+'</b><span style="font-size:11px;color:#666">de 100 · '+faixaNota(m.nota)+'</span></div>'+
       '<div style="font-size:13px;line-height:1.8"><b>Consultor:</b> '+esc(nomeDe(m.consultor))+'<br>'+
-      '<b>Departamento:</b> '+esc(m.dept||'')+'<br>'+
+      '<b>Departamento:</b> '+esc(rotDept(m.dept))+'<br>'+
       '<b>Monitor:</b> '+esc(nomeDe(m.monitor))+'<br>'+
       '<b>Atendimento:</b> '+brData(at.data)+(at.hora?(' às '+esc(at.hora)):'')+(at.canal?(' · '+esc(at.canal)):'')+
       (at.cliente?('<br><b>Cliente:</b> '+esc(at.cliente)):'')+
@@ -17894,7 +18394,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
              semCiencia:doConsultor(l).filter(function(m){ return m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em); }).length };
   };
   window.gwaMonitoriaPronta=function(){ return !!_mons; };
-  window.gwaMonitoriaCarregar=function(){ return carregar(); };
+  window.gwaMonitoriaCarregar=function(forcar){ return carregar(!!forcar); };
 
   /* pre-carrega em segundo plano para o perfil mostrar os numeros sem esperar */
   setTimeout(function(){ try{ carregar(); }catch(e){} },1500);
