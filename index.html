@@ -15468,71 +15468,43 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function iso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function norm(s){ return String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().trim(); }
 
-  /* ---------- departamento ----------
-     O departamento do vendedor e definido em Vendas > Ajustes (deptVendas).
-     So depois disso olhamos o cadastro de usuario. */
-  var AREAS=['COMERCIAL','NEGOCIACAO','DOCUMENTACAO','RH','TI','TREINAMENTOS',
-             'FINANCEIRO','MARKETING','ADMINISTRATIVO','JURIDICO','OPERACOES'];
+  /* ---------- departamento e acesso ----------
+     Fonte unica: Vendas > Ajustes.
+       . permissoesDept[LOGIN] = {admComercial, admNegociacao}  -> o que o gestor VE
+       . deptVendas[LOGIN]                                      -> onde a pessoa ESTA
+     Nada de regra paralela aqui. */
+  var NOME_DEPT={comercial:'Comercial',negociacao:'Negociação',documentacao:'Documentação'};
 
-  function areasDe(l){
+  function deptDoUsuario(l){
     var L=String(l||'').toUpperCase();
-    var achadas={};
-
-    /* 1. o que o modulo de Vendas definiu para esta pessoa */
     var ov=_cfg && _cfg.deptVendas && _cfg.deptVendas[L];
-    if(ov) achadas[norm(ov)]=1;
-
-    /* 2. o cadastro do usuario */
+    if(ov==='comercial'||ov==='negociacao'||ov==='documentacao') return ov;
     var u=usuario(L);
-    if(u){
-      var d=u.depts||u.departamentos||u.departments||u.departamento||u.dept||'';
-      if(Array.isArray(d)) d=d.join(' ');
-      var t=norm(d);
-      if(t.indexOf('TODOS')>=0 || t.indexOf('TODAS')>=0 || t==='ALL') return {TODOS:1};
-      AREAS.forEach(function(a){ if(t.indexOf(a)>=0) achadas[a]=1; });
-      /* texto livre que nao bate com a lista ainda conta como area */
-      if(!Object.keys(achadas).length && t) achadas[t]=1;
-    }
-    /* cadastro sem departamento vale como "todos", igual ao resto do sistema */
-    if(!Object.keys(achadas).length) return {TODOS:1};
-    return achadas;
+    var d=(u&&(u.depts||u.departamentos||u.departments||u.departamento||u.dept))||[];
+    if(!Array.isArray(d)) d=[d];
+    var t=norm(d.join(' '));
+    if(t.indexOf('NEGOCIA')>=0) return 'negociacao';
+    if(t.indexOf('COMERCIAL')>=0) return 'comercial';
+    if(t.indexOf('DOCUMENTA')>=0) return 'documentacao';
+    return '';
   }
-  function minhasAreas(){ return areasDe(meu()); }
 
-  /* Master ve todos. Os demais gestores veem quem divide area com eles. */
-  function podeVer(l){
-    if(ehMaster()) return true;
-    var L=String(l).toUpperCase();
-    if(L===meu()) return true;
-    if(!ehGestor()) return false;
-
-    if(ehMasterDe(L)) return false;
-
-    var minhas=Object.keys(minhasAreas());
-    var dele=Object.keys(areasDe(L));
-    var euTodos=minhas.indexOf('TODOS')>=0, eleTodos=dele.indexOf('TODOS')>=0;
-
-    /* outro gestor so entra na lista se dividir um departamento certo comigo */
-    if(ehGestorDe(L)){
-      if(euTodos || eleTodos) return false;
-      return minhas.some(function(a){ return dele.indexOf(a)>=0; });
-    }
-
-    /* consultor: quem cuida de "todos os departamentos" ve todo mundo,
-       e quem ainda nao tem departamento aparece para o gestor acertar */
-    if(euTodos || eleTodos) return true;
-    return minhas.some(function(a){ return dele.indexOf(a)>=0; });
+  /* departamentos que ESTE usuario pode supervisionar */
+  function deptsPermitidos(l){
+    var L=String(l||meu()).toUpperCase();
+    if(L==='TALIS' || String((usuario(L)||{}).role||'').toLowerCase()==='master')
+      return ['comercial','negociacao','documentacao'];
+    var pd=(_cfg && _cfg.permissoesDept && _cfg.permissoesDept[L])||{};
+    var a=[];
+    if(pd.admComercial) a.push('comercial');
+    if(pd.admNegociacao) a.push('negociacao');
+    if(!a.length){ var d=deptDoUsuario(L); if(d) a.push(d); }   /* sem marcacao: so o proprio */
+    return a;
   }
-  var NOME_AREA={COMERCIAL:'Comercial',NEGOCIACAO:'Negocia\u00e7\u00e3o',DOCUMENTACAO:'Documenta\u00e7\u00e3o',
-    RH:'RH',FINANCEIRO:'Financeiro',TI:'TI',MARKETING:'Marketing',ADMINISTRATIVO:'Administrativo',
-    JURIDICO:'Jur\u00eddico',OPERACOES:'Opera\u00e7\u00f5es'};
-  function rotuloArea(l){
-    if(String(l).toUpperCase()===meu() && ehMaster()) return 'toda a empresa';
-    var a=Object.keys(areasDe(l)).filter(function(x){ return x!=='TODOS'; });
-    if(!a.length) return 'todos os departamentos';
-    return a.map(function(x){ return NOME_AREA[x] || (x.charAt(0)+x.slice(1).toLowerCase()); }).join(', ');
-  }
-  /* o Master cuida da empresa toda: nao entra na equipe dos outros gestores */
+  function meusDepts(){ return deptsPermitidos(meu()); }
+  window.gwaDeptsPermitidos=deptsPermitidos;
+  window.gwaDeptDoUsuario=deptDoUsuario;
+
   function ehMasterDe(l){
     var u=usuario(l);
     return String(l).toUpperCase()==='TALIS' || String((u&&u.role)||'').toLowerCase()==='master';
@@ -15540,6 +15512,37 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function ehGestorDe(l){
     var u=usuario(l), r=String((u&&u.role)||'').toLowerCase();
     return ehMasterDe(l) || ['admin','gestor','supervisor'].indexOf(r)>=0;
+  }
+
+  function podeVer(l){
+    if(ehMaster()) return true;
+    var L=String(l).toUpperCase();
+    if(L===meu()) return true;            /* todo mundo ve o proprio perfil */
+    if(!ehGestor()) return false;
+    if(ehMasterDe(L)) return false;       /* o Master nao entra na equipe de ninguem */
+    var meus=meusDepts();
+    if(!meus.length) return false;
+    var dele=deptDoUsuario(L);
+    if(!dele) return false;               /* sem departamento definido fica de fora */
+    return meus.indexOf(dele)>=0;
+  }
+  window.gwaPodeVerConsultor=podeVer;
+
+  function rotuloArea(l){
+    var L=String(l).toUpperCase();
+    if(L===meu() && ehMaster()) return 'toda a empresa';
+    if(L===meu() && ehGestor()){
+      var ms=meusDepts();
+      if(ms.length) return ms.map(function(d){ return NOME_DEPT[d]||d; }).join(' + ');
+    }
+    var d=deptDoUsuario(L);
+    return d?(NOME_DEPT[d]||d):'sem departamento definido';
+  }
+  /* quem ficou de fora so por falta de departamento — para o gestor acertar nos Ajustes */
+  function semDepartamento(){
+    if(!ehGestor()) return [];
+    return usuarios().filter(function(u){ var L=login(u);
+      return L && L!==meu() && !ehGestorDe(L) && !deptDoUsuario(L); });
   }
   function equipe(){
     return usuarios().filter(function(u){ return podeVer(login(u)); })
@@ -15712,7 +15715,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="font-size:11px;color:'+Co.orange+';text-transform:uppercase;letter-spacing:1px;font-weight:700">Analise de desempenho</div>'+
       '<div style="font-size:22px;font-weight:800;color:#fff;margin:4px 0 6px">Escolha quem voce quer acompanhar</div>'+
       '<div style="font-size:13px;color:'+Co.mut+'">'+lista.length+' pessoa(s) &middot; '+
-        (ehMaster()?'voce ve toda a empresa':('sua area: '+esc(rotuloArea(meu()))))+'</div>'+
+        (ehMaster()?'voce ve toda a empresa':('seu acesso: '+esc(rotuloArea(meu()))))+'</div>'+
+      (function(){ var sd=semDepartamento(); if(!sd.length) return '';
+        return '<div style="margin-top:9px;font-size:12px;color:'+Co.orangeL+'"><i class="fas fa-circle-info"></i> '+
+          sd.length+' pessoa(s) ainda sem departamento definido n\u00e3o aparecem aqui. Defina em <b>Vendas &rsaquo; Ajustes</b>.</div>'; })()+
       '<div style="position:relative;margin-top:14px;max-width:420px">'+
         '<i class="fas fa-magnifying-glass" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:'+Co.orange+'"></i>'+
         '<input id="pcBusca" value="'+esc(_busca)+'" oninput="__gwaPcBusca(this.value)" placeholder="procurar pelo nome..." '+
@@ -15905,9 +15911,39 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         '<button onclick="__gwaPcFbFechar()" style="background:transparent;border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:11px;padding:10px 17px;cursor:pointer">Cancelar</button></div>'+
       '</div>') : '';
 
+    /* ---- qualidade: resumo das monitorias ---- */
+    var qualBox=(function(){
+      var r=(typeof window.gwaMonitoriaResumo==='function')?window.gwaMonitoriaResumo(_login):null;
+      var souEu=(_login===meu());
+      var podeAbrir=ehGestor()||souEu;
+      function mini(t,v,sub,cor){
+        return '<div style="flex:1 1 112px;min-width:104px;background:'+Co.card2+';border:1px solid '+Co.line+';border-radius:13px;padding:11px 13px">'+
+          '<div style="font-size:9.5px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;font-weight:700">'+t+'</div>'+
+          '<div style="font-size:21px;font-weight:900;color:'+(cor||Co.orangeL)+';line-height:1.2">'+v+'</div>'+
+          (sub?('<div style="font-size:10.5px;color:'+Co.mut+'">'+sub+'</div>'):'')+'</div>'; }
+      function corN(v){ return v>=90?Co.green:(v>=75?'#8bc34a':(v>=60?'#e3b341':Co.red)); }
+      var corpo = r
+        ? ('<div style="display:flex;gap:9px;flex-wrap:wrap">'+
+            mini('M\u00eas',r.mes==null?'—':r.mes.toFixed(1),null,r.mes==null?Co.mut:corN(r.mes))+
+            mini('Ano',r.ano==null?'—':r.ano.toFixed(1),null,r.ano==null?Co.mut:corN(r.ano))+
+            mini('Hist\u00f3rica',r.geral==null?'—':r.geral.toFixed(1),null,r.geral==null?Co.mut:corN(r.geral))+
+            mini('\u00daltima',r.ultima==null?'—':r.ultima.toFixed(1),r.total+' monitoria(s)',r.ultima==null?Co.mut:corN(r.ultima))+
+            (r.nps?mini('NPS',(r.nps.nps>0?'+':'')+r.nps.nps,r.nps.respostas+' resposta(s)',Co.roxo):'')+
+          '</div>'+
+          (r.semCiencia?('<div style="margin-top:10px;font-size:12px;color:'+Co.orangeL+'"><i class="fas fa-hourglass-half"></i> '+r.semCiencia+' feedback(s) aguardando ci\u00eancia</div>'):''))
+        : '<div style="font-size:12.5px;color:'+Co.mut+';padding:6px 0">Nenhuma monitoria finalizada ainda.</div>';
+      return '<div style="background:'+Co.card+';border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px;flex:1 1 380px;min-width:320px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
+        '<h4 style="margin:0;color:#fff;font-size:14px"><i class="fas fa-headset" style="color:'+Co.orange+'"></i> Monitoria e qualidade</h4>'+
+        '<div style="display:flex;gap:7px;flex-wrap:wrap">'+
+        (ehGestor()?('<button onclick="gwaAbrirMonitoria(&#39;'+esc(_login)+'&#39;,&#39;lista&#39;);__gwaMonNova(&#39;'+esc(_login)+'&#39;)" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12.5px"><i class="fas fa-plus"></i> Nova monitoria</button>'):'')+
+        (podeAbrir?('<button onclick="gwaAbrirMonitoria(&#39;'+esc(_login)+'&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12.5px"><i class="fas fa-chart-line"></i> Abrir painel</button>'):'')+
+        '</div></div>'+corpo+'</div>';
+    })();
+
     var fbBox='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;flex:1 1 380px;min-width:320px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
-        '<h4 style="margin:0;color:#fff;font-size:14px"><i class="fas fa-clipboard-check" style="color:'+Co.orange+'"></i> Feedbacks e monitorias</h4>'+
+        '<h4 style="margin:0;color:#fff;font-size:14px"><i class="fas fa-clipboard-check" style="color:'+Co.orange+'"></i> Anota\u00e7\u00f5es r\u00e1pidas</h4>'+
         (ehGestor()&&!_fbEdit?('<button onclick="__gwaPcFbNovo()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:12.5px"><i class="fas fa-plus"></i> Registrar</button>'):'')+
       '</div>'+formFb+
       (meus.length?meus.slice(0,12).map(function(it){
@@ -15942,7 +15978,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
     return capa+kpis+comp+metaBox+graficos+
       '<div style="display:flex;gap:14px;flex-wrap:wrap">'+agBox+vendasBox+'</div>'+
-      '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:14px">'+fbBox+'</div>';
+      '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:14px">'+qualBox+fbBox+'</div>';
   }
 
   function desenhar(){
@@ -15985,6 +16021,17 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         : '<i class="fas fa-user"></i> Meu desempenho';
       b.onclick=function(e){ e.stopPropagation(); gwaAbrirPerfilConsultor(ehGestor()?'':meu()); };
       tabs.appendChild(b);
+
+      /* aba da monitoria ao lado */
+      if(typeof window.gwaAbrirMonitoria==='function' && !tabs.querySelector('.gwaMonAbaTopo')){
+        var b2=document.createElement('button');
+        b2.type='button'; b2.className='gwaPcAba gwaMonAbaTopo';
+        b2.innerHTML= ehGestor()
+          ? '<i class="fas fa-headset"></i> Monitoria'
+          : '<i class="fas fa-headset"></i> Minhas monitorias';
+        b2.onclick=function(e){ e.stopPropagation(); window.gwaAbrirMonitoria(ehGestor()?'':meu()); };
+        tabs.appendChild(b2);
+      }
     });
   }
   var t=null;
@@ -16253,6 +16300,1604 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function agendar(){ if(tt) clearTimeout(tt); tt=setTimeout(talvez,150); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',agendar); else agendar();
   try{ new MutationObserver(agendar).observe(document.body,{childList:true,subtree:true}); }catch(e){}
+})();
+</script>
+
+<script>
+/* ===== INTRANET GWA :: MONITORIA E QUALIDADE ===== */
+(function(){
+  if(window.__gwaMonitoria) return; window.__gwaMonitoria=true;
+
+  var Co={bgA:'#0d0d0d',bgB:'#161616',card:'#1c1c1c',card2:'#242424',line:'rgba(255,255,255,.09)',
+          orange:'#e07820',orangeD:'#c4661a',orangeL:'#f0943a',sub:'#d4d8de',mut:'#949aa4',
+          green:'#3fae5a',red:'#e5533c',blue:'#4a9fd5',roxo:'#9b7bd4',amarelo:'#e3b341',
+          gradO:'linear-gradient(135deg,#f0943a,#c4661a)'};
+  var LOGO='https://drive.google.com/thumbnail?id=1erF3Vfah-MgTbl2QNLph7oyfIqENLn9m&sz=w240';
+  var MES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  var MESc=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+
+  var COL_CFG='monitoria_cfg', COL_MON='monitorias', COL_ANX='monitoria_anexos';
+  var MAX_ANEXO=900*1024;   /* por arquivo, depois de reduzir a imagem */
+
+  /* ---------------- util ---------------- */
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function js(v){ return esc(JSON.stringify(String(v==null?'':v))).replace(/&quot;/g,'&#34;'); }
+  function base(){ return (typeof API_URL!=='undefined')?API_URL:''; }
+  function H(){ return {'Content-Type':'application/json','X-MC-Token':(typeof API_TOKEN!=='undefined'?API_TOKEN:'')}; }
+  function cur(){ return window.currentUser||(typeof getSession==='function'?getSession():{})||{}; }
+  function login(u){ return String((u&&(u.login||u.user||u.email||u.nome))||'').toUpperCase(); }
+  function meu(){ return login(cur()); }
+  function meuNome(){ var u=cur(); return u.nome||u.login||meu(); }
+  function papel(){ return String((cur()||{}).role||'').toLowerCase(); }
+  function ehMaster(){ return meu()==='TALIS' || papel()==='master'; }
+  function ehGestor(){ return ehMaster() || ['admin','gestor','supervisor'].indexOf(papel())>=0; }
+  function usuarios(){ try{ if(typeof getUsers==='function'){ var g=getUsers(); if(g&&g.length) return g; } }catch(e){}
+    return window._usersCache||[]; }
+  function usuario(l){ var us=usuarios(); for(var i=0;i<us.length;i++){ if(login(us[i])===String(l).toUpperCase()) return us[i]; } return null; }
+  function nomeDe(l){ var u=usuario(l); return u?(u.nome||u.login):String(l||''); }
+  function norm(s){ return String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().trim(); }
+  function uid(p){ return (p||'m')+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7); }
+  function hoje(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function agoraHM(){ var d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+  function brData(s){ var p=String(s||'').split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):String(s||''); }
+  function dt(s){ var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m?new Date(+m[1],+m[2]-1,+m[3],12,0,0):null; }
+  function n1(v){ return (Math.round((Number(v)||0)*10)/10).toFixed(1); }
+  function quando(ts){ try{ return new Date(Number(ts)||0).toLocaleString('pt-BR'); }catch(e){ return ''; } }
+
+  /* ---------------- permissoes (fonte: Vendas > Ajustes) ---------------- */
+  var _cfgV=null;
+  function deptsPermitidos(l){
+    if(typeof window.gwaDeptsPermitidos==='function') return window.gwaDeptsPermitidos(l||meu());
+    var L=String(l||meu()).toUpperCase();
+    if(L==='TALIS'||String((usuario(L)||{}).role||'').toLowerCase()==='master') return ['comercial','negociacao','documentacao'];
+    var pd=(_cfgV&&_cfgV.permissoesDept&&_cfgV.permissoesDept[L])||{};
+    var a=[]; if(pd.admComercial)a.push('comercial'); if(pd.admNegociacao)a.push('negociacao');
+    if(!a.length){ var d=deptDe(L); if(d) a.push(d); }
+    return a; }
+  function deptDe(l){
+    if(typeof window.gwaDeptDoUsuario==='function') return window.gwaDeptDoUsuario(l);
+    var L=String(l||'').toUpperCase();
+    var ov=_cfgV&&_cfgV.deptVendas&&_cfgV.deptVendas[L];
+    if(ov==='comercial'||ov==='negociacao'||ov==='documentacao') return ov;
+    var u=usuario(L); var d=(u&&(u.depts||u.departamentos||u.departments||u.departamento))||[];
+    if(!Array.isArray(d)) d=[d];
+    var t=norm(d.join(' '));
+    if(t.indexOf('NEGOCIA')>=0) return 'negociacao';
+    if(t.indexOf('COMERCIAL')>=0) return 'comercial';
+    if(t.indexOf('DOCUMENTA')>=0) return 'documentacao';
+    return ''; }
+  function podeVer(l){
+    if(typeof window.gwaPodeVerConsultor==='function') return window.gwaPodeVerConsultor(l);
+    if(ehMaster()) return true;
+    var L=String(l).toUpperCase(); if(L===meu()) return true;
+    if(!ehGestor()) return false;
+    var d=deptDe(L); if(!d) return false;
+    return deptsPermitidos().indexOf(d)>=0; }
+
+  /* quem pode mexer no formulario: Master + quem o Master liberar */
+  function podeConfigurar(){ return ehMaster() || ((_cfg.gestores||[]).indexOf(meu())>=0); }
+  /* quem pode aplicar monitoria: gestor com departamento, ou liberado pelo Master */
+  function podeMonitorar(){ return ehGestor() || ((_cfg.monitores||[]).indexOf(meu())>=0); }
+  function podeNps(){ return podeMonitorar() || ((_cfg.avaliadoresNps||[]).indexOf(meu())>=0); }
+
+  /* ---------------- formulario padrao ---------------- */
+  var ESCALA_PADRAO=[
+    {key:'exc', label:'Excelente',     pts:100, cor:'#3fae5a'},
+    {key:'bom', label:'Bom',           pts:75,  cor:'#4a9fd5'},
+    {key:'reg', label:'Regular',       pts:50,  cor:'#e3b341'},
+    {key:'rui', label:'Ruim',          pts:0,   cor:'#e5533c'},
+    {key:'na',  label:'Não se aplica', pts:null, cor:'#949aa4'}
+  ];
+  var PERG_PADRAO=[
+    {id:'q1', texto:'Abordagem inicial e apresentação',          peso:10, obrig:true,  critico:false, dica:'Cumprimentou, se identificou e identificou o cliente?'},
+    {id:'q2', texto:'Comunicação e clareza',                     peso:15, obrig:true,  critico:false, dica:'Falou de forma clara, sem vícios de linguagem, no ritmo do cliente?'},
+    {id:'q3', texto:'Cordialidade e profissionalismo',                      peso:10, obrig:true,  critico:true,  dica:'Manteve educação e respeito do início ao fim?'},
+    {id:'q4', texto:'Conhecimento dos serviços',                       peso:15, obrig:true,  critico:false, dica:'Explicou o serviço sem prometer o que não pode ser cumprido?'},
+    {id:'q5', texto:'Identificação das necessidades do cliente',  peso:15, obrig:true,  critico:false, dica:'Fez as perguntas certas antes de oferecer?'},
+    {id:'q6', texto:'Argumentação e negociação',        peso:15, obrig:true,  critico:false, dica:'Sustentou valor em vez de só dar desconto?'},
+    {id:'q7', texto:'Tratamento de objeções',                     peso:10, obrig:true,  critico:false, dica:'Ouviu a objeção inteira e respondeu com segurança?'},
+    {id:'q8', texto:'Encerramento e direcionamento',                        peso:10, obrig:true,  critico:false, dica:'Combinou o próximo passo, com data e responsável?'}
+  ];
+  var NPS_PADRAO=[
+    {id:'n1', texto:'Qual é a probabilidade de você recomendar a qualidade deste atendimento?'}
+  ];
+  var CANAIS=['Telefone','WhatsApp','Presencial','E-mail','Chat','Vídeo','Outro'];
+
+  function cfgPadrao(){
+    return { id:'atual',
+      escala:ESCALA_PADRAO.map(function(x){ return Object.assign({},x); }),
+      forms:{ comercial:{nome:'Comercial', perguntas:PERG_PADRAO.map(function(q){ return Object.assign({},q); })},
+              negociacao:{nome:'Negociação', perguntas:PERG_PADRAO.map(function(q){ return Object.assign({},q); })} },
+      nps:{ ativo:true, perguntas:NPS_PADRAO.map(function(x){ return Object.assign({},x); }) },
+      criticoZera:false,
+      gestores:[], monitores:[], avaliadoresNps:[],
+      verConsultor:true,            /* o consultor ve as monitorias finalizadas dele */
+      hist:[] };
+  }
+  var _cfg=cfgPadrao(), _cfgOk=false;
+  var _mons=null, _carregando=false;
+
+  function formDe(dept){
+    var d=(dept==='negociacao')?'negociacao':((dept==='documentacao'&&_cfg.forms.documentacao)?'documentacao':'comercial');
+    var f=_cfg.forms[d]||_cfg.forms.comercial||{perguntas:[]};
+    return {chave:d, nome:f.nome||d, perguntas:(f.perguntas||[]).slice()};
+  }
+  function somaPesos(ps){ return (ps||[]).reduce(function(a,q){ return a+(Number(q.peso)||0); },0); }
+
+  /* ---------------- calculo da nota ---------------- */
+  /* Cada pergunta vale o seu peso. "Nao se aplica" sai da conta e o peso dela
+     e redistribuido entre as demais — por isso dividimos pelo peso respondido. */
+  function calcNota(perguntas, respostas, escala, criticoZera){
+    var esc_=escala||_cfg.escala||ESCALA_PADRAO;
+    function ptsDe(k){ for(var i=0;i<esc_.length;i++){ if(esc_[i].key===k) return esc_[i].pts; } return null; }
+    var pesoTot=0, soma=0, resp=0, na=0, faltando=[], zerou=null, det=[];
+    (perguntas||[]).forEach(function(q){
+      var r=(respostas||{})[q.id]||{};
+      var p=Number(q.peso)||0;
+      var pts=(r.opt==null||r.opt==='')?undefined:ptsDe(r.opt);
+      if(pts===undefined){ if(q.obrig!==false) faltando.push(q); det.push({q:q,pts:null,estado:'sem resposta'}); return; }
+      if(pts===null){ na++; det.push({q:q,pts:null,estado:'nao se aplica'}); return; }
+      resp++; pesoTot+=p; soma+=p*pts;
+      det.push({q:q,pts:pts,peso:p,contrib:p*pts});
+      if(q.critico && pts<=0) zerou=q;
+    });
+    var nota=pesoTot>0?(soma/pesoTot):0;
+    if(zerou && (criticoZera===undefined?_cfg.criticoZera:criticoZera)) nota=0;
+    return { nota:Math.round(nota*10)/10, pesoConsiderado:pesoTot, respondidas:resp,
+             naoSeAplica:na, faltando:faltando, zerouPor:zerou, detalhe:det };
+  }
+
+  /* ---------------- NPS ---------------- */
+  function npsDe(lista){
+    var vals=[];
+    (lista||[]).forEach(function(m){
+      var n=m && m.nps; if(!n) return;
+      Object.keys(n).forEach(function(k){ var v=Number(n[k]);
+        if(!isNaN(v) && v>=0 && v<=10) vals.push(v); });
+    });
+    if(!vals.length) return null;
+    var p=0,d=0,nt=0;
+    vals.forEach(function(v){ if(v>=9)p++; else if(v>=7)nt++; else d++; });
+    var t=vals.length;
+    return { nps:Math.round((p/t*100)-(d/t*100)), promotores:p, neutros:nt, detratores:d,
+             respostas:t, media:Math.round(vals.reduce(function(a,b){return a+b;},0)/t*10)/10 };
+  }
+  function corNps(v){ return v>=75?Co.green:(v>=50?'#8bc34a':(v>=0?Co.amarelo:Co.red)); }
+  function corNota(v){ return v>=90?Co.green:(v>=75?'#8bc34a':(v>=60?Co.amarelo:Co.red)); }
+  function faixaNota(v){ return v>=90?'Excelente':(v>=75?'Bom':(v>=60?'Regular':'Crítico')); }
+
+  /* ---------------- API ---------------- */
+  async function carregar(forcar){
+    if(_carregando) return;
+    if(_mons && !forcar) return;
+    _carregando=true;
+    try{ var r=await fetch(base()+'/api/vendas_config/atual',{headers:H()});
+      if(r.ok){ var j=await r.json(); _cfgV=(j&&j.data)||{}; } }catch(e){ _cfgV=_cfgV||{}; }
+    try{ var r2=await fetch(base()+'/api/'+COL_CFG,{headers:H()});
+      if(r2.ok){ var j2=await r2.json(); var it=((j2&&j2.data)||[]).filter(function(x){return x&&x.id==='atual';})[0];
+        if(it){ _cfg=mesclaCfg(it); } } }catch(e){}
+    _cfgOk=true;
+    try{ var r3=await fetch(base()+'/api/'+COL_MON,{headers:H()});
+      if(r3.ok){ var j3=await r3.json(); _mons=((j3&&j3.data)||[]).filter(function(x){ return x && x.removido!==true; }); } }catch(e){ _mons=_mons||[]; }
+    _mons=_mons||[];
+    _carregando=false;
+  }
+  function mesclaCfg(it){
+    var base_=cfgPadrao();
+    var c=Object.assign(base_, it);
+    c.escala=(it.escala&&it.escala.length)?it.escala:base_.escala;
+    c.forms=it.forms||base_.forms;
+    Object.keys(base_.forms).forEach(function(k){ if(!c.forms[k]) c.forms[k]=base_.forms[k]; });
+    c.nps=it.nps||base_.nps;
+    c.hist=it.hist||[];
+    ['gestores','monitores','avaliadoresNps'].forEach(function(k){ if(!Array.isArray(c[k])) c[k]=[]; });
+    return c;
+  }
+  async function salvarCfg(oque){
+    _cfg.hist=(_cfg.hist||[]).slice(-200);
+    _cfg.hist.push({em:Date.now(), quem:meu(), quemNome:meuNome(), oque:String(oque||'alterou o formulário')});
+    _cfg.id='atual';
+    try{
+      var r=await fetch(base()+'/api/'+COL_CFG+'/atual',{method:'PUT',headers:H(),body:JSON.stringify(_cfg)});
+      if(!r.ok) r=await fetch(base()+'/api/'+COL_CFG,{method:'POST',headers:H(),body:JSON.stringify(_cfg)});
+      return r.ok;
+    }catch(e){ return false; }
+  }
+  async function salvarMon(m){
+    m.atualizadoEm=Date.now();
+    try{
+      var r=await fetch(base()+'/api/'+COL_MON+'/'+encodeURIComponent(m.id),{method:'PUT',headers:H(),body:JSON.stringify(m)});
+      if(!r.ok) r=await fetch(base()+'/api/'+COL_MON,{method:'POST',headers:H(),body:JSON.stringify(m)});
+      if(r.ok){ _mons=_mons||[]; var i=-1;
+        for(var k=0;k<_mons.length;k++){ if(_mons[k].id===m.id){ i=k; break; } }
+        if(i>=0) _mons[i]=m; else _mons.push(m); }
+      return r.ok;
+    }catch(e){ return false; }
+  }
+  async function salvarAnexo(a){
+    try{ var r=await fetch(base()+'/api/'+COL_ANX+'/'+encodeURIComponent(a.id),{method:'PUT',headers:H(),body:JSON.stringify(a)});
+      if(!r.ok) r=await fetch(base()+'/api/'+COL_ANX,{method:'POST',headers:H(),body:JSON.stringify(a)});
+      return r.ok; }catch(e){ return false; }
+  }
+  async function lerAnexo(id){
+    try{ var r=await fetch(base()+'/api/'+COL_ANX+'/'+encodeURIComponent(id),{headers:H()});
+      if(r.ok){ var j=await r.json(); return (j&&j.data)||null; } }catch(e){}
+    return null;
+  }
+
+  /* ---------------- consultas ---------------- */
+  function doConsultor(l){
+    var L=String(l||'').toUpperCase();
+    return (_mons||[]).filter(function(m){ return String(m.consultor||'').toUpperCase()===L; })
+      .sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+  }
+  function finalizadas(lista){ return (lista||[]).filter(function(m){ return m.status==='finalizada'; }); }
+  function dataMon(m){ return dt(m && (m.atendimento&&m.atendimento.data)) || (m&&m.ts?new Date(m.ts):null); }
+  function mediaDe(lista){
+    var f=finalizadas(lista); if(!f.length) return null;
+    return Math.round(f.reduce(function(a,m){ return a+(Number(m.nota)||0); },0)/f.length*10)/10;
+  }
+  function noMes(lista,ano,mes){
+    return (lista||[]).filter(function(m){ var d=dataMon(m); return d && d.getFullYear()===ano && d.getMonth()===mes; });
+  }
+  function noAno(lista,ano){
+    return (lista||[]).filter(function(m){ var d=dataMon(m); return d && d.getFullYear()===ano; });
+  }
+  function visiveisParaMim(){
+    return (_mons||[]).filter(function(m){ return podeVer(m.consultor); });
+  }
+  function contarTextos(lista,campo){
+    var m={};
+    (lista||[]).forEach(function(x){
+      String(x[campo]||'').split(/[\n;]+/).forEach(function(t){
+        t=t.trim(); if(t.length<3) return;
+        var k=t.charAt(0).toUpperCase()+t.slice(1);
+        m[k]=(m[k]||0)+1; });
+    });
+    return Object.keys(m).map(function(k){ return {k:k,v:m[k]}; })
+      .sort(function(a,b){ return b.v-a.v; });
+  }
+  /* criterios com pior desempenho dentro de um conjunto de monitorias */
+  function porCriterio(lista){
+    var m={};
+    finalizadas(lista).forEach(function(mo){
+      (mo.snapshot||[]).forEach(function(q){
+        var r=(mo.respostas||{})[q.id]; if(!r||r.opt==null||r.opt==='') return;
+        var pts=null; (mo.escala||_cfg.escala).forEach(function(e){ if(e.key===r.opt) pts=e.pts; });
+        if(pts===null) return;
+        var o=m[q.texto]||(m[q.texto]={texto:q.texto,soma:0,n:0});
+        o.soma+=pts; o.n++; });
+    });
+    return Object.keys(m).map(function(k){ var o=m[k];
+      return {texto:o.texto, media:Math.round(o.soma/o.n*10)/10, n:o.n}; })
+      .sort(function(a,b){ return a.media-b.media; });
+  }
+
+  /* ---------------- pecas visuais ---------------- */
+  function card(t,v,sub,cor){
+    return '<div style="flex:1 1 148px;min-width:138px;background:linear-gradient(160deg,'+Co.card+','+Co.bgA+');'+
+      'border:1px solid '+Co.line+';border-radius:16px;padding:15px 17px">'+
+      '<div style="font-size:10.5px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px;font-weight:700">'+t+'</div>'+
+      '<div style="font-size:26px;font-weight:900;color:'+(cor||Co.orangeL)+';line-height:1.2;margin-top:3px">'+v+'</div>'+
+      (sub?('<div style="font-size:11px;color:'+Co.mut+';margin-top:2px">'+sub+'</div>'):'')+'</div>';
+  }
+  function sec(t,ic,inner,extra){
+    return '<div style="margin:0 0 18px">'+
+      '<div style="display:flex;align-items:center;gap:10px;margin:0 0 10px;flex-wrap:wrap">'+
+      '<span style="width:5px;height:18px;border-radius:3px;background:'+Co.gradO+'"></span>'+
+      '<h3 style="margin:0;color:#fff;font-size:15px;font-weight:800"><i class="fas '+ic+'" style="color:'+Co.orange+';margin-right:7px"></i>'+t+'</h3>'+
+      (extra?('<div style="margin-left:auto">'+extra+'</div>'):'')+'</div>'+inner+'</div>';
+  }
+  function anelNota(v,legenda,tam){
+    v=Number(v)||0; tam=tam||132;
+    var cor=corNota(v), r=(tam/2)-9, c=2*Math.PI*r;
+    return '<div style="position:relative;width:'+tam+'px;height:'+tam+'px;flex-shrink:0">'+
+      '<svg width="'+tam+'" height="'+tam+'" style="transform:rotate(-90deg)">'+
+      '<circle cx="'+(tam/2)+'" cy="'+(tam/2)+'" r="'+r+'" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="11"></circle>'+
+      '<circle cx="'+(tam/2)+'" cy="'+(tam/2)+'" r="'+r+'" fill="none" stroke="'+cor+'" stroke-width="11" stroke-linecap="round" '+
+      'stroke-dasharray="'+c+'" stroke-dashoffset="'+(c*(1-Math.min(100,v)/100))+'"></circle></svg>'+
+      '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">'+
+      '<div style="font-size:'+Math.round(tam/4.4)+'px;font-weight:900;color:'+cor+';line-height:1">'+n1(v)+'</div>'+
+      '<div style="font-size:10px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px">'+(legenda||'de 100')+'</div>'+
+      '</div></div>';
+  }
+  function barras(titulo,itens,cor,maxv){
+    if(!itens||!itens.length) return '';
+    var mx=maxv||Math.max.apply(null,itens.map(function(x){return Number(x.v)||0;}))||1;
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px;flex:1 1 320px;min-width:280px">'+
+      '<div style="font-size:12.5px;color:#fff;font-weight:700;margin-bottom:11px">'+titulo+'</div>'+
+      itens.map(function(x){ var p=Math.max(2,Math.round((Number(x.v)||0)/mx*100));
+        return '<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:11.5px;color:'+Co.sub+';margin-bottom:3px">'+
+          '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.k)+'</span>'+
+          '<b style="color:#fff;margin-left:8px">'+(x.txt||x.v)+'</b></div>'+
+          '<div style="height:8px;border-radius:20px;background:rgba(255,255,255,.055);overflow:hidden">'+
+          '<div style="height:100%;width:'+p+'%;border-radius:20px;background:'+(x.cor||cor||Co.gradO)+'"></div></div></div>'; }).join('')+
+      '</div>';
+  }
+  /* grafico de evolucao: colunas por mes */
+  function evolucao(titulo,pontos,sub){
+    if(!pontos||!pontos.length) return '';
+    var h=150;
+    var cols=pontos.map(function(p){
+      var v=Number(p.v)||0, alt=Math.max(3,Math.round(v/100*(h-26)));
+      var cor=corNota(v);
+      return '<div style="flex:1;min-width:34px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px">'+
+        (p.n?('<div style="font-size:11px;font-weight:800;color:'+cor+'">'+n1(v)+'</div>'):'<div style="font-size:11px;color:'+Co.mut+'">—</div>')+
+        '<div title="'+esc(p.k)+': '+(p.n?(n1(v)+' em '+p.n+' monitoria(s)'):'sem monitoria')+'" style="width:100%;max-width:46px;height:'+(p.n?alt:3)+'px;border-radius:7px 7px 3px 3px;background:'+(p.n?('linear-gradient(180deg,'+cor+','+cor+'99)'):'rgba(255,255,255,.08)')+'"></div>'+
+        '<div style="font-size:10.5px;color:'+Co.mut+'">'+esc(p.k)+'</div></div>';
+    }).join('');
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px">'+
+      '<div style="font-size:13px;color:#fff;font-weight:700">'+titulo+'</div>'+
+      (sub?('<div style="font-size:11px;color:'+Co.mut+';margin-bottom:10px">'+sub+'</div>'):'<div style="height:8px"></div>')+
+      '<div style="display:flex;gap:7px;align-items:flex-end;height:'+h+'px;padding-top:6px">'+cols+'</div></div>';
+  }
+  function chip(txt,cor,fundo){
+    return '<span style="background:'+(fundo||(cor+'22'))+';color:'+cor+';border-radius:20px;padding:3px 10px;font-size:10.5px;font-weight:800;white-space:nowrap">'+txt+'</span>';
+  }
+  function statusChip(m){
+    if(m.status==='rascunho') return chip('<i class="fas fa-pen"></i> Rascunho',Co.amarelo);
+    if(m.status==='revisao') return chip('<i class="fas fa-rotate"></i> Em revisão',Co.roxo);
+    return chip('<i class="fas fa-circle-check"></i> Finalizada',Co.green);
+  }
+  function btn(txt,onclick,estilo){
+    var base_='border-radius:11px;padding:10px 17px;font-weight:700;cursor:pointer;font-size:13px;border:none';
+    var est=(estilo==='sec')?('background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub)
+          :(estilo==='red')?('background:'+Co.card2+';border:1px solid '+Co.red+';color:'+Co.red)
+          :(estilo==='ghost')?('background:transparent;border:1px solid '+Co.line+';color:'+Co.sub)
+          :('background:'+Co.gradO+';color:#fff');
+    return '<button onclick="'+onclick+'" style="'+base_+';'+est+'">'+txt+'</button>';
+  }
+  function inp(id,label,val,ph,tipo,extra){
+    return '<div><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">'+label+'</label>'+
+      '<input id="'+id+'" type="'+(tipo||'text')+'" value="'+esc(val||'')+'" placeholder="'+esc(ph||'')+'" '+(extra||'')+
+      ' style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"></div>';
+  }
+  function txa(id,label,val,ph,alt){
+    return '<div><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">'+label+'</label>'+
+      '<textarea id="'+id+'" placeholder="'+esc(ph||'')+'" style="width:100%;box-sizing:border-box;min-height:'+(alt||80)+'px;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff;resize:vertical;font-family:inherit;font-size:13px">'+esc(val||'')+'</textarea></div>';
+  }
+  function sel(id,label,opcoes,val){
+    return '<div><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">'+label+'</label>'+
+      '<select id="'+id+'" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff">'+
+      opcoes.map(function(o){ var v=(o&&o.v!==undefined)?o.v:o, t=(o&&o.t!==undefined)?o.t:o;
+        return '<option value="'+esc(v)+'"'+(String(val)===String(v)?' selected':'')+'>'+esc(t)+'</option>'; }).join('')+
+      '</select></div>';
+  }
+  function gv(id){ var e=document.getElementById(id); return e?String(e.value||'').trim():''; }
+
+  /* ================= PAINEL ================= */
+  var _view='lista', _alvo='', _edit=null, _verId='', _passo=1;
+  var _fDe='', _fAte='', _fCons='', _fMon='', _fRes='';
+
+  function painel(){
+    if(document.getElementById('gwaMonOv')) return;
+    var o=document.createElement('div'); o.id='gwaMonOv';
+    o.style.cssText='position:fixed;inset:0;z-index:99994;background:linear-gradient(180deg,'+Co.bgA+','+Co.bgB+');display:none;flex-direction:column;overflow:auto;font-family:inherit';
+    o.innerHTML='<div id="gwaMonHead" style="position:sticky;top:0;background:'+Co.bgA+';border-bottom:3px solid '+Co.orangeD+';color:#fff;padding:14px max(22px,calc((100% - 1320px) / 2));display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;z-index:3;box-shadow:0 4px 18px rgba(0,0,0,.4)"></div>'+
+      '<div id="gwaMonBody" style="padding:22px;max-width:1320px;margin:0 auto;width:100%;box-sizing:border-box"></div>';
+    document.body.appendChild(o);
+  }
+  window.gwaAbrirMonitoria=function(consultor,vista){
+    painel();
+    _alvo=String(consultor||'').toUpperCase();
+    _view=vista||(_alvo?'consultor':'lista');
+    if(_alvo && !podeVer(_alvo)){ alert('Você não tem acesso a este consultor.'); return; }
+    document.getElementById('gwaMonOv').style.display='flex';
+    if(!_mons) carregar().then(desenhar); else desenhar();
+  };
+  window.__gwaMonClose=function(){ var o=document.getElementById('gwaMonOv'); if(o)o.style.display='none'; };
+  window.__gwaMonView=function(v){ _view=v; _edit=null; desenhar(); window.scrollTo&&window.scrollTo(0,0);
+    var b=document.getElementById('gwaMonOv'); if(b) b.scrollTop=0; };
+  window.__gwaMonConsultor=function(l){ if(!podeVer(l)){ alert('Sem acesso a este consultor.'); return; }
+    _alvo=String(l).toUpperCase(); _view='consultor'; desenhar(); };
+  window.__gwaMonFiltro=function(k,v){ if(k==='de')_fDe=v; else if(k==='ate')_fAte=v; else if(k==='cons')_fCons=v;
+    else if(k==='mon')_fMon=v; else if(k==='res')_fRes=v;
+    else if(k==='limpar'){ _fDe='';_fAte='';_fCons='';_fMon='';_fRes=''; } desenhar(); };
+
+  function abas(){
+    var its=[['lista','Monitorias','fa-headset']];
+    if(_alvo) its.push(['consultor','Perfil de qualidade','fa-user-check']);
+    if(ehGestor()||podeMonitorar()) its.push(['dash','Dashboard','fa-chart-pie']);
+    if(podeConfigurar()) its.push(['form','Formulário','fa-sliders']);
+    return '<div class="gwaTabs" style="display:flex;gap:4px;flex-wrap:wrap">'+its.map(function(t){
+      var on=(_view===t[0])||(_view==='aplicar'&&t[0]==='lista')||(_view==='ver'&&t[0]==='lista');
+      return '<button class="gwaMonAba" onclick="__gwaMonView(&#39;'+t[0]+'&#39;)" style="padding:10px 15px;border:none;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;position:relative;'+
+        (on?('background:'+Co.gradO+';color:#fff'):('background:transparent;color:'+Co.sub))+'"><i class="fas '+t[2]+'" style="margin-right:7px"></i>'+t[1]+'</button>'; }).join('')+'</div>';
+  }
+
+  function desenhar(){
+    painel();
+    var head=document.getElementById('gwaMonHead'), body=document.getElementById('gwaMonBody');
+    if(!head||!body) return;
+    head.innerHTML='<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">'+
+      '<img src="'+LOGO+'" alt="GWA" style="height:40px;width:auto;max-width:120px;object-fit:contain">'+
+      '<div><div style="font-size:18px;font-weight:800">Monitoria e Qualidade</div>'+
+      '<div style="font-size:11px;color:'+Co.mut+';letter-spacing:1px;text-transform:uppercase">'+
+        (ehMaster()?'toda a empresa':esc(deptsPermitidos().map(function(d){return d.charAt(0).toUpperCase()+d.slice(1);}).join(' + ')||'seu acesso'))+'</div></div></div>'+
+      abas()+
+      '<button onclick="__gwaMonClose()" style="width:38px;height:38px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:'+Co.sub+';cursor:pointer">✕</button>';
+
+    if(_carregando||!_mons){
+      body.innerHTML='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:40px;text-align:center;color:'+Co.mut+'"><i class="fas fa-spinner fa-spin"></i> carregando as monitorias...</div>';
+      return;
+    }
+    var h='';
+    if(_view==='aplicar') h=viewAplicar();
+    else if(_view==='ver') h=viewVer();
+    else if(_view==='dash') h=viewDash();
+    else if(_view==='form') h=viewForm();
+    else if(_view==='consultor') h=viewConsultor(_alvo);
+    else h=viewLista();
+    body.innerHTML=h;
+    if(_view==='aplicar') setTimeout(recalcAoVivo,30);
+  }
+
+  /* ================= LISTA DE MONITORIAS ================= */
+  function consultoresVisiveis(){
+    return usuarios().filter(function(u){ var L=login(u);
+      return L && podeVer(L) && !!deptDe(L); })
+      .sort(function(a,b){ return String(a.nome||a.login).localeCompare(String(b.nome||b.login)); });
+  }
+  function aplicaFiltros(lista){
+    return (lista||[]).filter(function(m){
+      var d=dataMon(m);
+      if(_fDe){ var a=dt(_fDe); if(a&&d&&d<a) return false; }
+      if(_fAte){ var b=dt(_fAte); if(b&&d&&d>new Date(b.getFullYear(),b.getMonth(),b.getDate(),23,59,59)) return false; }
+      if(_fCons && String(m.consultor||'').toUpperCase()!==_fCons) return false;
+      if(_fMon && String(m.monitor||'').toUpperCase()!==_fMon) return false;
+      if(_fRes){
+        var n=Number(m.nota)||0;
+        if(_fRes==='rascunho' && m.status!=='rascunho') return false;
+        if(_fRes==='pend' && !(m.feedback && m.feedback.aplicado && !(m.ciencia&&m.ciencia.em))) return false;
+        if(_fRes==='bom' && !(m.status==='finalizada' && n>=75)) return false;
+        if(_fRes==='ruim' && !(m.status==='finalizada' && n<60)) return false;
+      }
+      return true;
+    });
+  }
+  function caixaFiltros(){
+    var cons=consultoresVisiveis().map(function(u){ return {v:login(u),t:u.nome||u.login}; });
+    var mons=[]; (visiveisParaMim()||[]).forEach(function(m){ var L=String(m.monitor||'').toUpperCase();
+      if(L && !mons.some(function(x){return x.v===L;})) mons.push({v:L,t:nomeDe(L)}); });
+    mons.sort(function(a,b){ return a.t.localeCompare(b.t); });
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:14px 16px;margin-bottom:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:11px;align-items:end">'+
+      inp('fDe','De',_fDe,'','date','onchange="__gwaMonFiltro(&#39;de&#39;,this.value)"')+
+      inp('fAte','Até',_fAte,'','date','onchange="__gwaMonFiltro(&#39;ate&#39;,this.value)"')+
+      '<div><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">Consultor</label>'+
+      '<select onchange="__gwaMonFiltro(&#39;cons&#39;,this.value)" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"><option value="">Todos</option>'+
+      cons.map(function(o){ return '<option value="'+esc(o.v)+'"'+(_fCons===o.v?' selected':'')+'>'+esc(o.t)+'</option>'; }).join('')+'</select></div>'+
+      '<div><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">Monitor</label>'+
+      '<select onchange="__gwaMonFiltro(&#39;mon&#39;,this.value)" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"><option value="">Todos</option>'+
+      mons.map(function(o){ return '<option value="'+esc(o.v)+'"'+(_fMon===o.v?' selected':'')+'>'+esc(o.t)+'</option>'; }).join('')+'</select></div>'+
+      '<div><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">Resultado</label>'+
+      '<select onchange="__gwaMonFiltro(&#39;res&#39;,this.value)" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff">'+
+      [['','Todos'],['bom','Nota 75 ou mais'],['ruim','Abaixo de 60'],['rascunho','Rascunhos'],['pend','Feedback sem ciência']]
+        .map(function(o){ return '<option value="'+o[0]+'"'+(_fRes===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('')+'</select></div>'+
+      '<button onclick="__gwaMonFiltro(&#39;limpar&#39;,&#39;&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:10px;padding:10px 14px;cursor:pointer">Limpar</button></div>';
+  }
+
+  function linhaMon(m,mostrarConsultor){
+    var d=dataMon(m);
+    var nota=(m.status==='finalizada')?('<div style="font-size:20px;font-weight:900;color:'+corNota(m.nota)+';line-height:1">'+n1(m.nota)+'</div><div style="font-size:9.5px;color:'+Co.mut+';text-transform:uppercase">de 100</div>')
+      :('<div style="font-size:12px;color:'+Co.amarelo+';font-weight:700">em aberto</div>');
+    var pend=(m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em));
+    return '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:13px 15px;border-bottom:1px solid '+Co.line+'">'+
+      '<div style="width:62px;text-align:center;flex-shrink:0">'+nota+'</div>'+
+      '<div style="flex:1;min-width:190px">'+
+      '<div style="color:#fff;font-weight:700;font-size:14px">'+(mostrarConsultor?esc(nomeDe(m.consultor)):esc((m.atendimento&&m.atendimento.cliente)||'Atendimento avaliado'))+'</div>'+
+      '<div style="font-size:11.5px;color:'+Co.mut+';margin-top:3px">'+
+        (d?brData(m.atendimento&&m.atendimento.data):'')+
+        ((m.atendimento&&m.atendimento.hora)?(' · '+esc(m.atendimento.hora)):'')+
+        ((m.atendimento&&m.atendimento.canal)?(' · '+esc(m.atendimento.canal)):'')+
+        ' · monitor: '+esc(nomeDe(m.monitor))+'</div></div>'+
+      '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+statusChip(m)+
+        (pend?chip('<i class="fas fa-hourglass-half"></i> sem ciência',Co.orangeL):'')+
+        ((m.nps&&Object.keys(m.nps).length)?chip('NPS',Co.roxo):'')+'</div>'+
+      '<div style="display:flex;gap:6px;margin-left:auto">'+
+        btn('<i class="fas fa-eye"></i> Abrir','__gwaMonAbrir(&#39;'+esc(m.id)+'&#39;)','sec')+
+        ((m.status==='rascunho'&&(String(m.monitor||'').toUpperCase()===meu()||ehMaster()))?btn('<i class="fas fa-pen"></i>','__gwaMonEditar(&#39;'+esc(m.id)+'&#39;)','ghost'):'')+
+      '</div></div>';
+  }
+
+  function viewLista(){
+    var todas=aplicaFiltros(visiveisParaMim());
+    var fin=finalizadas(todas);
+    var med=mediaDe(todas);
+    var nps=npsDe(fin);
+    var semCiencia=todas.filter(function(m){ return m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em); }).length;
+    var topo='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
+      card('Monitorias no filtro',todas.length,fin.length+' finalizada(s)',Co.orangeL)+
+      card('Média de qualidade',med==null?'—':n1(med),med==null?'sem nota ainda':faixaNota(med),med==null?Co.mut:corNota(med))+
+      card('NPS',nps?((nps.nps>0?'+':'')+nps.nps):'—',nps?(nps.respostas+' resposta(s)'):'sem avaliação',nps?corNps(nps.nps):Co.mut)+
+      card('Feedback sem ciência',semCiencia,semCiencia?'aguardando o consultor':'tudo em dia',semCiencia?Co.orangeL:Co.green)+'</div>';
+
+    var acao=podeMonitorar()?('<div style="margin-bottom:16px">'+btn('<i class="fas fa-plus"></i> Nova monitoria','__gwaMonNova()')+'</div>'):'';
+
+    var lista=todas.length
+      ? '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden">'+todas.map(function(m){ return linhaMon(m,true); }).join('')+'</div>'
+      : '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:40px;text-align:center;color:'+Co.mut+'"><i class="fas fa-headset" style="font-size:26px;display:block;margin-bottom:10px;opacity:.5"></i>Nenhuma monitoria por aqui ainda.</div>';
+
+    return topo+acao+caixaFiltros()+sec('Monitorias','fa-list-check',lista);
+  }
+
+  /* ================= APLICAR MONITORIA ================= */
+  function novaMon(consultor){
+    var L=String(consultor||'').toUpperCase();
+    var dept=deptDe(L)||'comercial';
+    var f=formDe(dept);
+    return { id:uid('mon'), consultor:L, consultorNome:nomeDe(L), dept:dept,
+      monitor:meu(), monitorNome:meuNome(),
+      formChave:f.chave, snapshot:JSON.parse(JSON.stringify(f.perguntas)),
+      escala:JSON.parse(JSON.stringify(_cfg.escala)),
+      criticoZera:!!_cfg.criticoZera,
+      atendimento:{ data:hoje(), hora:agoraHM(), canal:'Telefone', cliente:'', ref:'', obs:'' },
+      respostas:{}, pontosFortes:'', oportunidades:'', recomendacao:'',
+      anexos:[], nps:{}, nota:0, status:'rascunho',
+      feedback:{ aplicado:false, resumo:'', positivos:'', melhorar:'', orientacoes:'', plano:'', prazo:'', acompanhar:false },
+      ciencia:null, hist:[{em:Date.now(),quem:meu(),quemNome:meuNome(),oque:'criou a monitoria'}],
+      ts:Date.now() };
+  }
+  window.__gwaMonNova=function(l){
+    if(!podeMonitorar()){ alert('Você não tem permissão para aplicar monitorias.'); return; }
+    var alvo=String(l||_alvo||'').toUpperCase();
+    if(!alvo){
+      var cs=consultoresVisiveis();
+      if(!cs.length){ alert('Nenhum consultor no seu acesso. Defina o departamento em Vendas > Ajustes.'); return; }
+      alvo=login(cs[0]);
+    }
+    if(!podeVer(alvo)){ alert('Sem acesso a este consultor.'); return; }
+    _edit=novaMon(alvo); _passo=1; _view='aplicar'; desenhar();
+  };
+  window.__gwaMonEditar=function(id){
+    var m=(_mons||[]).filter(function(x){return x.id===id;})[0]; if(!m) return;
+    if(m.status==='finalizada' && !ehMaster()){ alert('Monitoria finalizada. Peça uma revisão ao Master.'); return; }
+    _edit=JSON.parse(JSON.stringify(m)); _passo=1; _view='aplicar'; desenhar();
+  };
+  window.__gwaMonTrocaConsultor=function(l){
+    if(!_edit) return;
+    colher();
+    var L=String(l||'').toUpperCase();
+    if(!podeVer(L)){ alert('Sem acesso a este consultor.'); return; }
+    var dept=deptDe(L)||'comercial', f=formDe(dept);
+    _edit.consultor=L; _edit.consultorNome=nomeDe(L); _edit.dept=dept;
+    if(f.chave!==_edit.formChave){
+      _edit.formChave=f.chave;
+      _edit.snapshot=JSON.parse(JSON.stringify(f.perguntas));
+      _edit.respostas={};
+    }
+    desenhar();
+  };
+  window.__gwaMonPasso=function(n){ if(!_edit) return; colher();
+    if(n===2 && !String(_edit.atendimento.data||'').trim()){ alert('Informe a data do atendimento.'); return; }
+    _passo=n; desenhar(); var b=document.getElementById('gwaMonOv'); if(b) b.scrollTop=0; };
+  window.__gwaMonResp=function(qid,opt){
+    if(!_edit) return;
+    var r=_edit.respostas[qid]||(_edit.respostas[qid]={});
+    r.opt=(r.opt===opt)?'':opt;
+    desenhaPerguntas(); recalcAoVivo();
+  };
+  window.__gwaMonNps=function(qid,v){
+    if(!_edit) return;
+    _edit.nps=_edit.nps||{};
+    if(String(_edit.nps[qid])===String(v)) delete _edit.nps[qid]; else _edit.nps[qid]=Number(v);
+    desenhar();
+  };
+
+  /* guarda o que esta na tela dentro de _edit */
+  function colher(){
+    if(!_edit) return;
+    var a=_edit.atendimento;
+    if(document.getElementById('atData')) a.data=gv('atData');
+    if(document.getElementById('atHora')) a.hora=gv('atHora');
+    if(document.getElementById('atCanal')) a.canal=gv('atCanal');
+    if(document.getElementById('atCliente')) a.cliente=gv('atCliente');
+    if(document.getElementById('atRef')) a.ref=gv('atRef');
+    if(document.getElementById('atObs')) a.obs=gv('atObs');
+    (_edit.snapshot||[]).forEach(function(q){
+      var e=document.getElementById('obs_'+q.id);
+      if(e){ var r=_edit.respostas[q.id]||(_edit.respostas[q.id]={}); r.obs=String(e.value||'').trim(); }
+    });
+    if(document.getElementById('mPos')) _edit.pontosFortes=gv('mPos');
+    if(document.getElementById('mOpo')) _edit.oportunidades=gv('mOpo');
+    if(document.getElementById('mRec')) _edit.recomendacao=gv('mRec');
+    ['resumo','positivos','melhorar','orientacoes','plano','prazo'].forEach(function(k){
+      var e=document.getElementById('fb_'+k); if(e) _edit.feedback[k]=String(e.value||'').trim(); });
+    var ac=document.getElementById('fb_acompanhar'); if(ac) _edit.feedback.acompanhar=!!ac.checked;
+    var ap=document.getElementById('fb_aplicado'); if(ap) _edit.feedback.aplicado=!!ap.checked;
+  }
+
+  function resultadoAtual(){
+    return calcNota(_edit.snapshot,_edit.respostas,_edit.escala,_edit.criticoZera);
+  }
+  function recalcAoVivo(){
+    if(!_edit) return;
+    var r=resultadoAtual();
+    _edit.nota=r.nota;
+    var el=document.getElementById('notaAoVivo');
+    if(el) el.innerHTML=anelNota(r.nota,'de 100',120);
+    var inf=document.getElementById('notaInfo');
+    if(inf) inf.innerHTML=
+      '<div style="font-size:13px;color:#fff;font-weight:700">'+faixaNota(r.nota)+'</div>'+
+      '<div style="font-size:11.5px;color:'+Co.mut+';margin-top:3px">'+r.respondidas+' de '+(_edit.snapshot||[]).length+' critérios respondidos'+
+      (r.naoSeAplica?(' · '+r.naoSeAplica+' não se aplica'):'')+'</div>'+
+      (r.zerouPor?('<div style="font-size:11.5px;color:'+Co.red+';margin-top:4px;font-weight:700"><i class="fas fa-triangle-exclamation"></i> item crítico "'+esc(r.zerouPor.texto)+'" zerou a nota</div>'):'')+
+      (r.faltando.length?('<div style="font-size:11.5px;color:'+Co.amarelo+';margin-top:4px">faltam '+r.faltando.length+' obrigatório(s)</div>'):'');
+  }
+
+  function desenhaPerguntas(){
+    var box=document.getElementById('listaPerg');
+    if(box) box.innerHTML=htmlPerguntas();
+  }
+  function htmlPerguntas(){
+    var esc_=_edit.escala||_cfg.escala;
+    return (_edit.snapshot||[]).map(function(q,i){
+      var r=_edit.respostas[q.id]||{};
+      var opts=esc_.map(function(o){
+        var on=(r.opt===o.key);
+        return '<button onclick="__gwaMonResp(&#39;'+esc(q.id)+'&#39;,&#39;'+esc(o.key)+'&#39;)" '+
+          'style="flex:1 1 92px;min-width:84px;padding:9px 6px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;'+
+          'border:1px solid '+(on?o.cor:Co.line)+';background:'+(on?(o.cor+'26'):Co.bgA)+';color:'+(on?o.cor:Co.sub)+'">'+
+          (on?'<i class="fas fa-check" style="margin-right:5px"></i>':'')+esc(o.label)+
+          (o.pts==null?'':('<div style="font-size:9.5px;color:'+Co.mut+';font-weight:600">'+o.pts+' pts</div>'))+'</button>';
+      }).join('');
+      return '<div style="background:'+Co.card2+';border:1px solid '+(r.opt?Co.line:'rgba(224,120,32,.35)')+';border-radius:14px;padding:14px 16px;margin-bottom:11px">'+
+        '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">'+
+        '<div style="flex:1;min-width:200px"><div style="color:#fff;font-weight:700;font-size:13.5px">'+(i+1)+'. '+esc(q.texto)+'</div>'+
+        (q.dica?('<div style="font-size:11.5px;color:'+Co.mut+';margin-top:3px">'+esc(q.dica)+'</div>'):'')+'</div>'+
+        '<div style="display:flex;gap:5px;flex-wrap:wrap">'+chip('peso '+(Number(q.peso)||0)+'%',Co.orangeL)+
+          (q.critico?chip('<i class="fas fa-triangle-exclamation"></i> crítico',Co.red):'')+
+          (q.obrig===false?chip('opcional',Co.mut):'')+'</div></div>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">'+opts+'</div>'+
+        '<textarea id="obs_'+esc(q.id)+'" placeholder="Observação sobre este critério (opcional)" style="width:100%;box-sizing:border-box;margin-top:9px;min-height:40px;padding:8px 11px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff;resize:vertical;font-family:inherit;font-size:12.5px">'+esc(r.obs||'')+'</textarea>'+
+        '</div>';
+    }).join('');
+  }
+
+  function viewAplicar(){
+    if(!_edit) return '<div style="color:'+Co.mut+';padding:20px">Nada em edição.</div>';
+    var r=resultadoAtual(); _edit.nota=r.nota;
+    var cs=consultoresVisiveis();
+    var passos=[[1,'Atendimento','fa-headset'],[2,'Avaliação','fa-list-check'],[3,'Resumo e feedback','fa-comments']];
+    var trilha='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px">'+passos.map(function(p){
+      var on=(_passo===p[0]), feito=(_passo>p[0]);
+      return '<button onclick="__gwaMonPasso('+p[0]+')" style="flex:1 1 180px;text-align:left;border-radius:14px;padding:13px 16px;cursor:pointer;border:1px solid '+(on?Co.orangeD:Co.line)+';background:'+(on?'rgba(224,120,32,.12)':Co.card)+';color:#fff">'+
+        '<div style="display:flex;align-items:center;gap:10px">'+
+        '<span style="width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:'+(on?Co.gradO:(feito?Co.green:Co.card2))+';color:#fff">'+(feito?'<i class="fas fa-check"></i>':p[0])+'</span>'+
+        '<span style="font-size:13.5px;font-weight:700"><i class="fas '+p[2]+'" style="color:'+(on?Co.orangeL:Co.mut)+';margin-right:6px"></i>'+p[1]+'</span></div></button>';
+    }).join('')+'</div>';
+
+    var notaBar='<div style="position:sticky;top:76px;z-index:2;background:linear-gradient(135deg,'+Co.card+','+Co.bgA+');border:1px solid '+Co.orangeD+';border-radius:18px;padding:14px 18px;margin-bottom:16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">'+
+      '<div id="notaAoVivo">'+anelNota(r.nota,'de 100',120)+'</div>'+
+      '<div style="flex:1;min-width:190px"><div style="font-size:10.5px;color:'+Co.orange+';text-transform:uppercase;letter-spacing:1px;font-weight:800">Nota da monitoria</div>'+
+      '<div id="notaInfo"></div></div>'+
+      '<div style="text-align:right"><div style="font-size:11px;color:'+Co.mut+'">Consultor</div>'+
+      '<div style="font-size:16px;font-weight:800;color:#fff">'+esc(nomeDe(_edit.consultor))+'</div>'+
+      '<div style="font-size:11px;color:'+Co.mut+'">'+esc(_edit.dept)+' · formulário '+esc(formDe(_edit.dept).nome)+'</div></div></div>';
+
+    var corpo='';
+    if(_passo===1){
+      corpo=sec('Qual atendimento será avaliado','fa-headset',
+        '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px">'+
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">'+
+        '<div><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">Consultor avaliado</label>'+
+        '<select onchange="__gwaMonTrocaConsultor(this.value)" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff">'+
+        cs.map(function(u){ var L=login(u); return '<option value="'+esc(L)+'"'+(L===_edit.consultor?' selected':'')+'>'+esc(u.nome||u.login)+' · '+esc(deptDe(L))+'</option>'; }).join('')+'</select></div>'+
+        inp('atData','Data do atendimento',_edit.atendimento.data,'','date')+
+        inp('atHora','Horário',_edit.atendimento.hora,'','time')+
+        sel('atCanal','Canal de atendimento',CANAIS,_edit.atendimento.canal)+
+        inp('atCliente','Cliente atendido',_edit.atendimento.cliente,'nome do cliente (opcional)')+
+        inp('atRef','Referência do atendimento',_edit.atendimento.ref,'protocolo, ligação, número do card...')+
+        '</div><div style="margin-top:12px">'+txa('atObs','Contexto do atendimento',_edit.atendimento.obs,'O que o cliente procurava, situação, histórico...',70)+'</div>'+
+        '</div>')+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap">'+btn('Avançar para a avaliação <i class="fas fa-arrow-right"></i>','__gwaMonPasso(2)')+
+        btn('Salvar rascunho','__gwaMonSalvarRascunho()','sec')+btn('Cancelar','__gwaMonView(&#39;lista&#39;)','ghost')+'</div>';
+    }
+    else if(_passo===2){
+      var soma=somaPesos(_edit.snapshot);
+      corpo=sec('Avaliação por critério','fa-list-check',
+        '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px">'+
+        '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:12px">Formulário <b style="color:#fff">'+esc(formDe(_edit.dept).nome)+'</b> · '+(_edit.snapshot||[]).length+' critérios · soma dos pesos '+soma+'%'+
+        '. Marcar <b>Não se aplica</b> tira o critério da conta e redistribui o peso.</div>'+
+        '<div id="listaPerg">'+htmlPerguntas()+'</div></div>')+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap">'+btn('<i class="fas fa-arrow-left"></i> Voltar','__gwaMonPasso(1)','sec')+
+        btn('Avançar para o resumo <i class="fas fa-arrow-right"></i>','__gwaMonPasso(3)')+
+        btn('Salvar rascunho','__gwaMonSalvarRascunho()','ghost')+'</div>';
+    }
+    else {
+      var melhores=r.detalhe.filter(function(x){return x.pts!=null;}).slice().sort(function(a,b){return b.pts-a.pts;}).slice(0,3);
+      var piores=r.detalhe.filter(function(x){return x.pts!=null;}).slice().sort(function(a,b){return a.pts-b.pts;}).slice(0,3);
+      function listinha(t,arr,cor,ic){
+        if(!arr.length) return '';
+        return '<div style="flex:1 1 260px;min-width:240px;background:'+Co.card2+';border:1px solid '+Co.line+';border-radius:14px;padding:14px 16px">'+
+          '<div style="font-size:12px;font-weight:800;color:'+cor+';margin-bottom:8px"><i class="fas '+ic+'"></i> '+t+'</div>'+
+          arr.map(function(x){ return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;color:'+Co.sub+';padding:4px 0"><span>'+esc(x.q.texto)+'</span><b style="color:'+corNota(x.pts)+'">'+x.pts+'</b></div>'; }).join('')+'</div>';
+      }
+      var npsBox='';
+      if(_cfg.nps&&_cfg.nps.ativo&&podeNps()){
+        npsBox=sec('Satisfação (NPS)','fa-face-smile',
+          '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px">'+
+          '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:12px">Indicador separado da nota técnica. Preencha apenas quando houver a resposta de quem foi atendido.</div>'+
+          (_cfg.nps.perguntas||[]).map(function(q){
+            var v=(_edit.nps||{})[q.id];
+            var bolas='';
+            for(var i=0;i<=10;i++){
+              var on=(String(v)===String(i));
+              var cor=(i>=9)?Co.green:((i>=7)?Co.amarelo:Co.red);
+              bolas+='<button onclick="__gwaMonNps(&#39;'+esc(q.id)+'&#39;,'+i+')" style="width:38px;height:38px;border-radius:10px;cursor:pointer;font-weight:800;font-size:13px;border:1px solid '+(on?cor:Co.line)+';background:'+(on?cor:Co.bgA)+';color:'+(on?'#fff':Co.sub)+'">'+i+'</button>';
+            }
+            return '<div style="margin-bottom:12px"><div style="font-size:13px;color:#fff;font-weight:600;margin-bottom:8px">'+esc(q.texto)+'</div>'+
+              '<div style="display:flex;gap:5px;flex-wrap:wrap">'+bolas+'</div>'+
+              '<div style="font-size:11px;color:'+Co.mut+';margin-top:6px">0 a 6 detrator · 7 e 8 neutro · 9 e 10 promotor</div></div>';
+          }).join('')+'</div>');
+      }
+      corpo=sec('Resumo da avaliação','fa-clipboard-check',
+        '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px">'+
+        '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'+listinha('Melhores critérios',melhores,Co.green,'fa-arrow-trend-up')+listinha('Precisam melhorar',piores,Co.red,'fa-arrow-trend-down')+'</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px">'+
+        txa('mPos','Pontos positivos',_edit.pontosFortes,'Um por linha. Ex.: Escuta ativa; Clareza na explicação',80)+
+        txa('mOpo','Oportunidades de melhoria',_edit.oportunidades,'Um por linha. Ex.: Fechamento sem próximo passo',80)+
+        '</div><div style="margin-top:12px">'+txa('mRec','Recomendação do monitor',_edit.recomendacao,'O que você orienta para o próximo atendimento',70)+'</div>'+
+        '</div>')+
+        anexosBox()+
+        npsBox+
+        feedbackBox()+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap">'+btn('<i class="fas fa-arrow-left"></i> Voltar','__gwaMonPasso(2)','sec')+
+        btn('Salvar rascunho','__gwaMonSalvarRascunho()','ghost')+
+        btn('<i class="fas fa-circle-check"></i> Finalizar monitoria','__gwaMonFinalizar()')+'</div>';
+    }
+    return trilha+notaBar+corpo;
+  }
+
+  function feedbackBox(){
+    var f=_edit.feedback||{};
+    return sec('Feedback para o consultor','fa-comments',
+      '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px">'+
+      '<label style="display:flex;align-items:center;gap:9px;font-size:13px;color:'+Co.sub+';cursor:pointer;margin-bottom:12px">'+
+      '<input type="checkbox" id="fb_aplicado"'+(f.aplicado?' checked':'')+' style="width:17px;height:17px;accent-color:'+Co.orange+';cursor:pointer"> '+
+      'Aplicar o feedback ao consultor (ele passa a ver e precisa dar ciência)</label>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px">'+
+      txa('fb_resumo','Resumo da avaliação',f.resumo,'Como foi o atendimento, em poucas linhas',70)+
+      txa('fb_positivos','O que manteve bem',f.positivos,'',70)+
+      txa('fb_melhorar','O que precisa melhorar',f.melhorar,'',70)+
+      txa('fb_orientacoes','Orientações específicas',f.orientacoes,'',70)+
+      '</div>'+
+      '<div style="margin-top:12px">'+txa('fb_plano','Plano de ação',f.plano,'O que será feito, por quem e como vamos conferir',70)+'</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:12px;align-items:end">'+
+      inp('fb_prazo','Prazo para melhoria',f.prazo,'','date')+
+      '<label style="display:flex;align-items:center;gap:9px;font-size:13px;color:'+Co.sub+';cursor:pointer;padding-bottom:10px">'+
+      '<input type="checkbox" id="fb_acompanhar"'+(f.acompanhar?' checked':'')+' style="width:17px;height:17px;accent-color:'+Co.orange+';cursor:pointer"> Precisa de acompanhamento</label>'+
+      '</div></div>');
+  }
+
+  /* ---------------- anexos ---------------- */
+  function icoArq(t){
+    t=String(t||'');
+    if(t.indexOf('audio')>=0) return 'fa-file-audio';
+    if(t.indexOf('image')>=0) return 'fa-file-image';
+    if(t.indexOf('video')>=0) return 'fa-file-video';
+    if(t.indexOf('pdf')>=0) return 'fa-file-pdf';
+    return 'fa-paperclip';
+  }
+  function kb(n){ n=Number(n)||0; return n<1024?(n+' B'):(n<1048576?(Math.round(n/1024)+' KB'):((n/1048576).toFixed(1)+' MB')); }
+  function anexosBox(){
+    var ax=_edit.anexos||[];
+    return sec('Evidências e anexos','fa-paperclip',
+      '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px">'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
+      '<label style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:11px;padding:10px 17px;font-weight:700;cursor:pointer;font-size:13px">'+
+      '<i class="fas fa-upload"></i> Enviar arquivo'+
+      '<input type="file" accept="audio/*,image/*,.pdf,.doc,.docx,.txt" multiple onchange="__gwaMonAnexar(this)" style="display:none"></label>'+
+      btn('<i class="fas fa-link"></i> Colar link','__gwaMonAnexarLink()','sec')+
+      '<span style="font-size:11.5px;color:'+Co.mut+'">áudio, imagem, PDF ou documento até '+kb(MAX_ANEXO)+' por arquivo. Gravações maiores: suba no Drive e cole o link.</span></div>'+
+      (ax.length?('<div style="margin-top:13px;display:flex;flex-direction:column;gap:8px">'+ax.map(function(a,i){
+        return '<div style="display:flex;align-items:center;gap:11px;background:'+Co.card2+';border:1px solid '+Co.line+';border-radius:12px;padding:10px 13px">'+
+          '<i class="fas '+(a.link?'fa-link':icoArq(a.tipo))+'" style="color:'+Co.orangeL+';font-size:15px"></i>'+
+          '<div style="flex:1;min-width:0"><div style="color:#fff;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(a.nome)+'</div>'+
+          '<div style="font-size:11px;color:'+Co.mut+'">'+(a.link?'link externo':kb(a.tamanho))+'</div></div>'+
+          (a.link?('<a href="'+esc(a.link)+'" target="_blank" rel="noopener" style="color:'+Co.blue+';font-size:12px">abrir</a>')
+                 :('<button onclick="__gwaMonVerAnexo(&#39;'+esc(a.id)+'&#39;)" style="background:transparent;border:1px solid '+Co.line+';color:'+Co.blue+';border-radius:8px;padding:5px 11px;cursor:pointer;font-size:12px">abrir</button>'))+
+          '<button onclick="__gwaMonTirarAnexo('+i+')" style="background:transparent;border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:5px 9px;cursor:pointer"><i class="fas fa-trash"></i></button>'+
+          '</div>'; }).join('')+'</div>'):'<div style="font-size:12.5px;color:'+Co.mut+';margin-top:12px">Nenhum anexo ainda.</div>')+
+      '</div>');
+  }
+  function reduzImagem(file,cb){
+    var fr=new FileReader();
+    fr.onload=function(){
+      var img=new Image();
+      img.onload=function(){
+        var mx=1280, w=img.width, h=img.height;
+        if(w>mx||h>mx){ if(w>h){ h=Math.round(h*mx/w); w=mx; } else { w=Math.round(w*mx/h); h=mx; } }
+        var cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        cb(cv.toDataURL('image/jpeg',0.78));
+      };
+      img.onerror=function(){ cb(fr.result); };
+      img.src=fr.result;
+    };
+    fr.onerror=function(){ cb(null); };
+    fr.readAsDataURL(file);
+  }
+  window.__gwaMonAnexar=function(el){
+    if(!_edit||!el||!el.files||!el.files.length) return;
+    colher();
+    var arqs=Array.prototype.slice.call(el.files);
+    var fila=arqs.length;
+    arqs.forEach(function(file){
+      function guarda(dataUrl){
+        if(!dataUrl){ fila--; return; }
+        var tam=Math.round((dataUrl.length-(dataUrl.indexOf(',')+1))*0.75);
+        if(tam>MAX_ANEXO){
+          alert('"'+file.name+'" ficou com '+kb(tam)+' e passa do limite de '+kb(MAX_ANEXO)+'.\n\nSuba no Drive e cole o link no botão "Colar link".');
+          fila--; if(!fila) desenhar(); return;
+        }
+        var a={id:uid('anx'), monitoriaId:_edit.id, nome:file.name, tipo:file.type||'', tamanho:tam, dataUrl:dataUrl, ts:Date.now()};
+        salvarAnexo(a).then(function(ok){
+          if(!ok){ alert('Não consegui guardar "'+file.name+'".'); }
+          else { _edit.anexos=_edit.anexos||[];
+            _edit.anexos.push({id:a.id,nome:a.nome,tipo:a.tipo,tamanho:a.tamanho}); }
+          fila--; if(!fila) desenhar();
+        });
+      }
+      if(String(file.type||'').indexOf('image')===0) reduzImagem(file,guarda);
+      else { var fr=new FileReader(); fr.onload=function(){ guarda(fr.result); }; fr.onerror=function(){ fila--; }; fr.readAsDataURL(file); }
+    });
+    el.value='';
+  };
+  window.__gwaMonAnexarLink=function(){
+    if(!_edit) return; colher();
+    var u=prompt('Cole o link da gravação ou do arquivo (Drive, OneDrive, etc.):','');
+    if(!u) return;
+    u=String(u).trim(); if(!/^https?:\/\//i.test(u)){ alert('O link precisa começar com http.'); return; }
+    var nome=prompt('Nome para este anexo:','Gravação do atendimento')||'Link';
+    _edit.anexos=_edit.anexos||[];
+    _edit.anexos.push({id:uid('lnk'),nome:nome,link:u,tipo:'link'});
+    desenhar();
+  };
+  window.__gwaMonTirarAnexo=function(i){
+    if(!_edit) return; colher();
+    if(!confirm('Remover este anexo da monitoria?')) return;
+    (_edit.anexos||[]).splice(i,1); desenhar();
+  };
+  window.__gwaMonVerAnexo=async function(id){
+    var a=await lerAnexo(id);
+    if(!a||!a.dataUrl){ alert('Não consegui abrir este anexo.'); return; }
+    var w=window.open('','_blank');
+    if(!w){ alert('Libere o pop-up para ver o anexo.'); return; }
+    var t=String(a.tipo||'');
+    var corpo = t.indexOf('image')===0 ? '<img src="'+a.dataUrl+'" style="max-width:100%">'
+      : t.indexOf('audio')===0 ? '<audio controls src="'+a.dataUrl+'" style="width:100%"></audio>'
+      : t.indexOf('video')===0 ? '<video controls src="'+a.dataUrl+'" style="max-width:100%"></video>'
+      : '<p><a href="'+a.dataUrl+'" download="'+esc(a.nome)+'">Baixar '+esc(a.nome)+'</a></p>';
+    w.document.write('<!doctype html><meta charset="utf-8"><title>'+esc(a.nome)+'</title>'+
+      '<body style="margin:0;background:#111;color:#eee;font-family:system-ui;padding:18px">'+
+      '<h3 style="font-size:15px">'+esc(a.nome)+'</h3>'+corpo+'</body>');
+    w.document.close();
+  };
+
+  /* ---------------- salvar / finalizar / revisar ---------------- */
+  window.__gwaMonSalvarRascunho=async function(){
+    if(!_edit) return; colher();
+    var r=resultadoAtual(); _edit.nota=r.nota; _edit.status='rascunho';
+    var ok=await salvarMon(_edit);
+    if(ok){ alert('Rascunho salvo. Você pode terminar depois.'); _view='lista'; _edit=null; desenhar(); }
+    else alert('Não consegui salvar.');
+  };
+  window.__gwaMonFinalizar=async function(){
+    if(!_edit) return; colher();
+    var r=resultadoAtual();
+    if(r.faltando.length){
+      alert('Faltam '+r.faltando.length+' critério(s) obrigatório(s):\n\n'+r.faltando.slice(0,8).map(function(q){return '• '+q.texto;}).join('\n'));
+      _passo=2; desenhar(); return;
+    }
+    var msg='Finalizar a monitoria de '+nomeDe(_edit.consultor)+' com nota '+n1(r.nota)+'?\n\n'+
+      'Depois de finalizada ela não pode mais ser editada — só o Master pode abrir revisão.';
+    if(_edit.feedback&&_edit.feedback.aplicado) msg+='\n\nO feedback será liberado para o consultor dar ciência.';
+    if(!confirm(msg)) return;
+    _edit.nota=r.nota; _edit.status='finalizada'; _edit.finalizadaEm=Date.now();
+    _edit.finalizadaPor=meu(); _edit.finalizadaPorNome=meuNome();
+    _edit.resultado={respondidas:r.respondidas, naoSeAplica:r.naoSeAplica, pesoConsiderado:r.pesoConsiderado,
+      zerouPor:r.zerouPor?r.zerouPor.texto:''};
+    _edit.hist=(_edit.hist||[]).concat([{em:Date.now(),quem:meu(),quemNome:meuNome(),oque:'finalizou com nota '+n1(r.nota)}]);
+    var ok=await salvarMon(_edit);
+    if(ok){ var id=_edit.id; _edit=null; _verId=id; _view='ver'; desenhar(); confete(); }
+    else alert('Não consegui salvar.');
+  };
+  window.__gwaMonAbrir=function(id){ _verId=id; _view='ver'; desenhar();
+    var b=document.getElementById('gwaMonOv'); if(b) b.scrollTop=0; };
+  window.__gwaMonRevisar=async function(id){
+    if(!ehMaster()){ alert('Apenas o Master pode abrir revisão de uma monitoria finalizada.'); return; }
+    var m=(_mons||[]).filter(function(x){return x.id===id;})[0]; if(!m) return;
+    var motivo=prompt('Motivo da revisão (fica registrado no histórico):','');
+    if(motivo===null) return;
+    m.status='revisao'; m.revisao={em:Date.now(),por:meu(),porNome:meuNome(),motivo:String(motivo||'')};
+    m.hist=(m.hist||[]).concat([{em:Date.now(),quem:meu(),quemNome:meuNome(),oque:'abriu revisão: '+String(motivo||'')}]);
+    var ok=await salvarMon(m);
+    alert(ok?'Revisão aberta. A monitoria pode ser editada de novo.':'Não consegui salvar.');
+    desenhar();
+  };
+  window.__gwaMonCiencia=async function(id){
+    var m=(_mons||[]).filter(function(x){return x.id===id;})[0]; if(!m) return;
+    if(String(m.consultor||'').toUpperCase()!==meu()){ alert('Só o próprio consultor pode dar ciência.'); return; }
+    var c=prompt('Comentário (opcional). Dar ciência significa que você leu o feedback — não quer dizer que concorda.','');
+    if(c===null) return;
+    m.ciencia={em:Date.now(), por:meu(), porNome:meuNome(), comentario:String(c||'')};
+    m.hist=(m.hist||[]).concat([{em:Date.now(),quem:meu(),quemNome:meuNome(),oque:'deu ciência no feedback'}]);
+    var ok=await salvarMon(m);
+    alert(ok?'Ciência registrada. Obrigado!':'Não consegui salvar.');
+    desenhar();
+  };
+  window.__gwaMonPedirRevisao=async function(id){
+    var m=(_mons||[]).filter(function(x){return x.id===id;})[0]; if(!m) return;
+    if(String(m.consultor||'').toUpperCase()!==meu()){ alert('Só o próprio consultor pede revisão aqui.'); return; }
+    var t=prompt('O que você gostaria que fosse revisto nesta avaliação?','');
+    if(!t) return;
+    m.pedidoRevisao={em:Date.now(), por:meu(), porNome:meuNome(), texto:String(t)};
+    m.hist=(m.hist||[]).concat([{em:Date.now(),quem:meu(),quemNome:meuNome(),oque:'pediu revisão: '+String(t)}]);
+    var ok=await salvarMon(m);
+    alert(ok?'Pedido registrado. O monitor e o Master vão ver.':'Não consegui salvar.');
+    desenhar();
+  };
+  window.__gwaMonExcluir=async function(id){
+    if(!ehMaster()){ alert('Apenas o Master pode excluir.'); return; }
+    if(!confirm('Excluir esta monitoria definitivamente?')) return;
+    try{ await fetch(base()+'/api/'+COL_MON+'/'+encodeURIComponent(id),{method:'DELETE',headers:H()}); }catch(e){}
+    _mons=(_mons||[]).filter(function(x){ return x.id!==id; });
+    _view='lista'; desenhar();
+  };
+  function confete(){
+    try{
+      var c=document.createElement('div');
+      c.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:99999;overflow:hidden';
+      var cores=['#e07820','#f0943a','#3fae5a','#4a9fd5','#9b7bd4','#e3b341'];
+      for(var i=0;i<34;i++){
+        var p=document.createElement('div');
+        p.style.cssText='position:absolute;top:-16px;left:'+Math.random()*100+'%;width:9px;height:14px;border-radius:2px;background:'+cores[i%cores.length]+
+          ';animation:gwaMonCai '+(1.6+Math.random()*1.4)+'s linear '+(Math.random()*0.5)+'s forwards';
+        c.appendChild(p);
+      }
+      document.body.appendChild(c);
+      setTimeout(function(){ c.remove(); },3600);
+    }catch(e){}
+  }
+
+  /* ================= VER UMA MONITORIA ================= */
+  function viewVer(){
+    var m=(_mons||[]).filter(function(x){return x.id===_verId;})[0];
+    if(!m) return '<div style="padding:20px;color:'+Co.mut+'">Monitoria não encontrada. '+btn('Voltar','__gwaMonView(&#39;lista&#39;)','sec')+'</div>';
+    if(!podeVer(m.consultor) && String(m.consultor||'').toUpperCase()!==meu())
+      return '<div style="padding:20px;color:'+Co.red+'">Você não tem acesso a esta monitoria.</div>';
+    var souEu=(String(m.consultor||'').toUpperCase()===meu());
+    var esc_=m.escala||_cfg.escala;
+    function rotulo(k){ for(var i=0;i<esc_.length;i++){ if(esc_[i].key===k) return esc_[i]; } return null; }
+
+    var at=m.atendimento||{};
+    var topo='<div style="background:linear-gradient(135deg,'+Co.card+','+Co.bgA+');border:1px solid '+Co.orangeD+';border-radius:18px;padding:20px;margin-bottom:16px;display:flex;gap:20px;flex-wrap:wrap;align-items:center">'+
+      anelNota(m.nota,'de 100',136)+
+      '<div style="flex:1;min-width:220px">'+
+      '<div style="font-size:10.5px;color:'+Co.orange+';text-transform:uppercase;letter-spacing:1px;font-weight:800">Monitoria · '+faixaNota(m.nota)+'</div>'+
+      '<div style="font-size:22px;font-weight:900;color:#fff;margin-top:2px">'+esc(nomeDe(m.consultor))+'</div>'+
+      '<div style="font-size:12.5px;color:'+Co.mut+';margin-top:5px">'+
+        brData(at.data)+(at.hora?(' às '+esc(at.hora)):'')+(at.canal?(' · '+esc(at.canal)):'')+
+        (at.cliente?(' · cliente: '+esc(at.cliente)):'')+(at.ref?(' · ref.: '+esc(at.ref)):'')+'</div>'+
+      '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px">monitor: <b style="color:'+Co.sub+'">'+esc(nomeDe(m.monitor))+'</b> · '+esc(m.dept||'')+'</div>'+
+      '<div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap">'+statusChip(m)+
+        (m.resultado&&m.resultado.zerouPor?chip('<i class="fas fa-triangle-exclamation"></i> zerada por item crítico',Co.red):'')+'</div>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">'+
+        btn('<i class="fas fa-arrow-left"></i> Voltar','__gwaMonView(&#39;lista&#39;)','sec')+
+        btn('<i class="fas fa-print"></i> PDF','__gwaMonPdf(&#39;'+esc(m.id)+'&#39;)','ghost')+
+        ((m.status==='finalizada'&&ehMaster())?btn('<i class="fas fa-rotate"></i> Revisar','__gwaMonRevisar(&#39;'+esc(m.id)+'&#39;)','ghost'):'')+
+        ((m.status!=='finalizada'&&(String(m.monitor||'').toUpperCase()===meu()||ehMaster()))?btn('<i class="fas fa-pen"></i> Continuar','__gwaMonEditar(&#39;'+esc(m.id)+'&#39;)'):'')+
+        (ehMaster()?btn('<i class="fas fa-trash"></i>','__gwaMonExcluir(&#39;'+esc(m.id)+'&#39;)','red'):'')+
+      '</div></div>';
+
+    if(at.obs) topo+='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-left:4px solid '+Co.blue+';border-radius:14px;padding:13px 16px;margin-bottom:16px"><div style="font-size:11px;color:'+Co.blue+';text-transform:uppercase;letter-spacing:.8px;font-weight:700">Contexto do atendimento</div><div style="font-size:13px;color:'+Co.sub+';margin-top:5px;white-space:pre-wrap;line-height:1.6">'+esc(at.obs)+'</div></div>';
+
+    var crit=sec('Critérios avaliados','fa-list-check',
+      '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden">'+
+      (m.snapshot||[]).map(function(q,i){
+        var r=(m.respostas||{})[q.id]||{};
+        var o=rotulo(r.opt);
+        var cor=o?o.cor:Co.mut, lbl=o?o.label:'sem resposta';
+        return '<div style="display:flex;gap:13px;align-items:flex-start;padding:13px 16px;border-bottom:1px solid '+Co.line+'">'+
+          '<div style="width:34px;height:34px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;background:'+cor+'22;color:'+cor+'">'+(o&&o.pts!=null?o.pts:'—')+'</div>'+
+          '<div style="flex:1;min-width:0"><div style="color:#fff;font-size:13.5px;font-weight:600">'+(i+1)+'. '+esc(q.texto)+'</div>'+
+          '<div style="font-size:11.5px;color:'+Co.mut+';margin-top:3px">peso '+(Number(q.peso)||0)+'% · <b style="color:'+cor+'">'+esc(lbl)+'</b>'+(q.critico?' · item crítico':'')+'</div>'+
+          (r.obs?('<div style="font-size:12.5px;color:'+Co.sub+';margin-top:6px;background:'+Co.card2+';border-radius:9px;padding:8px 11px;white-space:pre-wrap">'+esc(r.obs)+'</div>'):'')+
+          '</div></div>'; }).join('')+'</div>');
+
+    function blocoTexto(t,v,cor,ic){
+      if(!String(v||'').trim()) return '';
+      return '<div style="flex:1 1 280px;min-width:250px;background:'+Co.card+';border:1px solid '+Co.line+';border-left:4px solid '+cor+';border-radius:14px;padding:14px 16px">'+
+        '<div style="font-size:11.5px;color:'+cor+';font-weight:800;text-transform:uppercase;letter-spacing:.7px"><i class="fas '+ic+'"></i> '+t+'</div>'+
+        '<div style="font-size:13px;color:'+Co.sub+';margin-top:6px;white-space:pre-wrap;line-height:1.65">'+esc(v)+'</div></div>';
+    }
+    var resumo='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px">'+
+      blocoTexto('Pontos positivos',m.pontosFortes,Co.green,'fa-thumbs-up')+
+      blocoTexto('Oportunidades de melhoria',m.oportunidades,Co.orangeL,'fa-arrow-trend-up')+
+      blocoTexto('Recomendação do monitor',m.recomendacao,Co.blue,'fa-lightbulb')+'</div>';
+
+    var npsB='';
+    if(m.nps&&Object.keys(m.nps).length){
+      var n=npsDe([m]);
+      npsB=sec('Satisfação (NPS) deste atendimento','fa-face-smile',
+        '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px;display:flex;gap:16px;flex-wrap:wrap;align-items:center">'+
+        '<div style="font-size:34px;font-weight:900;color:'+corNps(n.nps)+'">'+(n.nps>0?'+':'')+n.nps+'</div>'+
+        '<div style="font-size:12.5px;color:'+Co.mut+'">nota dada: <b style="color:#fff">'+n1(n.media)+'</b> de 10<br>'+
+        n.promotores+' promotor(es) · '+n.neutros+' neutro(s) · '+n.detratores+' detrator(es)</div>'+
+        '<div style="font-size:11.5px;color:'+Co.mut+';flex:1;min-width:200px">Este número é a satisfação de quem foi atendido. A nota técnica da monitoria é a de cima, calculada pelos critérios.</div></div>');
+    }
+
+    var anx='';
+    if((m.anexos||[]).length){
+      anx=sec('Evidências','fa-paperclip','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px">'+
+        m.anexos.map(function(a){
+          return '<div style="display:flex;align-items:center;gap:11px"><i class="fas '+(a.link?'fa-link':icoArq(a.tipo))+'" style="color:'+Co.orangeL+'"></i>'+
+          '<div style="flex:1;min-width:0;color:#fff;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(a.nome)+'</div>'+
+          (a.link?('<a href="'+esc(a.link)+'" target="_blank" rel="noopener" style="color:'+Co.blue+';font-size:12.5px">abrir</a>')
+                 :('<button onclick="__gwaMonVerAnexo(&#39;'+esc(a.id)+'&#39;)" style="background:transparent;border:1px solid '+Co.line+';color:'+Co.blue+';border-radius:8px;padding:5px 11px;cursor:pointer;font-size:12px">abrir</button>'))+
+          '</div>'; }).join('')+'</div>');
+    }
+
+    var fb=m.feedback||{};
+    var fbB='';
+    if(fb.aplicado){
+      var cie=m.ciencia;
+      fbB=sec('Feedback aplicado','fa-comments',
+        '<div style="background:'+Co.card+';border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px">'+
+        '<div style="display:flex;gap:12px;flex-wrap:wrap">'+
+        blocoTexto('Resumo',fb.resumo,Co.blue,'fa-file-lines')+
+        blocoTexto('Manteve bem',fb.positivos,Co.green,'fa-thumbs-up')+
+        blocoTexto('Precisa melhorar',fb.melhorar,Co.orangeL,'fa-circle-exclamation')+
+        blocoTexto('Orientações',fb.orientacoes,Co.roxo,'fa-compass')+
+        blocoTexto('Plano de ação',fb.plano,Co.orange,'fa-list-check')+'</div>'+
+        ((fb.prazo||fb.acompanhar)?('<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'+
+          (fb.prazo?chip('<i class="fas fa-calendar-day"></i> prazo: '+brData(fb.prazo)+(atrasado(fb.prazo,cie)?' (vencido)':''),atrasado(fb.prazo,cie)?Co.red:Co.orangeL):'')+
+          (fb.acompanhar?chip('<i class="fas fa-user-clock"></i> precisa de acompanhamento',Co.roxo):'')+'</div>'):'')+
+        '<div style="margin-top:14px;padding-top:13px;border-top:1px solid '+Co.line+'">'+
+        (cie?('<div style="font-size:12.5px;color:'+Co.green+';font-weight:700"><i class="fas fa-circle-check"></i> Ciência registrada por '+esc(cie.porNome||cie.por)+' em '+quando(cie.em)+'</div>'+
+             (cie.comentario?('<div style="font-size:12.5px;color:'+Co.sub+';margin-top:6px;white-space:pre-wrap">"'+esc(cie.comentario)+'"</div>'):'')+
+             '<div style="font-size:11px;color:'+Co.mut+';margin-top:5px">Ciência quer dizer que o consultor leu o feedback. Não significa concordância.</div>')
+            :(souEu?('<div style="font-size:12.5px;color:'+Co.sub+';margin-bottom:9px">Leia o feedback e registre sua ciência. Ciência não quer dizer que você concorda.</div>'+
+                     btn('<i class="fas fa-check"></i> Dar ciência','__gwaMonCiencia(&#39;'+esc(m.id)+'&#39;)')+' '+
+                     btn('Pedir revisão','__gwaMonPedirRevisao(&#39;'+esc(m.id)+'&#39;)','ghost'))
+                   :('<div style="font-size:12.5px;color:'+Co.orangeL+'"><i class="fas fa-hourglass-half"></i> Aguardando a ciência de '+esc(nomeDe(m.consultor))+'.</div>')))+
+        (m.pedidoRevisao?('<div style="margin-top:11px;background:'+Co.card2+';border-left:3px solid '+Co.roxo+';border-radius:0 10px 10px 0;padding:10px 13px"><div style="font-size:11.5px;color:'+Co.roxo+';font-weight:700">Pedido de revisão · '+quando(m.pedidoRevisao.em)+'</div><div style="font-size:12.5px;color:'+Co.sub+';margin-top:4px;white-space:pre-wrap">'+esc(m.pedidoRevisao.texto)+'</div></div>'):'')+
+        '</div></div>');
+    }
+
+    var hist=sec('Histórico','fa-clock-rotate-left',
+      '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:14px 18px">'+
+      (m.hist||[]).slice().reverse().map(function(h){
+        return '<div style="display:flex;gap:10px;font-size:12.5px;color:'+Co.sub+';padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04)">'+
+          '<span style="color:'+Co.mut+';white-space:nowrap">'+quando(h.em)+'</span>'+
+          '<span style="color:#fff;font-weight:600">'+esc(h.quemNome||h.quem)+'</span>'+
+          '<span>'+esc(h.oque)+'</span></div>'; }).join('')+'</div>');
+
+    return topo+crit+resumo+npsB+anx+fbB+hist;
+  }
+  function atrasado(prazo,ciencia){
+    if(!prazo) return false;
+    if(ciencia&&ciencia.em) return false;
+    var d=dt(prazo); if(!d) return false;
+    return d.getTime()<new Date().setHours(0,0,0,0);
+  }
+
+  /* ================= PERFIL DE QUALIDADE DO CONSULTOR ================= */
+  function viewConsultor(l){
+    var L=String(l||'').toUpperCase();
+    if(!L) return viewLista();
+    if(!podeVer(L) && L!==meu()) return '<div style="padding:20px;color:'+Co.red+'">Sem acesso a este consultor.</div>';
+    var todas=doConsultor(L);
+    var visiveis=(L===meu()&&!ehGestor()&&!podeMonitorar())
+      ? todas.filter(function(m){ return m.status==='finalizada' && _cfg.verConsultor!==false; })
+      : todas;
+    var fin=finalizadas(visiveis);
+    var hj=new Date(), ano=hj.getFullYear(), mes=hj.getMonth();
+    var mMes=mediaDe(noMes(fin,ano,mes)), mAno=mediaDe(noAno(fin,ano)), mTudo=mediaDe(fin);
+    var ultima=fin[0]||null;
+    var nps=npsDe(fin);
+    var mesAnt=mediaDe(noMes(fin,mes===0?ano-1:ano,mes===0?11:mes-1));
+    var delta=(mMes!=null&&mesAnt!=null)?(mMes-mesAnt):null;
+
+    var topo='<div style="background:linear-gradient(135deg,'+Co.card+','+Co.bgA+');border:1px solid '+Co.orangeD+';border-radius:18px;padding:20px;margin-bottom:16px;display:flex;gap:20px;flex-wrap:wrap;align-items:center">'+
+      anelNota(mMes==null?0:mMes,MES[mes].slice(0,3)+'/'+String(ano).slice(2),140)+
+      '<div style="flex:1;min-width:220px">'+
+      '<div style="font-size:10.5px;color:'+Co.orange+';text-transform:uppercase;letter-spacing:1px;font-weight:800">Qualidade do atendimento</div>'+
+      '<div style="font-size:23px;font-weight:900;color:#fff;margin-top:2px">'+esc(nomeDe(L))+'</div>'+
+      '<div style="font-size:12.5px;color:'+Co.mut+';margin-top:4px">'+esc(deptDe(L)||'sem departamento')+' · '+fin.length+' monitoria(s) finalizada(s)</div>'+
+      (delta!=null?('<div style="margin-top:9px;font-size:13px;font-weight:800;color:'+(delta>=0?Co.green:Co.red)+'">'+
+        '<i class="fas fa-arrow-'+(delta>=0?'up':'down')+'"></i> '+(delta>=0?'+':'')+n1(delta)+' pontos em relação a '+MES[mes===0?11:mes-1]+'</div>')
+        :'<div style="margin-top:9px;font-size:12px;color:'+Co.mut+'">sem comparação com o mês anterior ainda</div>')+
+      '</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">'+
+        (podeMonitorar()&&podeVer(L)?btn('<i class="fas fa-plus"></i> Nova monitoria','__gwaMonNova(&#39;'+esc(L)+'&#39;)'):'')+
+        btn('<i class="fas fa-list"></i> Todas','__gwaMonView(&#39;lista&#39;)','sec')+
+      '</div></div>';
+
+    var cards='<div style="display:flex;gap:13px;flex-wrap:wrap;margin-bottom:18px">'+
+      card('Média do mês',mMes==null?'—':n1(mMes),mMes==null?'sem monitoria':faixaNota(mMes),mMes==null?Co.mut:corNota(mMes))+
+      card('Média do ano',mAno==null?'—':n1(mAno),String(ano),mAno==null?Co.mut:corNota(mAno))+
+      card('Média histórica',mTudo==null?'—':n1(mTudo),'desde o início',mTudo==null?Co.mut:corNota(mTudo))+
+      card('Última monitoria',ultima?n1(ultima.nota):'—',ultima?brData(ultima.atendimento&&ultima.atendimento.data):'nenhuma',ultima?corNota(ultima.nota):Co.mut)+
+      card('Monitorias',fin.length,(visiveis.length-fin.length)?((visiveis.length-fin.length)+' em aberto'):'todas finalizadas',Co.blue)+
+      card('NPS',nps?((nps.nps>0?'+':'')+nps.nps):'—',nps?(nps.respostas+' resposta(s) de satisfação'):'sem avaliação do cliente',nps?corNps(nps.nps):Co.mut)+
+      '</div>';
+
+    /* evolucao dos ultimos 12 meses */
+    var pontos=[];
+    for(var i=11;i>=0;i--){
+      var d=new Date(ano,mes-i,1);
+      var mm=noMes(fin,d.getFullYear(),d.getMonth());
+      pontos.push({k:MESc[d.getMonth()], v:mediaDe(mm)||0, n:mm.length});
+    }
+    var graf=sec('Evolu\u00e7\u00e3o da qualidade','fa-chart-column',
+      evolucao('Nota m\u00e9dia por m\u00eas',pontos,'cada coluna \u00e9 a m\u00e9dia das monitorias finalizadas do m\u00eas'));
+
+    /* criterios e recorrencias */
+    var crit=porCriterio(fin);
+    var piores=crit.slice(0,5).map(function(c){ return {k:c.texto, v:c.media, txt:n1(c.media), cor:corNota(c.media)}; });
+    var melhores=crit.slice().reverse().slice(0,5).map(function(c){ return {k:c.texto, v:c.media, txt:n1(c.media), cor:corNota(c.media)}; });
+    var pos=contarTextos(fin,'pontosFortes').slice(0,6).map(function(x){ return {k:x.k, v:x.v, txt:x.v+'x', cor:Co.green}; });
+    var opo=contarTextos(fin,'oportunidades').slice(0,6).map(function(x){ return {k:x.k, v:x.v, txt:x.v+'x', cor:Co.orangeL}; });
+
+    var quadros=fin.length?sec('O que mais aparece','fa-magnifying-glass-chart',
+      '<div style="display:flex;gap:13px;flex-wrap:wrap">'+
+      barras('Critérios mais fortes (média 0-100)',melhores,null,100)+
+      barras('Critérios que precisam melhorar',piores,null,100)+
+      '</div><div style="display:flex;gap:13px;flex-wrap:wrap;margin-top:13px">'+
+      (pos.length?barras('Pontos positivos recorrentes',pos):'')+
+      (opo.length?barras('Oportunidades recorrentes',opo):'')+'</div>'):'';
+
+    /* linha do tempo */
+    var linha=sec('Monitorias e feedbacks','fa-clock-rotate-left',
+      visiveis.length
+      ? '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden">'+
+        visiveis.map(function(m){ return linhaMon(m,false); }).join('')+'</div>'
+      : '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:34px;text-align:center;color:'+Co.mut+'">Nenhuma monitoria registrada ainda.</div>');
+
+    var pend=visiveis.filter(function(m){ return m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em); });
+    var aviso=pend.length?('<div style="background:#2a1f14;border:1px solid '+Co.orangeD+';border-radius:14px;padding:14px 18px;margin-bottom:16px">'+
+      '<div style="color:'+Co.orangeL+';font-weight:800"><i class="fas fa-hourglass-half"></i> '+pend.length+' feedback(s) aguardando ciência</div>'+
+      '<div style="font-size:12.5px;color:'+Co.sub+';margin-top:4px">'+(L===meu()?'Abra o feedback, leia e registre sua ciência.':'O consultor ainda não registrou a ciência.')+'</div></div>'):'';
+
+    return topo+aviso+cards+graf+quadros+linha;
+  }
+
+  /* ================= DASHBOARD GERENCIAL ================= */
+  function viewDash(){
+    if(!(ehGestor()||podeMonitorar())) return '<div style="padding:20px;color:'+Co.red+'">Acesso restrito.</div>';
+    var todas=aplicaFiltros(visiveisParaMim());
+    var fin=finalizadas(todas);
+    var med=mediaDe(fin), nps=npsDe(fin);
+
+    /* por departamento */
+    var pd={};
+    fin.forEach(function(m){ var d=m.dept||deptDe(m.consultor)||'sem departamento';
+      var o=pd[d]||(pd[d]={d:d,soma:0,n:0}); o.soma+=Number(m.nota)||0; o.n++; });
+    var deps=Object.keys(pd).map(function(k){ var o=pd[k];
+      return {k:(o.d.charAt(0).toUpperCase()+o.d.slice(1)), v:Math.round(o.soma/o.n*10)/10, n:o.n}; })
+      .sort(function(a,b){ return b.v-a.v; });
+
+    /* por consultor */
+    var pc={};
+    fin.forEach(function(m){ var L=String(m.consultor||'').toUpperCase();
+      var o=pc[L]||(pc[L]={L:L,soma:0,n:0}); o.soma+=Number(m.nota)||0; o.n++; });
+    var ranking=Object.keys(pc).map(function(k){ var o=pc[k];
+      return {L:o.L, nome:nomeDe(o.L), dept:deptDe(o.L), media:Math.round(o.soma/o.n*10)/10, n:o.n}; })
+      .sort(function(a,b){ return b.media-a.media; });
+
+    /* por avaliador */
+    var pm={};
+    todas.forEach(function(m){ var L=String(m.monitor||'').toUpperCase();
+      var o=pm[L]||(pm[L]={L:L,n:0,fin:0}); o.n++; if(m.status==='finalizada')o.fin++; });
+    var avaliadores=Object.keys(pm).map(function(k){ var o=pm[k];
+      return {k:nomeDe(o.L), v:o.n, txt:o.n+(o.fin!==o.n?(' ('+o.fin+' fin.)'):'')}; })
+      .sort(function(a,b){ return b.v-a.v; });
+
+    /* evolucao geral 12 meses */
+    var hj=new Date(), pontos=[];
+    for(var i=11;i>=0;i--){ var d=new Date(hj.getFullYear(),hj.getMonth()-i,1);
+      var mm=noMes(fin,d.getFullYear(),d.getMonth());
+      pontos.push({k:MESc[d.getMonth()], v:mediaDe(mm)||0, n:mm.length}); }
+
+    /* falhas mais comuns */
+    var crit=porCriterio(fin).slice(0,7).map(function(c){ return {k:c.texto, v:c.media, txt:n1(c.media), cor:corNota(c.media)}; });
+    var opo=contarTextos(fin,'oportunidades').slice(0,7).map(function(x){ return {k:x.k, v:x.v, txt:x.v+'x', cor:Co.orangeL}; });
+
+    /* pendencias */
+    var semCiencia=todas.filter(function(m){ return m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em); });
+    var planos=todas.filter(function(m){ return m.feedback&&m.feedback.aplicado&&String(m.feedback.plano||'').trim(); });
+    var atrasados=planos.filter(function(m){ return atrasado(m.feedback.prazo,m.ciencia); });
+    var rascunhos=todas.filter(function(m){ return m.status==='rascunho'; });
+
+    var cards='<div style="display:flex;gap:13px;flex-wrap:wrap;margin-bottom:18px">'+
+      card('Monitorias',todas.length,fin.length+' finalizada(s)',Co.orangeL)+
+      card('Média geral',med==null?'—':n1(med),med==null?'sem nota':faixaNota(med),med==null?Co.mut:corNota(med))+
+      card('NPS',nps?((nps.nps>0?'+':'')+nps.nps):'—',nps?(nps.respostas+' resposta(s)'):'sem avaliação',nps?corNps(nps.nps):Co.mut)+
+      card('Consultores avaliados',ranking.length,consultoresVisiveis().length+' no seu acesso',Co.blue)+
+      card('Sem ciência',semCiencia.length,semCiencia.length?'cobrar o consultor':'tudo em dia',semCiencia.length?Co.orangeL:Co.green)+
+      card('Planos atrasados',atrasados.length,atrasados.length?'prazo vencido':'nenhum',atrasados.length?Co.red:Co.green)+
+      (rascunhos.length?card('Rascunhos',rascunhos.length,'monitorias não finalizadas',Co.amarelo):'')+
+      '</div>';
+
+    var compara='';
+    if(deps.length){
+      compara=sec('Comparação entre departamentos','fa-scale-balanced',
+        '<div style="display:flex;gap:13px;flex-wrap:wrap">'+
+        deps.map(function(d){
+          return '<div style="flex:1 1 220px;min-width:200px;background:'+Co.card+';border:1px solid '+Co.line+';border-top:4px solid '+corNota(d.v)+';border-radius:16px;padding:16px 18px;text-align:center">'+
+            '<div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px;font-weight:700">'+esc(d.k)+'</div>'+
+            '<div style="font-size:34px;font-weight:900;color:'+corNota(d.v)+';line-height:1.15">'+n1(d.v)+'</div>'+
+            '<div style="font-size:11.5px;color:'+Co.mut+'">'+d.n+' monitoria(s) · '+faixaNota(d.v)+'</div></div>'; }).join('')+'</div>');
+    }
+
+    var tabela=sec('Ranking por consultor','fa-ranking-star',
+      ranking.length
+      ? '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto">'+
+        '<table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px">'+
+        '<thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'">'+
+        '<th style="padding:10px;width:46px">#</th><th style="padding:10px">Consultor</th><th style="padding:10px">Departamento</th>'+
+        '<th style="padding:10px;text-align:center">Monitorias</th><th style="padding:10px;text-align:center">Média</th>'+
+        '<th style="padding:10px">Desempenho</th><th></th></tr></thead><tbody>'+
+        ranking.map(function(r,i){
+          return '<tr style="border-bottom:1px solid '+Co.line+'">'+
+            '<td style="padding:10px;font-weight:800;color:'+(i===0?Co.orangeL:Co.mut)+'">'+(i+1)+'º</td>'+
+            '<td style="padding:10px;color:#fff;font-weight:600">'+esc(r.nome)+'</td>'+
+            '<td style="padding:10px">'+esc(r.dept||'—')+'</td>'+
+            '<td style="padding:10px;text-align:center">'+r.n+'</td>'+
+            '<td style="padding:10px;text-align:center;font-weight:900;color:'+corNota(r.media)+'">'+n1(r.media)+'</td>'+
+            '<td style="padding:10px;min-width:130px"><div style="height:8px;border-radius:20px;background:rgba(255,255,255,.055);overflow:hidden"><div style="height:100%;width:'+Math.max(2,Math.round(r.media))+'%;background:'+corNota(r.media)+'"></div></div></td>'+
+            '<td style="padding:10px"><button onclick="__gwaMonConsultor(&#39;'+esc(r.L)+'&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.orangeD+';color:'+Co.orangeL+';border-radius:8px;padding:6px 11px;cursor:pointer;font-size:12px">perfil</button></td></tr>'; }).join('')+
+        '</tbody></table></div></div>'
+      : '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:30px;text-align:center;color:'+Co.mut+'">Nenhuma monitoria finalizada no filtro.</div>');
+
+    var graficos='<div style="display:flex;gap:13px;flex-wrap:wrap;margin-bottom:18px">'+
+      (crit.length?barras('Critérios com menor nota (média 0-100)',crit,null,100):'')+
+      (opo.length?barras('Falhas mais apontadas',opo):'')+
+      (avaliadores.length?barras('Monitorias por avaliador',avaliadores,'linear-gradient(135deg,#9b7bd4,#6d4fae)'):'')+'</div>';
+
+    var pendBox='';
+    if(semCiencia.length||atrasados.length){
+      pendBox=sec('Pendências','fa-triangle-exclamation',
+        '<div style="background:'+Co.card+';border:1px solid '+Co.orangeD+';border-radius:16px;overflow:hidden">'+
+        semCiencia.concat(atrasados.filter(function(m){ return semCiencia.indexOf(m)<0; })).slice(0,20).map(function(m){
+          var atr=atrasado(m.feedback&&m.feedback.prazo,m.ciencia);
+          return '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 15px;border-bottom:1px solid '+Co.line+'">'+
+            '<div style="flex:1;min-width:180px"><div style="color:#fff;font-weight:600;font-size:13.5px">'+esc(nomeDe(m.consultor))+'</div>'+
+            '<div style="font-size:11.5px;color:'+Co.mut+'">monitoria de '+brData(m.atendimento&&m.atendimento.data)+' · nota '+n1(m.nota)+'</div></div>'+
+            (m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em)?chip('<i class="fas fa-hourglass-half"></i> sem ciência',Co.orangeL):'')+
+            (atr?chip('<i class="fas fa-calendar-xmark"></i> plano vencido em '+brData(m.feedback.prazo),Co.red):'')+
+            btn('abrir','__gwaMonAbrir(&#39;'+esc(m.id)+'&#39;)','sec')+'</div>'; }).join('')+'</div>');
+    }
+
+    return caixaFiltros()+cards+compara+
+      sec('Evolução geral','fa-chart-column',evolucao('Média de qualidade por mês',pontos,'todas as monitorias finalizadas do seu acesso'))+
+      graficos+tabela+pendBox;
+  }
+
+  /* ================= FORMULARIO (Master e autorizados) ================= */
+  var _formAba='comercial';
+  window.__gwaMonFormAba=function(k){ _formAba=k; desenhar(); };
+
+  function viewForm(){
+    if(!podeConfigurar()) return '<div style="padding:20px;color:'+Co.red+'">Apenas o Master (ou quem ele autorizar) pode mexer no formulário.</div>';
+    var chaves=Object.keys(_cfg.forms);
+    var f=_cfg.forms[_formAba]||_cfg.forms[chaves[0]];
+    var ps=f.perguntas||[];
+    var soma=somaPesos(ps);
+
+    var abasF='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">'+chaves.map(function(k){
+      var on=(k===_formAba);
+      return '<button onclick="__gwaMonFormAba(&#39;'+esc(k)+'&#39;)" style="padding:9px 16px;border-radius:11px;cursor:pointer;font-weight:700;font-size:13px;border:1px solid '+(on?'transparent':Co.line)+';background:'+(on?Co.gradO:Co.card2)+';color:'+(on?'#fff':Co.sub)+'">'+esc(_cfg.forms[k].nome||k)+'</button>'; }).join('')+
+      btn('<i class="fas fa-plus"></i> Novo formulário','__gwaMonFormNovo()','sec')+'</div>';
+
+    var barraSoma='<div style="background:'+(soma===100?'rgba(63,174,90,.12)':'rgba(229,83,60,.12)')+';border:1px solid '+(soma===100?Co.green:Co.red)+';border-radius:14px;padding:13px 17px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'+
+      '<div><div style="font-weight:800;color:'+(soma===100?Co.green:Co.red)+';font-size:14px">'+
+      (soma===100?'<i class="fas fa-circle-check"></i> Soma dos pesos: 100%':'<i class="fas fa-triangle-exclamation"></i> Soma dos pesos: '+soma+'%')+'</div>'+
+      '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px">'+(soma===100?'Pode salvar.':'A soma precisa fechar em 100% para salvar.')+'</div></div>'+
+      (soma!==100?btn('Ajustar automaticamente','__gwaMonFormEqualizar()','sec'):'')+'</div>';
+
+    var linhas=ps.map(function(q,i){
+      return '<div class="gwaQRow" data-qid="'+esc(q.id)+'" style="background:'+Co.card2+';border:1px solid '+Co.line+';border-radius:13px;padding:13px 15px;margin-bottom:9px">'+
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+        '<span style="color:'+Co.mut+';font-weight:800;width:20px">'+(i+1)+'</span>'+
+        '<input class="qTexto" value="'+esc(q.texto)+'" placeholder="Critério avaliado" style="flex:1 1 230px;min-width:200px;padding:9px 12px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff">'+
+        '<div style="display:flex;align-items:center;gap:5px"><input class="qPeso" type="number" min="0" max="100" value="'+(Number(q.peso)||0)+'" oninput="__gwaMonFormSoma()" style="width:72px;padding:9px 10px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff;text-align:center"><span style="color:'+Co.mut+';font-size:12px">%</span></div>'+
+        '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:'+Co.sub+';cursor:pointer"><input class="qObrig" type="checkbox"'+(q.obrig===false?'':' checked')+' style="width:16px;height:16px;accent-color:'+Co.orange+'"> obrigatória</label>'+
+        '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:'+Co.red+';cursor:pointer" title="Se receber a pior nota, zera a monitoria (quando a regra estiver ligada)"><input class="qCrit" type="checkbox"'+(q.critico?' checked':'')+' style="width:16px;height:16px;accent-color:'+Co.red+'"> crítica</label>'+
+        '<button onclick="__gwaMonFormMover('+i+',-1)" title="subir" style="background:transparent;border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-arrow-up"></i></button>'+
+        '<button onclick="__gwaMonFormMover('+i+',1)" title="descer" style="background:transparent;border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-arrow-down"></i></button>'+
+        '<button onclick="__gwaMonFormTirar('+i+')" title="excluir" style="background:transparent;border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-trash"></i></button>'+
+        '</div>'+
+        '<input class="qDica" value="'+esc(q.dica||'')+'" placeholder="Dica para o monitor (opcional)" style="width:100%;box-sizing:border-box;margin-top:8px;padding:8px 11px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:'+Co.sub+';font-size:12.5px">'+
+        '</div>';
+    }).join('');
+
+    var escBox=sec('Escala de notas','fa-ruler',
+      '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px">'+
+      '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:11px">Os pontos de cada classificação vão de 0 a 100. Deixe o campo vazio para a opção "não entra na conta" (o peso dela é redistribuído).</div>'+
+      '<div id="escRows">'+(_cfg.escala||[]).map(function(e,i){
+        return '<div class="gwaERow" style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:8px">'+
+          '<input class="eLabel" value="'+esc(e.label)+'" style="flex:1 1 170px;padding:9px 12px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff">'+
+          '<input class="ePts" type="number" min="0" max="100" value="'+(e.pts==null?'':e.pts)+'" placeholder="n/a" style="width:86px;padding:9px 10px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff;text-align:center">'+
+          '<input class="eCor" type="color" value="'+esc(e.cor||'#949aa4')+'" style="width:46px;height:38px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.bgA+';cursor:pointer">'+
+          '<input class="eKey" type="hidden" value="'+esc(e.key)+'">'+
+          '</div>'; }).join('')+'</div>'+
+      '<label style="display:flex;align-items:center;gap:9px;font-size:13px;color:'+Co.sub+';cursor:pointer;margin-top:10px">'+
+      '<input type="checkbox" id="cfgCritZera"'+(_cfg.criticoZera?' checked':'')+' style="width:17px;height:17px;accent-color:'+Co.red+'"> '+
+      'Item crítico com a pior nota <b style="color:'+Co.red+'">zera</b> a monitoria</label>'+
+      '</div>');
+
+    var npsBox=sec('Perguntas de satisfação (NPS)','fa-face-smile',
+      '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px">'+
+      '<label style="display:flex;align-items:center;gap:9px;font-size:13px;color:'+Co.sub+';cursor:pointer;margin-bottom:11px">'+
+      '<input type="checkbox" id="cfgNpsAtivo"'+((_cfg.nps&&_cfg.nps.ativo)?' checked':'')+' style="width:17px;height:17px;accent-color:'+Co.orange+'"> Usar NPS nas monitorias</label>'+
+      '<div id="npsRows">'+((_cfg.nps&&_cfg.nps.perguntas)||[]).map(function(q,i){
+        return '<div class="gwaNRow" style="display:flex;gap:9px;align-items:center;margin-bottom:8px">'+
+          '<input class="nTexto" value="'+esc(q.texto)+'" style="flex:1;padding:9px 12px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff">'+
+          '<input class="nId" type="hidden" value="'+esc(q.id)+'">'+
+          '<button onclick="__gwaMonNpsTirar('+i+')" style="background:transparent;border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:8px 11px;cursor:pointer"><i class="fas fa-trash"></i></button></div>'; }).join('')+'</div>'+
+      btn('<i class="fas fa-plus"></i> Nova pergunta de NPS','__gwaMonNpsNova()','sec')+
+      '<div style="font-size:11.5px;color:'+Co.mut+';margin-top:9px">Escala fixa de 0 a 10. O cálculo segue o padrão: % de promotores (9-10) menos % de detratores (0-6).</div>'+
+      '</div>');
+
+    var permBox=ehMaster()?sec('Quem pode o quê','fa-user-shield',
+      '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px">'+
+      '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:12px">Um login por linha. Gestores e supervisores já aplicam monitoria pelo departamento deles; use isto para liberar mais gente.</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px">'+
+      txa('cfgGestores','Podem editar o formulário',(_cfg.gestores||[]).join('\n'),'LOGIN por linha',70)+
+      txa('cfgMonitores','Podem aplicar monitoria',(_cfg.monitores||[]).join('\n'),'LOGIN por linha',70)+
+      txa('cfgNpsQuem','Podem registrar NPS',(_cfg.avaliadoresNps||[]).join('\n'),'LOGIN por linha',70)+
+      '</div>'+
+      '<label style="display:flex;align-items:center;gap:9px;font-size:13px;color:'+Co.sub+';cursor:pointer;margin-top:12px">'+
+      '<input type="checkbox" id="cfgVerCons"'+(_cfg.verConsultor!==false?' checked':'')+' style="width:17px;height:17px;accent-color:'+Co.orange+'"> '+
+      'O consultor pode ver as próprias monitorias finalizadas</label></div>'):'';
+
+    var hist=sec('Histórico de alterações','fa-clock-rotate-left',
+      '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:14px 18px;max-height:230px;overflow:auto">'+
+      ((_cfg.hist||[]).length?_cfg.hist.slice().reverse().map(function(h){
+        return '<div style="display:flex;gap:10px;font-size:12.5px;color:'+Co.sub+';padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04)">'+
+          '<span style="color:'+Co.mut+';white-space:nowrap">'+quando(h.em)+'</span>'+
+          '<span style="color:#fff;font-weight:600">'+esc(h.quemNome||h.quem)+'</span><span>'+esc(h.oque)+'</span></div>'; }).join('')
+        :'<div style="color:'+Co.mut+';font-size:12.5px">Nenhuma alteração registrada ainda.</div>')+'</div>');
+
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-left:4px solid '+Co.blue+';border-radius:14px;padding:13px 17px;margin-bottom:16px;font-size:12.5px;color:'+Co.sub+'">'+
+      '<i class="fas fa-circle-info" style="color:'+Co.blue+'"></i> Monitorias já finalizadas <b>não mudam</b> quando você altera o formulário: cada avaliação guarda a cópia das perguntas e dos pesos do dia em que foi aplicada.</div>'+
+      abasF+
+      sec('Critérios de '+esc(f.nome||_formAba),'fa-sliders',
+        barraSoma+'<div id="qRows">'+linhas+'</div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">'+
+        btn('<i class="fas fa-plus"></i> Novo critério','__gwaMonFormNovaPerg()','sec')+
+        btn('<i class="fas fa-rotate-left"></i> Voltar ao modelo padrão','__gwaMonFormPadrao()','ghost')+'</div>',
+        '<span id="somaTopo" style="font-size:12.5px;color:'+(soma===100?Co.green:Co.red)+';font-weight:800">'+soma+'%</span>')+
+      escBox+npsBox+permBox+hist+
+      '<div style="position:sticky;bottom:0;background:linear-gradient(0deg,'+Co.bgB+' 70%,transparent);padding:14px 0;display:flex;gap:10px;flex-wrap:wrap">'+
+      btn('<i class="fas fa-save"></i> Salvar formulário','__gwaMonFormSalvar()')+
+      btn('Descartar','__gwaMonView(&#39;form&#39;)','ghost')+'</div>';
+  }
+
+  /* ---- acoes do editor de formulario ---- */
+  function colherForm(){
+    var f=_cfg.forms[_formAba]; if(!f) return;
+    var rows=document.querySelectorAll('#qRows .gwaQRow');
+    var novas=[];
+    Array.prototype.forEach.call(rows,function(tr){
+      var id=tr.getAttribute('data-qid')||uid('q');
+      var t=(tr.querySelector('.qTexto')||{}).value||'';
+      if(!String(t).trim()) return;
+      novas.push({ id:id, texto:String(t).trim(),
+        peso:Number((tr.querySelector('.qPeso')||{}).value)||0,
+        obrig:!!(tr.querySelector('.qObrig')||{}).checked,
+        critico:!!(tr.querySelector('.qCrit')||{}).checked,
+        dica:String((tr.querySelector('.qDica')||{}).value||'').trim() });
+    });
+    if(novas.length) f.perguntas=novas;
+
+    var er=document.querySelectorAll('#escRows .gwaERow');
+    if(er.length){
+      var esc2=[];
+      Array.prototype.forEach.call(er,function(tr){
+        var lbl=String((tr.querySelector('.eLabel')||{}).value||'').trim();
+        if(!lbl) return;
+        var pv=String((tr.querySelector('.ePts')||{}).value||'').trim();
+        esc2.push({ key:String((tr.querySelector('.eKey')||{}).value||uid('e')),
+          label:lbl, pts:(pv===''?null:Number(pv)),
+          cor:String((tr.querySelector('.eCor')||{}).value||'#949aa4') });
+      });
+      if(esc2.length) _cfg.escala=esc2;
+    }
+    var cz=document.getElementById('cfgCritZera'); if(cz) _cfg.criticoZera=!!cz.checked;
+
+    var nr=document.querySelectorAll('#npsRows .gwaNRow');
+    var nps=[];
+    Array.prototype.forEach.call(nr,function(tr){
+      var t=String((tr.querySelector('.nTexto')||{}).value||'').trim();
+      if(t) nps.push({ id:String((tr.querySelector('.nId')||{}).value||uid('n')), texto:t });
+    });
+    _cfg.nps=_cfg.nps||{};
+    _cfg.nps.perguntas=nps;
+    var na=document.getElementById('cfgNpsAtivo'); if(na) _cfg.nps.ativo=!!na.checked;
+
+    if(ehMaster()){
+      function logins(id){ var v=gv(id); return v?v.split(/[\n,;]+/).map(function(x){return x.trim().toUpperCase();}).filter(Boolean):[]; }
+      if(document.getElementById('cfgGestores')) _cfg.gestores=logins('cfgGestores');
+      if(document.getElementById('cfgMonitores')) _cfg.monitores=logins('cfgMonitores');
+      if(document.getElementById('cfgNpsQuem')) _cfg.avaliadoresNps=logins('cfgNpsQuem');
+      var vc=document.getElementById('cfgVerCons'); if(vc) _cfg.verConsultor=!!vc.checked;
+    }
+  }
+  window.__gwaMonFormSoma=function(){
+    var tot=0;
+    Array.prototype.forEach.call(document.querySelectorAll('#qRows .qPeso'),function(e){ tot+=Number(e.value)||0; });
+    var el=document.getElementById('somaTopo');
+    if(el){ el.textContent=tot+'%'; el.style.color=(tot===100?Co.green:Co.red); }
+  };
+  window.__gwaMonFormNovaPerg=function(){
+    colherForm();
+    var f=_cfg.forms[_formAba];
+    f.perguntas=(f.perguntas||[]).concat([{id:uid('q'),texto:'',peso:0,obrig:true,critico:false,dica:''}]);
+    desenhar();
+  };
+  window.__gwaMonFormTirar=function(i){
+    colherForm();
+    var f=_cfg.forms[_formAba];
+    if((f.perguntas||[]).length<=1){ alert('O formulário precisa ter pelo menos um critério.'); return; }
+    if(!confirm('Excluir este critério do formulário?')) return;
+    f.perguntas.splice(i,1); desenhar();
+  };
+  window.__gwaMonFormMover=function(i,d){
+    colherForm();
+    var f=_cfg.forms[_formAba], ps=f.perguntas||[];
+    var j=i+d; if(j<0||j>=ps.length) return;
+    var t=ps[i]; ps[i]=ps[j]; ps[j]=t; desenhar();
+  };
+  window.__gwaMonFormEqualizar=function(){
+    colherForm();
+    var f=_cfg.forms[_formAba], ps=f.perguntas||[];
+    if(!ps.length) return;
+    var soma=somaPesos(ps);
+    if(soma>0){
+      var acc=0;
+      ps.forEach(function(q,i){
+        if(i===ps.length-1){ q.peso=100-acc; }
+        else { q.peso=Math.round((Number(q.peso)||0)/soma*100); acc+=q.peso; }
+      });
+    } else {
+      var base_=Math.floor(100/ps.length), resto=100-base_*ps.length;
+      ps.forEach(function(q,i){ q.peso=base_+(i<resto?1:0); });
+    }
+    desenhar();
+  };
+  window.__gwaMonFormPadrao=function(){
+    if(!confirm('Voltar este formulário para o modelo padrão da GWA?\n\nAs monitorias já feitas não mudam.')) return;
+    _cfg.forms[_formAba].perguntas=PERG_PADRAO.map(function(q){ return Object.assign({},q); });
+    desenhar();
+  };
+  window.__gwaMonFormNovo=function(){
+    colherForm();
+    var nome=prompt('Nome do novo formulário (ex.: Documentação, Retenção):','');
+    if(!nome) return;
+    var k=norm(nome).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||uid('f');
+    if(_cfg.forms[k]){ alert('Já existe um formulário com esse nome.'); return; }
+    _cfg.forms[k]={nome:String(nome).trim(), perguntas:PERG_PADRAO.map(function(q){ return Object.assign({},q,{id:uid('q')}); })};
+    _formAba=k; desenhar();
+  };
+  window.__gwaMonNpsNova=function(){
+    colherForm();
+    _cfg.nps=_cfg.nps||{ativo:true,perguntas:[]};
+    _cfg.nps.perguntas=(_cfg.nps.perguntas||[]).concat([{id:uid('n'),texto:''}]);
+    desenhar();
+  };
+  window.__gwaMonNpsTirar=function(i){
+    colherForm();
+    (_cfg.nps.perguntas||[]).splice(i,1); desenhar();
+  };
+  window.__gwaMonFormSalvar=async function(){
+    colherForm();
+    var f=_cfg.forms[_formAba];
+    var soma=somaPesos(f.perguntas);
+    if(soma!==100){ alert('A soma dos pesos está em '+soma+'%.\n\nEla precisa fechar exatamente em 100% para salvar.'); return; }
+    var vazias=(f.perguntas||[]).filter(function(q){ return !String(q.texto||'').trim(); });
+    if(vazias.length){ alert('Tem critério sem texto. Preencha ou exclua.'); return; }
+    var ok=await salvarCfg('alterou o formulário "'+(f.nome||_formAba)+'"');
+    alert(ok?'Formulário salvo. As monitorias novas já usam esta versão.':'Não consegui salvar.');
+    desenhar();
+  };
+
+  /* ================= PDF DA MONITORIA ================= */
+  window.__gwaMonPdf=function(id){
+    var m=(_mons||[]).filter(function(x){return x.id===id;})[0]; if(!m) return;
+    var esc_=m.escala||_cfg.escala;
+    function rot(k){ for(var i=0;i<esc_.length;i++){ if(esc_[i].key===k) return esc_[i]; } return null; }
+    var at=m.atendimento||{}, fb=m.feedback||{};
+    var linhas=(m.snapshot||[]).map(function(q,i){
+      var r=(m.respostas||{})[q.id]||{}; var o=rot(r.opt);
+      return '<tr><td>'+(i+1)+'</td><td>'+esc(q.texto)+(q.critico?' <b>(crítico)</b>':'')+'</td>'+
+        '<td style="text-align:center">'+(Number(q.peso)||0)+'%</td>'+
+        '<td style="text-align:center">'+esc(o?o.label:'—')+'</td>'+
+        '<td style="text-align:center">'+(o&&o.pts!=null?o.pts:'n/a')+'</td>'+
+        '<td>'+esc(r.obs||'')+'</td></tr>'; }).join('');
+    var n=npsDe([m]);
+    var html='<!doctype html><html><head><meta charset="utf-8"><title>Monitoria '+esc(nomeDe(m.consultor))+'</title>'+
+      '<style>body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:28px}'+
+      'h1{color:#c4661a;font-size:19px;margin:0 0 3px}.sub{color:#666;font-size:12px}'+
+      '.hd{display:flex;align-items:center;gap:14px;border-bottom:3px solid #c4661a;padding-bottom:12px;margin-bottom:16px}'+
+      '.nota{float:right;text-align:center;border:3px solid #c4661a;border-radius:12px;padding:10px 18px}'+
+      '.nota b{font-size:30px;color:#c4661a;display:block}'+
+      'table{width:100%;border-collapse:collapse;font-size:11px;margin-top:8px}'+
+      'th,td{border:1px solid #e5e5e5;padding:5px}th{background:#fafafa;text-align:left}'+
+      '.box{border:1px solid #ddd;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:12px}'+
+      '.box b{color:#c4661a;display:block;margin-bottom:3px}</style></head><body>'+
+      '<div class="hd"><img src="'+LOGO+'" style="height:46px"><div><h1>MONITORIA DE QUALIDADE</h1>'+
+      '<div class="sub">GWA Consultoria · emitido em '+new Date().toLocaleString('pt-BR')+'</div></div></div>'+
+      '<div class="nota"><b>'+n1(m.nota)+'</b><span style="font-size:11px;color:#666">de 100 · '+faixaNota(m.nota)+'</span></div>'+
+      '<div style="font-size:13px;line-height:1.8"><b>Consultor:</b> '+esc(nomeDe(m.consultor))+'<br>'+
+      '<b>Departamento:</b> '+esc(m.dept||'')+'<br>'+
+      '<b>Monitor:</b> '+esc(nomeDe(m.monitor))+'<br>'+
+      '<b>Atendimento:</b> '+brData(at.data)+(at.hora?(' às '+esc(at.hora)):'')+(at.canal?(' · '+esc(at.canal)):'')+
+      (at.cliente?('<br><b>Cliente:</b> '+esc(at.cliente)):'')+
+      (at.ref?('<br><b>Referência:</b> '+esc(at.ref)):'')+'</div>'+
+      '<div style="clear:both"></div>'+
+      '<h3 style="font-size:14px;margin-top:16px;border-left:5px solid #c4661a;padding-left:9px">Critérios avaliados</h3>'+
+      '<table><thead><tr><th>#</th><th>Critério</th><th>Peso</th><th>Classificação</th><th>Pontos</th><th>Observação</th></tr></thead><tbody>'+linhas+'</tbody></table>'+
+      (m.pontosFortes?('<div class="box"><b>Pontos positivos</b>'+esc(m.pontosFortes).replace(/\n/g,'<br>')+'</div>'):'')+
+      (m.oportunidades?('<div class="box"><b>Oportunidades de melhoria</b>'+esc(m.oportunidades).replace(/\n/g,'<br>')+'</div>'):'')+
+      (m.recomendacao?('<div class="box"><b>Recomendação do monitor</b>'+esc(m.recomendacao).replace(/\n/g,'<br>')+'</div>'):'')+
+      (n?('<div class="box"><b>Satisfação (NPS)</b>Nota dada pelo cliente: '+n1(n.media)+' de 10 · NPS '+(n.nps>0?'+':'')+n.nps+'</div>'):'')+
+      (fb.aplicado?('<h3 style="font-size:14px;margin-top:16px;border-left:5px solid #c4661a;padding-left:9px">Feedback aplicado</h3>'+
+        (fb.resumo?('<div class="box"><b>Resumo</b>'+esc(fb.resumo).replace(/\n/g,'<br>')+'</div>'):'')+
+        (fb.positivos?('<div class="box"><b>Manteve bem</b>'+esc(fb.positivos).replace(/\n/g,'<br>')+'</div>'):'')+
+        (fb.melhorar?('<div class="box"><b>Precisa melhorar</b>'+esc(fb.melhorar).replace(/\n/g,'<br>')+'</div>'):'')+
+        (fb.orientacoes?('<div class="box"><b>Orientações</b>'+esc(fb.orientacoes).replace(/\n/g,'<br>')+'</div>'):'')+
+        (fb.plano?('<div class="box"><b>Plano de ação</b>'+esc(fb.plano).replace(/\n/g,'<br>')+(fb.prazo?('<br><i>Prazo: '+brData(fb.prazo)+'</i>'):'')+'</div>'):'')+
+        (m.ciencia?('<div class="box"><b>Ciência do consultor</b>'+esc(m.ciencia.porNome||m.ciencia.por)+' em '+quando(m.ciencia.em)+
+          (m.ciencia.comentario?('<br>"'+esc(m.ciencia.comentario)+'"'):'')+
+          '<br><i style="color:#666">Ciência significa que o consultor leu o feedback; não significa concordância.</i></div>')
+          :'<div class="box"><b>Ciência do consultor</b>Pendente.<br><br>Assinatura: ______________________________  Data: ____/____/______</div>')):'')+
+      '<p style="text-align:center;color:#999;font-size:10px;margin-top:20px">Documento gerado pela Intranet GWA · Monitoria e Qualidade</p>'+
+      '<scr'+'ipt>setTimeout(function(){window.print();},400);</scr'+'ipt></body></html>';
+    try{ var w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); }
+      else { var b=new Blob([html],{type:'text/html'}); window.open(URL.createObjectURL(b),'_blank'); }
+    }catch(e){ alert('Não consegui abrir: '+(e&&e.message||e)); }
+  };
+
+  /* ================= CSS E LIGACOES ================= */
+  var css='@keyframes gwaMonCai{to{transform:translateY(105vh) rotate(540deg);opacity:0}}'+
+    '#gwaMonOv .gwaMonAba:hover{background:rgba(255,255,255,.06)}'+
+    'html[data-gwa-tema="claro"] #gwaMonOv{background:linear-gradient(180deg,#f3f5f8,#e9edf2) !important}'+
+    'html[data-gwa-paineis="lateral"] #gwaMonOv{flex-direction:row !important;overflow:hidden !important}'+
+    'html[data-gwa-paineis="lateral"] #gwaMonHead{position:relative !important;width:240px !important;min-width:240px !important;'+
+      'height:100vh !important;flex-direction:column !important;align-items:stretch !important;justify-content:flex-start !important;'+
+      'padding:20px 14px 16px !important;gap:13px !important;overflow-y:auto !important;'+
+      'border-bottom:none !important;border-right:1px solid rgba(255,255,255,.08) !important}'+
+    'html[data-gwa-paineis="lateral"] #gwaMonHead .gwaTabs{flex-direction:column !important;align-items:stretch !important;width:100% !important}'+
+    'html[data-gwa-paineis="lateral"] #gwaMonHead .gwaTabs > button{width:100% !important;text-align:left !important}'+
+    'html[data-gwa-paineis="lateral"] #gwaMonBody{height:100vh !important;overflow-y:auto !important;flex:1 !important;padding:28px 34px 52px !important}'+
+    '@media(max-width:768px){#gwaMonBody{padding:14px 12px 40px !important}'+
+      '#gwaMonHead{padding:10px 12px !important}}';
+  var st=document.createElement('style'); st.id='gwaMonCss'; st.textContent=css;
+  (document.head||document.documentElement).appendChild(st);
+
+  /* API para os outros blocos */
+  window.gwaMonitoriaResumo=function(l){
+    var fin=finalizadas(doConsultor(l));
+    if(!fin.length) return null;
+    var hj=new Date();
+    return { total:fin.length,
+             mes:mediaDe(noMes(fin,hj.getFullYear(),hj.getMonth())),
+             ano:mediaDe(noAno(fin,hj.getFullYear())),
+             geral:mediaDe(fin),
+             ultima:fin[0]?fin[0].nota:null,
+             nps:npsDe(fin),
+             semCiencia:doConsultor(l).filter(function(m){ return m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em); }).length };
+  };
+  window.gwaMonitoriaPronta=function(){ return !!_mons; };
+  window.gwaMonitoriaCarregar=function(){ return carregar(); };
+
+  /* pre-carrega em segundo plano para o perfil mostrar os numeros sem esperar */
+  setTimeout(function(){ try{ carregar(); }catch(e){} },1500);
 })();
 </script>
 </body>
