@@ -10867,6 +10867,41 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function mondayOf(d){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); var dow=x.getDay(); var diff=(dow===0?-6:1-dow); x.setDate(x.getDate()+diff); return x; }
   function addDays(d,n){ var x=new Date(d); x.setDate(x.getDate()+n); return x; }
   var DIAS=['Segunda','Terça','Quarta','Quinta','Sexta'];
+
+  /* ---- dias uteis: a semanal pode ser pedida no 1o dia util depois da semana ---- */
+  function pascoa(ano){                       /* algoritmo de Meeus/Jones/Butcher */
+    var a=ano%19, b=Math.floor(ano/100), c=ano%100, d=Math.floor(b/4), e=b%4,
+        g=Math.floor((8*b+13)/25), h=(19*a+b-d-g+15)%30, i=Math.floor(c/4), k=c%4,
+        l=(32+2*e+2*i-h-k)%7, m2=Math.floor((a+11*h+19*l)/433),
+        mes=Math.floor((h+l-7*m2+90)/25), dia=(h+l-7*m2+33*mes+19)%32;
+    return new Date(ano,mes-1,dia,12,0,0); }
+  var _fer={};
+  function feriadosDoAno(ano){
+    if(_fer[ano]) return _fer[ano];
+    var set={};
+    ['01-01','04-21','05-01','09-07','10-12','11-02','11-15','12-25']
+      .forEach(function(x){ set[ano+'-'+x]=1; });
+    var p=pascoa(ano);
+    [[-48,'carnaval'],[-47,'carnaval'],[-2,'sexta-santa'],[60,'corpus christi']]
+      .forEach(function(x){ set[ymd(addDays(p,x[0]))]=1; });
+    /* feriados proprios da empresa, se o Master cadastrar em vendas_config */
+    ((_cfg&&_cfg.feriados)||[]).forEach(function(x){ var v=String(x||'').trim(); if(v) set[v]=1; });
+    _fer[ano]=set; return set; }
+  function ehFeriado(d){ return !!feriadosDoAno(d.getFullYear())[ymd(d)]; }
+  function ehDiaUtil(d){ var w=d.getDay(); return w>=1 && w<=5 && !ehFeriado(d); }
+  /* ultimo dia para pedir a semanal daquela semana: 1o dia util depois da sexta */
+  function prazoDaSemana(monday){
+    var d=addDays(monday,7), n=0;                     /* segunda seguinte */
+    while(!ehDiaUtil(d) && n++<12) d=addDays(d,1);
+    return d; }
+  /* a janela abre no sabado e fecha no fim do 1o dia util */
+  function janelaSemanaAberta(monday){
+    var hoje=new Date();
+    var ini=addDays(monday,5);
+    ini=new Date(ini.getFullYear(),ini.getMonth(),ini.getDate(),0,0,0);
+    var f=prazoDaSemana(monday);
+    var fim=new Date(f.getFullYear(),f.getMonth(),f.getDate(),23,59,59);
+    return hoje>=ini && hoje<=fim; }
   function tierDiaria(dept,val){ var t=metasDe(dept).diaria.slice().sort(function(a,b){return a.f-b.f;}); var best=null; t.forEach(function(x){ if(val>=x.f) best=x; }); return best; }
   function proxDiaria(dept,val){ var t=metasDe(dept).diaria.slice().sort(function(a,b){return a.f-b.f;}); for(var i=0;i<t.length;i++){ if(val<t[i].f) return t[i]; } return null; }
   function greedySemanal(bs,tiers){ var t=tiers.slice().sort(function(a,b){return b.f-a.f;}); var rem=bs,total=0,itens=[],vezesTot=0; t.forEach(function(x){ if(x.f>0){ var vz=Math.floor(rem/x.f); if(vz>0){ itens.push({f:x.f,v:x.v,vezes:vz}); total+=vz*x.v; vezesTot+=vz; rem-=vz*x.f; } } }); return {total:total,itens:itens,vezes:vezesTot,base:bs,resto:rem}; }
@@ -10917,6 +10952,29 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var semBar=proxSem?('<div style="height:12px;border-radius:8px;background:'+Co.card2+';overflow:hidden;margin:6px 0 10px"><div style="height:100%;width:'+pctSem+'%;background:'+Co.gradO+'"></div></div><div style="font-size:12px;color:'+Co.orangeL+'">Faltam '+money(Math.max(0,proxSem.f-W.baseLivre))+' para a premiação semanal de '+money(proxSem.v)+'</div>'):'';
     var acaoSem=''; if(W.weeklyClaim){ acaoSem='<div style="margin-top:10px;color:'+statusColor(W.weeklyClaim.status)+';font-weight:700">Premiação semanal ('+money(W.weeklyClaim.valorTotal)+' · '+W.weeklyClaim.vezes+'x): '+statusLabel(W.weeklyClaim.status)+'</div>'; } else if(W.pot.total>0){ acaoSem='<div style="margin-top:10px"><button onclick="__gwaPremSolicitarSemana()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-hand-holding-dollar"></i> Solicitar premiação semanal ('+money(W.pot.total)+')</button></div>'; }
     var semBox=sec('Semana ('+brDate(W.monday)+' a '+brDate(W.fri)+')','fa-calendar-week','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px">'+semCards+semBar+acaoSem+'</div>');
+
+    /* ---- semana passada: pode pedir no 1o dia util depois do fim de semana ---- */
+    var semPassBox='';
+    (function(){
+      var segAnt=addDays(W.monday,-7);
+      if(!janelaSemanaAberta(segAnt)) return;
+      var P=computeWeek(L,dept,segAnt);
+      if(P.weeklyClaim || P.pot.total<=0) return;
+      var prazo=prazoDaSemana(segAnt);
+      var hojeEhPrazo=(ymd(prazo)===hojeStr);
+      semPassBox=sec('Premiação semanal da semana passada','fa-calendar-check',
+        '<div style="background:'+Co.card+';border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'+
+        '<div><div style="color:#fff;font-weight:800;font-size:15px">'+brDate(segAnt)+' a '+brDate(addDays(segAnt,4))+'</div>'+
+        '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px">Faturamento livre: <b style="color:'+Co.green+'">'+money(P.baseLivre)+'</b> &middot; '+P.pot.vezes+'x a meta semanal</div></div>'+
+        '<div style="text-align:right"><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase">A receber</div>'+
+        '<div style="font-size:26px;font-weight:900;color:'+Co.orangeL+'">'+money(P.pot.total)+'</div></div></div>'+
+        '<div style="margin-top:12px"><button onclick="__gwaPremSolicitarSemana(&#39;'+P.weekId+'&#39;)" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-hand-holding-dollar"></i> Solicitar premiação da semana passada ('+money(P.pot.total)+')</button></div>'+
+        '<div style="margin-top:9px;font-size:12px;color:'+(hojeEhPrazo?Co.red:Co.mut)+'">'+
+        (hojeEhPrazo?'<i class="fas fa-triangle-exclamation"></i> <b>Último dia para solicitar — hoje, '+brDate(prazo)+'.</b>'
+                    :'<i class="fas fa-circle-info"></i> Prazo para solicitar: até '+brDate(prazo)+' (primeiro dia útil depois da semana).')+
+        '</div></div>');
+    })();
     var todayIdx=-1; for(var pi=0;pi<W.perDay.length;pi++){ if(W.perDay[pi].data===hojeStr) todayIdx=pi; } var decor=(todayIdx>=0?todayIdx+1:5); var mediaDia=decor?W.baseLivre/decor:0; var projSemana=mediaDia*5; var projPot=greedySemanal(projSemana,m.semanal);
     var projSec=sec('Projeção da semana','fa-chart-line','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px"><div style="display:flex;gap:14px;flex-wrap:wrap">'+card('Projeção de faturamento',money(projSemana),'mantendo o ritmo atual (seg-sex)')+card('Premiação projetada',money(projPot.total),projPot.vezes?(projPot.vezes+'x se mantiver o ritmo'):'sem faixa ainda',projPot.total?Co.orangeL:Co.mut)+'</div><div style="font-size:12px;color:'+Co.mut+';margin-top:8px">Você <b>solicita</b> a premiação e o <b>Financeiro</b> confirma e paga. O recebimento ocorre quando o status ficar <b style="color:'+Co.green+'">Paga</b>.</div></div>');
     var totalPrevisto=W.claims.reduce(function(a,c){return a+(Number(c.valorTotal)||0);},0);
@@ -10924,9 +10982,14 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var totalBox='<div style="background:linear-gradient(135deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:16px;padding:16px 20px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px"><i class="fas fa-sack-dollar" style="color:'+Co.orange+'"></i> Total previsto para receber (semana)</div><div style="font-size:24px;font-weight:900;color:'+Co.orangeL+'">'+money(totalPrevisto)+'</div></div>';
     var conqBox=sec('Premiações da semana','fa-list-check','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+'"><th style="padding:9px 10px">Tipo</th><th style="padding:9px 10px">Faturamento</th><th style="padding:9px 10px">Valor</th><th style="padding:9px 10px">Status</th><th></th></tr></thead><tbody>'+conqList+'</tbody></table></div>');
     var devs=W.claims.filter(function(c){return c.status==='devolvida';}); var devBanner=devs.length?('<div style="background:#2a1414;border:1px solid '+Co.red+';border-radius:14px;padding:14px 18px;margin-bottom:16px"><div style="font-weight:800;color:'+Co.red+'"><i class="fas fa-triangle-exclamation"></i> '+devs.length+' premiação(ões) pendente(s) de ajuste</div>'+devs.map(function(c){ return '<div style="font-size:12px;color:'+Co.sub+';margin-top:6px">'+(c.tipo==='diaria'?('Diária '+brDate(new Date(c.dia+"T12:00:00"))):'Semanal')+' ('+money(c.valorTotal)+'): <b style="color:'+Co.red+'">'+esc(c.motivo||'ajuste necessário')+'</b>. Corrija a venda e solicite novamente.</div>'; }).join('')+'</div>'):'';
-    return '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:12px">Departamento: <b style="color:'+Co.orange+'">'+esc(dept)+'</b> · '+brDate(new Date())+'</div>'+devBanner+cards+barra+acaoHoje+pendPrevBox+tlBox+semBox+projSec+totalBox+conqBox; }
+    return '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:12px">Departamento: <b style="color:'+Co.orange+'">'+esc(dept)+'</b> · '+brDate(new Date())+'</div>'+devBanner+cards+barra+acaoHoje+pendPrevBox+tlBox+semPassBox+semBox+projSec+totalBox+conqBox; }
   window.__gwaPremSolicitarDia=async function(ds){ var u=curU(); var L=loginU(u); var dept=userDept(u); var W=computeWeek(L,dept,mondayOf(new Date())); var d=W.perDay.filter(function(x){return x.data===ds;})[0]; if(!d||!d.tier){ alert('Sem faixa atingida neste dia.'); return; } if(d.claim){ alert('Já solicitada.'); return; } var avisoSem=(dept==='negociacao')?' Estas vendas continuam contando integralmente na premiação semanal.':' As vendas de hoje serão reservadas e não contarão na semanal.'; if(!confirm('Solicitar premiação diária de '+money(d.tier.v)+'? Faturamento do dia: '+money(d.total)+'.'+avisoSem)) return; var now=Date.now(); var p={ id:'prm_'+L+'_'+W.weekId+'_'+ds+'_'+now.toString(36), vendedor:L, dept:dept, tipo:'diaria', semana:W.weekId, dia:ds, faturamento:d.total, vezes:1, valorUnit:d.tier.v, valorTotal:d.tier.v, vendasIds:d.ids, status:'solicitada', ts:now }; var ok=await savePrem(p); if(ok){ _prem=_prem||[]; _prem.push(p); confetti('Premiação solicitada!',money(d.tier.v)); render(); } else alert('Falha ao solicitar.'); };
-  window.__gwaPremSolicitarSemana=async function(){ var u=curU(); var L=loginU(u); var dept=userDept(u); var W=computeWeek(L,dept,mondayOf(new Date())); if(W.weeklyClaim){ alert('Já solicitada.'); return; } if(W.pot.total<=0){ alert('Ainda não atingiu a meta semanal.'); return; } if(!confirm('Solicitar premiação semanal de '+money(W.pot.total)+' ('+W.pot.vezes+'x)?')) return; var now=Date.now(); var p={ id:'prm_'+L+'_'+W.weekId+'_sem_'+now.toString(36), vendedor:L, dept:dept, tipo:'semanal', semana:W.weekId, dia:'', faturamento:W.baseLivre, vezes:W.pot.vezes, valorUnit:(W.pot.itens[0]?W.pot.itens[0].v:0), valorTotal:W.pot.total, detalhe:W.pot.itens, vendasIds:W.pot.ids, status:'solicitada', ts:now }; var ok=await savePrem(p); if(ok){ _prem=_prem||[]; _prem.push(p); confetti('Premiação semanal solicitada!',money(W.pot.total)); render(); } else alert('Falha ao solicitar.'); };
+  window.__gwaPremSolicitarSemana=async function(weekId){ var u=curU(); var L=loginU(u); var dept=userDept(u);
+    var seg=mondayOf(new Date());
+    if(weekId){ var mm=String(weekId).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if(mm) seg=new Date(+mm[1],+mm[2]-1,+mm[3],12,0,0);
+      if(!janelaSemanaAberta(seg)){ alert('O prazo para solicitar a premiação daquela semana já passou.\n\nA semanal pode ser pedida até o primeiro dia útil depois da semana.'); return; } }
+    var W=computeWeek(L,dept,seg); if(W.weeklyClaim){ alert('Já solicitada.'); return; } if(W.pot.total<=0){ alert('Ainda não atingiu a meta semanal.'); return; } if(!confirm('Solicitar premiação semanal de '+money(W.pot.total)+' ('+W.pot.vezes+'x)'+(weekId?(' — semana de '+brDate(seg)+' a '+brDate(addDays(seg,4))):'')+'?')) return; var now=Date.now(); var p={ id:'prm_'+L+'_'+W.weekId+'_sem_'+now.toString(36), vendedor:L, dept:dept, tipo:'semanal', semana:W.weekId, dia:'', faturamento:W.baseLivre, vezes:W.pot.vezes, valorUnit:(W.pot.itens[0]?W.pot.itens[0].v:0), valorTotal:W.pot.total, detalhe:W.pot.itens, vendasIds:W.pot.ids, status:'solicitada', ts:now }; var ok=await savePrem(p); if(ok){ _prem=_prem||[]; _prem.push(p); confetti('Premiação semanal solicitada!',money(W.pot.total)); render(); } else alert('Falha ao solicitar.'); };
   function viewCtrl(){ var depts=allowedDepts(); var monday=mondayOf(new Date());
     var vends=usuarios().filter(function(u){ return !isAdminUser(u) && depts.indexOf(userDept(u))>=0; });
     var rows=[],bateram=0,faltaPouco=0;
