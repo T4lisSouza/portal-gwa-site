@@ -3786,7 +3786,7 @@ function renderDestaques() {
       <div class="dest-staff-list">
         ${st.premiados.map(p=>`
           <div class="dest-staff-item">
-            <div class="dest-staff-icon">🏆</div>
+            ${p.foto ? `<img src="${destGetPhotoUrl(p.foto)}" alt="" style="width:46px;height:46px;border-radius:50%;object-fit:cover;border:2px solid #FF8000;flex-shrink:0" onerror="this.outerHTML='<div class=\'dest-staff-icon\'>🏆</div>'">` : `<div class="dest-staff-icon">🏆</div>`}
             <div class="dest-staff-info"><strong>${p.nome}</strong><span>${p.conquista||''}</span></div>
             ${isAdmin ? `<button onclick="destRemove('premiados','${p.id}')" style="margin-left:auto;background:#dc2626;color:#fff;border:none;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer">✕</button>` : ''}
           </div>`).join('')}
@@ -3799,7 +3799,7 @@ function renderDestaques() {
       <div class="dest-staff-list">
         ${st.staff.map(s=>`
           <div class="dest-staff-item">
-            <div class="dest-staff-icon">⭐</div>
+            ${s.foto ? `<img src="${destGetPhotoUrl(s.foto)}" alt="" style="width:46px;height:46px;border-radius:50%;object-fit:cover;border:2px solid #FF8000;flex-shrink:0" onerror="this.outerHTML='<div class=\'dest-staff-icon\'>⭐</div>'">` : `<div class="dest-staff-icon">⭐</div>`}
             <div class="dest-staff-info"><strong>${s.texto}</strong><span>${s.subtitulo||''}</span></div>
             ${isAdmin ? `<button onclick="destRemove('staff','${s.id}')" style="margin-left:auto;background:#dc2626;color:#fff;border:none;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer">✕</button>` : ''}
           </div>`).join('')}
@@ -3829,9 +3829,9 @@ function renderAdmDestaques() {
       }).join('')}</tbody>
     </table></div>` : '<p style="color:#9ca3af;font-size:13px;margin-top:8px">Nenhum item no ranking.</p>';
   const pl = document.getElementById('admDestPremList');
-  if(pl) pl.innerHTML = (st.premiados||[]).length ? `<ul style="margin-top:10px;list-style:none">${st.premiados.map(p=>`<li style="padding:8px;background:#f9fafb;border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#374151"><span><strong>${p.nome}</strong> — ${p.conquista||''}</span><button onclick="destRemove('premiados','${p.id}')" class="mc-btn mc-btn--danger mc-btn--sm">✕</button></li>`).join('')}</ul>` : '<p style="color:#9ca3af;font-size:13px;margin-top:8px">Nenhum premiado.</p>';
+  if(pl) pl.innerHTML = (st.premiados||[]).length ? `<ul style="margin-top:10px;list-style:none">${st.premiados.map(p=>`<li style="padding:8px;background:#f9fafb;border-radius:8px;margin-bottom:6px;display:flex;gap:10px;justify-content:space-between;align-items:center;font-size:13px;color:#374151"><span style="display:flex;align-items:center;gap:10px;min-width:0">${p.foto?`<img src="${destGetPhotoUrl(p.foto)}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid #FF8000;flex-shrink:0" onerror="this.style.display='none'">`:`<span style="width:36px;height:36px;border-radius:50%;background:#f1f5f9;border:2px dashed #cbd5e1;display:inline-flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px;flex-shrink:0">🏆</span>`}<span><strong>${p.nome}</strong> — ${p.conquista||''}</span></span><button onclick="destRemove('premiados','${p.id}')" class="mc-btn mc-btn--danger mc-btn--sm">✕</button></li>`).join('')}</ul>` : '<p style="color:#9ca3af;font-size:13px;margin-top:8px">Nenhum premiado.</p>';
   const sl = document.getElementById('admDestStaffList');
-  if(sl) sl.innerHTML = (st.staff||[]).length ? `<ul style="margin-top:10px;list-style:none">${st.staff.map(s=>`<li style="padding:8px;background:#f9fafb;border-radius:8px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#374151"><span>⭐ <strong>${s.texto}</strong> — ${s.subtitulo||''}</span><button onclick="destRemove('staff','${s.id}')" class="mc-btn mc-btn--danger mc-btn--sm">✕</button></li>`).join('')}</ul>` : '<p style="color:#9ca3af;font-size:13px;margin-top:8px">Nenhum item.</p>';
+  if(sl) sl.innerHTML = (st.staff||[]).length ? `<ul style="margin-top:10px;list-style:none">${st.staff.map(s=>`<li style="padding:8px;background:#f9fafb;border-radius:8px;margin-bottom:6px;display:flex;gap:10px;justify-content:space-between;align-items:center;font-size:13px;color:#374151"><span style="display:flex;align-items:center;gap:10px;min-width:0">${s.foto?`<img src="${destGetPhotoUrl(s.foto)}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid #FF8000;flex-shrink:0" onerror="this.style.display='none'">`:`<span style="width:36px;height:36px;border-radius:50%;background:#f1f5f9;border:2px dashed #cbd5e1;display:inline-flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px;flex-shrink:0">⭐</span>`}<span><strong>${s.texto}</strong> — ${s.subtitulo||''}</span></span><button onclick="destRemove('staff','${s.id}')" class="mc-btn mc-btn--danger mc-btn--sm">✕</button></li>`).join('')}</ul>` : '<p style="color:#9ca3af;font-size:13px;margin-top:8px">Nenhum item.</p>';
 }
 
 /* ids removidos nesta sessao — para a gravacao nao ressuscitar o que foi apagado */
@@ -3866,7 +3866,13 @@ async function destOperar(aplicar, msgOk){
 }
 
 function admAddDestaque(tipo) {
+  /* segura as sincronizacoes desde ja: sem isso, uma copia antiga do servidor
+     podia chegar no meio do caminho e apagar o item recem-adicionado */
+  window.__destBloqueio = Date.now() + 12000;
   const st = destLoad();
+  st.ranking   = Array.isArray(st.ranking)   ? st.ranking   : [];
+  st.premiados = Array.isArray(st.premiados) ? st.premiados : [];
+  st.staff     = Array.isArray(st.staff)     ? st.staff     : [];
   const newId = Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   if(tipo==='ranking') {
     const nome = document.getElementById('admDestNome').value.trim();
@@ -3893,16 +3899,20 @@ function admAddDestaque(tipo) {
     const nome = document.getElementById('admPremNome').value.trim();
     const conquista = document.getElementById('admPremConq').value.trim();
     if(!nome) return toast('Nome obrigatório','error');
-    st.premiados.push({id:newId,nome,conquista});
+    var fotoP=((document.getElementById('admPremFoto')||{}).value||'').trim();
+    st.premiados.push({id:newId,nome,conquista,foto:fotoP});
     document.getElementById('admPremNome').value='';
     document.getElementById('admPremConq').value='';
+    if(typeof admDestLimparFotoDe==='function') admDestLimparFotoDe('Prem');
   } else if(tipo==='staff') {
     const texto = document.getElementById('admStaffText').value.trim();
     const subtitulo = document.getElementById('admStaffSub').value.trim();
     if(!texto) return toast('Texto obrigatório','error');
-    st.staff.push({id:newId,texto,subtitulo});
+    var fotoS=((document.getElementById('admStaffFoto')||{}).value||'').trim();
+    st.staff.push({id:newId,texto,subtitulo,foto:fotoS});
     document.getElementById('admStaffText').value='';
     document.getElementById('admStaffSub').value='';
+    if(typeof admDestLimparFotoDe==='function') admDestLimparFotoDe('Staff');
   }
   /* o push ja foi feito em "st", que e o proprio estado; aqui so persiste com seguranca */
   destOperar(function(){ return true; }, 'Destaque adicionado! ✅');
@@ -8282,11 +8292,36 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var st=null;
     try{st=typeof destLoad==='function'?destLoad():null;}catch(e){}
     if(!st) st=readJson('gwa_destaques_v1',{ranking:[],premiados:[],staff:[]});
-    return {id:'destaques_gwa_anchor',type:DEST_API_TYPE,title:'Destaques GWA',ranking:st.ranking||[],premiados:st.premiados||[],staff:st.staff||[],ts:now(),updatedAt:now(),sharedWithAll:true,visibilityMode:'all'};
+    return {id:'destaques_gwa_anchor',type:DEST_API_TYPE,title:'Destaques GWA',ranking:st.ranking||[],premiados:st.premiados||[],staff:st.staff||[],historico:st.historico||[],ts:now(),updatedAt:now(),sharedWithAll:true,visibilityMode:'all'};
   }
+  /* Junta o que veio do servidor com o que ja esta aqui.
+     Antes isso SUBSTITUIA o estado inteiro, e um premiado recem-adicionado
+     sumia quando chegava uma copia mais velha do servidor. */
   function applyDestState(payload){
     if(!payload) return;
-    var st={ranking:payload.ranking||[],premiados:payload.premiados||[],staff:payload.staff||[]};
+    var atual=null;
+    try{ atual=(typeof _destState==='object'&&_destState)?_destState:null; }catch(e){ atual=null; }
+    var removidos=(window._destRemovidos||{});
+    function semRemovidos(arr){
+      return (arr||[]).filter(function(x){
+        var id=(x&&x.id!=null)?String(x.id):'';
+        return !id || !removidos[id]; });
+    }
+    var st={ ranking:semRemovidos(payload.ranking),
+             premiados:semRemovidos(payload.premiados),
+             staff:semRemovidos(payload.staff),
+             historico:(payload.historico||(atual&&atual.historico)||[]).slice() };
+    if(atual){
+      ['ranking','premiados','staff','historico'].forEach(function(k){
+        var vieram={};
+        (st[k]||[]).forEach(function(x){ if(x&&x.id!=null) vieram[String(x.id)]=1; });
+        (atual[k]||[]).forEach(function(x){
+          var id=(x&&x.id!=null)?String(x.id):'';
+          if(!id) return;
+          if(!vieram[id] && !removidos[id]) st[k].push(x);
+        });
+      });
+    }
     try{_destState=st;}catch(e){}
     writeJson('gwa_destaques_v1',st);
   }
@@ -18398,6 +18433,104 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   /* pre-carrega em segundo plano para o perfil mostrar os numeros sem esperar */
   setTimeout(function(){ try{ carregar(); }catch(e){} },1500);
+})();
+</script>
+
+<script>
+/* ===== INTRANET GWA :: FOTO NOS PREMIADOS E NO RECONHECIMENTO ===== */
+(function(){
+  if(window.__gwaFotoPrem) return; window.__gwaFotoPrem=true;
+
+  var LADO=420, QUAL=0.82, LIMITE=700*1024;
+
+  function reduzir(file){
+    return new Promise(function(ok,erro){
+      var leitor=new FileReader();
+      leitor.onerror=function(){ erro(new Error('nao consegui ler o arquivo')); };
+      leitor.onload=function(){
+        var img=new Image();
+        img.onerror=function(){ erro(new Error('o arquivo nao e uma imagem valida')); };
+        img.onload=function(){
+          try{
+            var lado=Math.min(img.width,img.height);
+            var sx=(img.width-lado)/2, sy=(img.height-lado)/2;
+            var alvo=Math.min(LADO,lado);
+            var c=document.createElement('canvas'); c.width=alvo; c.height=alvo;
+            var ctx=c.getContext('2d'); ctx.imageSmoothingQuality='high';
+            ctx.drawImage(img,sx,sy,lado,lado,0,0,alvo,alvo);
+            var q=QUAL, url=c.toDataURL('image/jpeg',q);
+            while(url.length>LIMITE && q>0.4){ q-=0.12; url=c.toDataURL('image/jpeg',q); }
+            ok({url:url, lado:alvo, kb:Math.round(url.length/1024)});
+          }catch(e){ erro(e); }
+        };
+        img.src=leitor.result;
+      };
+      leitor.readAsDataURL(file);
+    });
+  }
+
+  function aviso(suf,txt,cor){
+    var el=document.getElementById('adm'+suf+'UpInfo');
+    if(el){ el.innerHTML=txt; el.style.color=cor||'#6b7280'; }
+  }
+
+  window.admDestUploadDe=async function(suf,input){
+    var f=input && input.files && input.files[0];
+    if(!f) return;
+    if(!/^image\//.test(f.type)){ aviso(suf,'Escolha um arquivo de imagem (JPG ou PNG).','#dc2626'); return; }
+    aviso(suf,'<i class="fas fa-spinner fa-spin"></i> preparando a imagem...','#6b7280');
+    try{
+      var r=await reduzir(f);
+      var campo=document.getElementById('adm'+suf+'Foto'); if(campo) campo.value=r.url;
+      var prev=document.getElementById('adm'+suf+'Prev');
+      if(prev){ prev.src=r.url; prev.style.display='block'; }
+      aviso(suf,'Pronto: '+r.lado+'x'+r.lado+'px, '+r.kb+' KB. A foto vai junto quando voce clicar em Adicionar.','#059669');
+    }catch(e){ aviso(suf,'Nao consegui preparar a imagem: '+(e&&e.message||e),'#dc2626'); }
+  };
+  window.admDestLimparFotoDe=function(suf){
+    var campo=document.getElementById('adm'+suf+'Foto'); if(campo) campo.value='';
+    var arq=document.getElementById('adm'+suf+'Arquivo'); if(arq) arq.value='';
+    var prev=document.getElementById('adm'+suf+'Prev'); if(prev){ prev.src=''; prev.style.display='none'; }
+    aviso(suf,'Opcional. JPG ou PNG — a imagem e reduzida antes de salvar.');
+  };
+
+  function caixa(suf,rotulo){
+    return '<div id="adm'+suf+'FotoBox" style="margin-top:11px;background:#f8fafc;border:1px solid #e5e7eb;'+
+      'border-radius:10px;padding:11px 13px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">'+
+      '<img id="adm'+suf+'Prev" alt="" style="display:none;width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid #FF8000">'+
+      '<div style="flex:1;min-width:190px">'+
+        '<label style="display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:5px">'+rotulo+'</label>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+          '<label style="background:#fff;border:1.5px solid #d1d5db;border-radius:8px;padding:7px 13px;'+
+            'font-size:12.5px;font-weight:600;color:#374151;cursor:pointer">'+
+            '<i class="fas fa-upload"></i> Escolher do computador'+
+            '<input id="adm'+suf+'Arquivo" type="file" accept="image/*" onchange="admDestUploadDe(\''+suf+'\',this)" style="display:none">'+
+          '</label>'+
+          '<button type="button" onclick="admDestLimparFotoDe(\''+suf+'\')" style="background:#fff;border:1.5px solid #d1d5db;'+
+            'border-radius:8px;padding:7px 12px;font-size:12.5px;color:#6b7280;cursor:pointer">Limpar</button>'+
+        '</div>'+
+        '<div id="adm'+suf+'UpInfo" style="font-size:11.5px;color:#6b7280;margin-top:6px">Opcional. JPG ou PNG — a imagem e reduzida antes de salvar.</div>'+
+      '</div>'+
+      '<input id="adm'+suf+'Foto" type="hidden" value="">'+
+      '</div>';
+  }
+
+  function montar(){
+    [['Prem','admPremNome','Foto do premiado'],['Staff','admStaffText','Foto de quem foi reconhecido']].forEach(function(p){
+      if(document.getElementById('adm'+p[0]+'FotoBox')) return;
+      var ref=document.getElementById(p[1]); if(!ref) return;
+      /* sobe ate a caixa do formulario (.dest-admin-form) e pendura embaixo */
+      var caixaForm=ref.closest ? ref.closest('.dest-admin-form') : null;
+      if(!caixaForm){ caixaForm=ref.parentNode && ref.parentNode.parentNode; }
+      if(!caixaForm) return;
+      caixaForm.insertAdjacentHTML('beforeend', caixa(p[0],p[2]));
+    });
+  }
+
+  var t=null;
+  function agendar(){ if(t) clearTimeout(t); t=setTimeout(montar,130); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',agendar); else agendar();
+  try{ new MutationObserver(agendar).observe(document.body,{childList:true,subtree:true}); }catch(e){}
 })();
 </script>
 </body>
