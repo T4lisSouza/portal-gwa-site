@@ -9989,7 +9989,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function pct(n){ n=Number(n)||0; return n.toFixed(1).replace('.',',')+'%'; }
   function today(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function depsOf(u){ var d=(u&&(u.depts||u.departamentos||u.departments))||[]; if(typeof d==='string')d=[d]; return (d||[]).map(function(x){return String(x).toLowerCase();}); }
-  function userDept(u){ var ov=(_cfg&&_cfg.deptVendas&&_cfg.deptVendas[loginU(u)]); if(ov==='comercial'||ov==='negociacao'||ov==='documentacao') return ov; var d=depsOf(u); if(d.indexOf('negociacao')>=0 || d.indexOf('negociação')>=0) return 'negociacao'; if(d.indexOf('comercial')>=0) return 'comercial'; return 'comercial'; }
+  function userDept(u){ if(u&&u.gwa&&u.dept) return u.dept;
+    var Lg=String((u&&(u.login||u.user))||'').toUpperCase();
+    if(Lg==='GWA-NEGOCIACAO') return 'negociacao';
+    if(Lg==='GWA-COMERCIAL') return 'comercial';
+    var ov=(_cfg&&_cfg.deptVendas&&_cfg.deptVendas[loginU(u)]); if(ov==='comercial'||ov==='negociacao'||ov==='documentacao') return ov; var d=depsOf(u); if(d.indexOf('negociacao')>=0 || d.indexOf('negociação')>=0) return 'negociacao'; if(d.indexOf('comercial')>=0) return 'comercial'; return 'comercial'; }
 
   var DEF_CFG={
     metas:{ comercial:{dia:30000,mes:650000}, negociacao:{dia:20000,mes:450000} },
@@ -10065,7 +10069,29 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function aplicaFiltro(arr){ return arr.filter(function(v){ if(!inPeriodo(v)) return false; if(_filtro.consultor && loginU({login:v.consultor})!==_filtro.consultor.toUpperCase()) return false; if(_filtro.forma && v.forma!==_filtro.forma) return false; return true; }); }
   function isAdminUser(u){ var r=String((u&&u.role)||'').toLowerCase(); return loginU(u)==='TALIS'||r==='master'||r==='admin'||r==='gestor'||r==='supervisor'; }
   function log0(m){ try{ console.log('[vendas] '+m); }catch(e){} }
-  function vendedoresDept(dept){ return (window._usersCache||[]).filter(function(u){ return userDept(u)===dept && !isAdminUser(u); }); }
+  /* ===== vendedor padrao da casa =====
+     Quando alguem sai da empresa, as vendas dele sao transferidas para o
+     GWA do departamento. Assim nada some do faturamento do setor nem da
+     empresa, e o historico continua apontando de quem veio. */
+  var GWA_VENDEDORES={
+    comercial : {login:'GWA-COMERCIAL',  nome:'GWA · Comercial',  dept:'comercial',  gwa:true, role:'user'},
+    negociacao: {login:'GWA-NEGOCIACAO', nome:'GWA · Negociação', dept:'negociacao', gwa:true, role:'user'}
+  };
+  function vendedorGwa(dept){ return GWA_VENDEDORES[(dept==='negociacao')?'negociacao':'comercial']; }
+  function ehGwa(L){ L=String(L||'').toUpperCase();
+    return L==='GWA-COMERCIAL'||L==='GWA-NEGOCIACAO'||L.indexOf('GWA-')===0; }
+  function gwaPorLogin(L){ L=String(L||'').toUpperCase();
+    if(L==='GWA-NEGOCIACAO') return GWA_VENDEDORES.negociacao;
+    if(L==='GWA-COMERCIAL') return GWA_VENDEDORES.comercial;
+    return null; }
+  /* quem ja saiu da empresa some dos seletores, mas continua no historico */
+  function saiuDaEmpresa(L){ return ((_cfg&&_cfg.vendedoresSaidos)||[]).indexOf(String(L||'').toUpperCase())>=0; }
+
+  function vendedoresDept(dept){
+    var base_=(window._usersCache||[]).filter(function(u){ return userDept(u)===dept && !isAdminUser(u) && !saiuDaEmpresa(loginU(u)); });
+    var g=vendedorGwa(dept);
+    if(g && !base_.some(function(u){ return loginU(u)===g.login; })) base_=base_.concat([g]);
+    return base_; }
 
   /* supervisor, gestor, admin e master podem lancar / editar em nome de outro vendedor */
   function podeEscolherVendedor(){ return isMaster() || ['supervisor','gestor','admin','master'].indexOf(role())>=0; }
@@ -10075,9 +10101,14 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var us=(typeof getUsers==='function'?getUsers():(window._usersCache||[]))||[];
     var out=us.filter(function(u){ if(!u||!loginU(u)) return false;
       if(isAdminUser(u)) return false;
+      if(saiuDaEmpresa(loginU(u))) return false;
       return dept ? (userDept(u)===dept) : true; });
-    if(!out.length) out=us.filter(function(u){ return u && loginU(u) && !isAdminUser(u); });
-    return out.sort(function(a,b){ return String(a.nome||a.login).localeCompare(String(b.nome||b.login)); }); }
+    if(!out.length) out=us.filter(function(u){ return u && loginU(u) && !isAdminUser(u) && !saiuDaEmpresa(loginU(u)); });
+    out=out.sort(function(a,b){ return String(a.nome||a.login).localeCompare(String(b.nome||b.login)); });
+    /* o GWA do departamento fica por ultimo, para nao atrapalhar a busca */
+    var gs=dept?[vendedorGwa(dept)]:[GWA_VENDEDORES.comercial,GWA_VENDEDORES.negociacao];
+    gs.forEach(function(g){ if(g && !out.some(function(u){ return loginU(u)===g.login; })) out.push(g); });
+    return out; }
 
   function seletorVendedor(ed,dept){
     if(!podeEscolherVendedor()) return '';
@@ -10615,7 +10646,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       box('Taxas do cartão / link','fa-percent',cartaoRows+'<div style="color:'+Co.mut+';font-size:12px;margin-top:10px;margin-bottom:4px">Outras formas</div><div style="display:flex;gap:8px">'+cel('Boleto %','<input id="tfBol" type="number" step="0.1" value="'+(c.taxasForma.boleto||0)+'" '+inp()+'>')+cel('Débito %','<input id="tfDeb" type="number" step="0.1" value="'+c.taxasForma.debito+'" '+inp()+'>')+cel('PIX %','<input id="tfPix" type="number" step="0.1" value="'+c.taxasForma.pix+'" '+inp()+'>')+cel('Dinheiro %','<input id="tfDin" type="number" step="0.1" value="'+c.taxasForma.dinheiro+'" '+inp()+'>')+'</div>')+
       box('Taxas Link-Mercado (Mercado Pago)','fa-percent',mercadoRows)+
       googleBox(c)+
-      '</div>'+premiacaoBoxTab(c)+premiacaoBoxTabNeg(c)+negociacaoBox(c)+deptVendasBox(c)+formasExtrasBox(c)+metasVendedorBox(c)+avisosBox()+permBox(c);
+      '</div>'+premiacaoBoxTab(c)+premiacaoBoxTabNeg(c)+negociacaoBox(c)+deptVendasBox(c)+transferirBox()+formasExtrasBox(c)+metasVendedorBox(c)+avisosBox()+permBox(c);
     return grid+'<div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+btnPri('<i class="fas fa-save"></i> Salvar configurações','__gwaVendasSalvarCfg()')+'<button onclick="__gwaVendasCorrigirHorarios()" style="background:'+Co.card2+';border:1px solid '+Co.orangeD+';color:'+Co.orangeL+';border-radius:12px;padding:12px 18px;font-weight:700;cursor:pointer"><i class="fas fa-clock-rotate-left"></i> Corrigir horários fora do expediente</button></div><div style="font-size:11px;color:'+Co.mut+';margin-top:6px">Ajusta vendas lançadas antes das '+((c.expediente&&c.expediente.ini)||9)+'h ou depois das '+((c.expediente&&c.expediente.fim)||18)+'h para ficarem dentro do horário (a data não muda).</div>'; }
   function premRowHtml(f){ f=f||{min:'',max:'',pct:'',valor:''}; return '<tr class="premRow" style="border-bottom:1px solid '+Co.line+'"><td style="padding:5px"><input type="number" step="0.01" class="pMin" value="'+esc(f.min)+'" style="width:110px;padding:7px;border-radius:8px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"></td><td style="padding:5px"><input type="number" step="0.01" class="pMax" value="'+esc(f.max)+'" style="width:110px;padding:7px;border-radius:8px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"></td><td style="padding:5px"><input type="number" step="0.1" class="pPct" value="'+esc(f.pct)+'" style="width:70px;padding:7px;border-radius:8px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"></td><td style="padding:5px"><input type="number" step="0.01" class="pVal" value="'+esc(f.valor)+'" style="width:110px;padding:7px;border-radius:8px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"></td><td style="padding:5px"><button onclick="this.closest(&#39;tr&#39;).remove()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-trash"></i></button></td></tr>'; }
   function premiacaoBoxTab(c){ var tab=((c.tabelaPremiacao)||[]).slice().sort(function(a,b){return a.min-b.min;}); var rows=tab.map(premRowHtml).join('');
@@ -10676,6 +10707,176 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     ov.innerHTML='<div style="max-width:460px;width:100%;background:linear-gradient(160deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:20px;padding:26px;box-shadow:0 24px 70px rgba(0,0,0,.7)"><div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:44px;height:44px;border-radius:12px;background:'+Co.gradO+';display:flex;align-items:center;justify-content:center"><i class="fas fa-bullhorn" style="color:#fff;font-size:20px"></i></div><div><div style="color:#fff;font-weight:800;font-size:17px">'+esc(a.titulo||'Melhorias do sistema')+'</div><div style="font-size:11px;color:'+Co.mut+'">Novidades da intranet</div></div></div><ul style="color:'+Co.sub+';font-size:14px;line-height:1.6;padding-left:20px;margin:8px 0 16px">'+itens+'</ul><div style="display:flex;gap:8px;flex-wrap:wrap"><button onclick="__gwaAvisoSisFechar(false)" style="flex:1;min-width:140px;background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:12px;font-weight:700;cursor:pointer">Entendi 👍</button><button onclick="__gwaAvisoSisFechar(true)" style="flex:1;min-width:140px;background:'+Co.card2+';color:'+Co.sub+';border:1px solid '+Co.line+';border-radius:12px;padding:12px;font-weight:600;cursor:pointer">Não mostrar novamente</button></div></div>';
     document.body.appendChild(ov); }catch(e){} }
   setTimeout(checarAvisoSistema, 4000); setInterval(checarAvisoSistema, 300000);
+  /* ================= TRANSFERIR VENDAS DE QUEM SAIU ================= */
+  var _trDe='', _trPara='', _trRodando=false;
+  window.__gwaTransfSel=function(k,v){ if(k==='de'){ _trDe=String(v||'').toUpperCase();
+      if(!_trPara){ var u=usuarioPorLoginT(_trDe); if(u) _trPara=vendedorGwa(userDept(u)).login; } }
+    else if(k==='para') _trPara=String(v||'').toUpperCase();
+    render(); };
+  function usuarioPorLoginT(L){
+    var us=(typeof getUsers==='function'?getUsers():(window._usersCache||[]))||[];
+    for(var i=0;i<us.length;i++){ if(loginU(us[i])===String(L).toUpperCase()) return us[i]; }
+    return gwaPorLogin(L); }
+  function nomeVend(L){ var u=usuarioPorLoginT(L); return u?(u.nome||u.login):String(L||''); }
+  function vendasDe(L){ L=String(L||'').toUpperCase();
+    return (_vendas||[]).filter(function(v){ return loginU({login:v.consultor})===L; }); }
+
+  function transferirBox(){
+    if(!isAdmin()) return '';
+    /* quem tem venda lancada, mesmo que ja tenha sido desativado no cadastro */
+    var mapa={};
+    (_vendas||[]).forEach(function(v){ var L=loginU({login:v.consultor});
+      if(!L || ehGwa(L)) return;
+      var o=mapa[L]||(mapa[L]={login:L,nome:v.consultorNome||L,n:0,liq:0,ult:0});
+      o.n++; o.liq+=Number(v.liquido)||0; o.ult=Math.max(o.ult,Number(v.ts||0)); });
+    var pessoas=Object.keys(mapa).map(function(k){ var o=mapa[k];
+      var u=usuarioPorLoginT(k); if(u&&u.nome) o.nome=u.nome;
+      o.dept=u?userDept(u):'';
+      o.saiu=saiuDaEmpresa(k);
+      return o; }).sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+
+    var alvo=_trDe?mapa[_trDe]:null;
+    var vs=_trDe?vendasDe(_trDe):[];
+    var totLiq=vs.reduce(function(a,v){ return a+(Number(v.liquido)||0); },0);
+    var totBru=vs.reduce(function(a,v){ return a+(Number(v.valorPago)||0); },0);
+    var porDept={}; vs.forEach(function(v){ var d=v.dept||'(sem)'; porDept[d]=(porDept[d]||0)+1; });
+    var datas=vs.map(function(v){ return String(v.dataVenda||'').slice(0,10); }).filter(Boolean).sort();
+
+    var selDe='<select onchange="__gwaTransfSel(&#39;de&#39;,this.value)" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff">'+
+      '<option value="">Escolha quem saiu da empresa...</option>'+
+      pessoas.map(function(p){ return '<option value="'+esc(p.login)+'"'+(_trDe===p.login?' selected':'')+'>'+
+        esc(p.nome)+' · '+p.n+' venda(s)'+(p.dept?(' · '+p.dept):'')+(p.saiu?' · já marcado como saída':'')+'</option>'; }).join('')+'</select>';
+
+    var selPara='<select onchange="__gwaTransfSel(&#39;para&#39;,this.value)" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff">'+
+      '<option value="">Escolha o GWA de destino...</option>'+
+      [GWA_VENDEDORES.comercial,GWA_VENDEDORES.negociacao].map(function(g){
+        return '<option value="'+esc(g.login)+'"'+(_trPara===g.login?' selected':'')+'>'+esc(g.nome)+'</option>'; }).join('')+'</select>';
+
+    var resumo='';
+    if(_trDe && alvo){
+      resumo='<div style="background:'+Co.card2+';border:1px solid '+Co.orangeD+';border-radius:14px;padding:15px 17px;margin-top:14px">'+
+        '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">'+
+        '<div style="flex:1;min-width:190px"><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px">Vai sair de</div>'+
+        '<div style="font-size:17px;font-weight:800;color:#fff">'+esc(alvo.nome)+'</div>'+
+        '<div style="font-size:12px;color:'+Co.mut+'">'+(alvo.dept||'sem departamento')+'</div></div>'+
+        '<div style="font-size:22px;color:'+Co.orange+'"><i class="fas fa-arrow-right"></i></div>'+
+        '<div style="flex:1;min-width:190px"><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px">Vai para</div>'+
+        '<div style="font-size:17px;font-weight:800;color:'+Co.orangeL+'">'+esc(_trPara?nomeVend(_trPara):'—')+'</div>'+
+        '<div style="font-size:12px;color:'+Co.mut+'">vendedor padrão da casa</div></div></div>'+
+        '<div style="display:flex;gap:11px;flex-wrap:wrap;margin-top:14px">'+
+        cardMini('Vendas',vs.length,'')+
+        cardMini('Líquido',money(totLiq),'')+
+        cardMini('Bruto',money(totBru),'')+
+        cardMini('Período',datas.length?(brDataT(datas[0])+' a '+brDataT(datas[datas.length-1])):'—','')+
+        '</div>'+
+        (Object.keys(porDept).length>1?('<div style="font-size:12px;color:'+Co.orangeL+';margin-top:11px"><i class="fas fa-circle-info"></i> Estas vendas estão em mais de um departamento ('+
+          Object.keys(porDept).map(function(d){ return d+': '+porDept[d]; }).join(', ')+'). Todas passam para o GWA escolhido.</div>'):'')+
+        '<label style="display:flex;align-items:center;gap:9px;font-size:13px;color:'+Co.sub+';cursor:pointer;margin-top:13px">'+
+        '<input type="checkbox" id="trMarcarSaida" checked style="width:17px;height:17px;accent-color:'+Co.orange+';cursor:pointer"> '+
+        'Marcar '+esc(alvo.nome)+' como saída (some dos seletores, mas o histórico continua)</label>'+
+        '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
+        '<button onclick="__gwaTransferir()" '+(_trRodando?'disabled ':'')+'style="background:'+(_trRodando?Co.card2:Co.gradO)+';color:#fff;border:none;border-radius:11px;padding:11px 19px;font-weight:700;cursor:'+(_trRodando?'wait':'pointer')+'">'+
+        '<i class="fas fa-right-left"></i> '+(_trRodando?'Transferindo...':('Transferir '+vs.length+' venda(s)'))+'</button>'+
+        '<span id="trStatus" style="font-size:12.5px;color:'+Co.orangeL+'"></span></div>'+
+        '</div>';
+    }
+
+    var jaNoGwa=['GWA-COMERCIAL','GWA-NEGOCIACAO'].map(function(L){
+      var q=vendasDe(L); if(!q.length) return '';
+      var liq=q.reduce(function(a,v){ return a+(Number(v.liquido)||0); },0);
+      return '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 0;border-top:1px solid '+Co.line+';font-size:13px">'+
+        '<span style="color:#fff;font-weight:600">'+esc(nomeVend(L))+'</span>'+
+        '<span style="color:'+Co.mut+'">'+q.length+' venda(s) · <b style="color:'+Co.green+'">'+money(liq)+'</b></span></div>'; }).join('');
+
+    return '<div style="margin-top:16px">'+boxWrap('Transferir vendas de quem saiu da empresa','fa-right-left',
+      '<p style="font-size:12px;color:'+Co.mut+';margin:0 0 13px">Quando alguém sai e não volta, as vendas dele não podem sumir do faturamento. '+
+      'Escolha a pessoa, escolha o <b>GWA</b> do departamento e transfira: o responsável muda na intranet, na planilha do Google e nos relatórios, '+
+      'e cada venda guarda no histórico de quem veio.</p>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">'+
+      '<div><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">Quem saiu</label>'+selDe+'</div>'+
+      '<div><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">Vendedor de destino</label>'+selPara+'</div>'+
+      '</div>'+resumo+
+      (jaNoGwa?('<div style="margin-top:16px"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;font-weight:700;margin-bottom:4px">Já está no GWA</div>'+jaNoGwa+'</div>'):'')+
+      (((_cfg&&_cfg.vendedoresSaidos)||[]).length?('<div style="margin-top:14px;font-size:12px;color:'+Co.mut+'"><i class="fas fa-user-slash"></i> Marcados como saída: '+
+        _cfg.vendedoresSaidos.map(function(L){ return esc(nomeVend(L)); }).join(', ')+
+        ' <button onclick="__gwaTransfLimparSaidas()" style="background:transparent;border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:8px;padding:4px 10px;font-size:11.5px;cursor:pointer;margin-left:6px">liberar todos</button></div>'):'')
+    )+'</div>';
+  }
+  function cardMini(t,v){
+    return '<div style="flex:1 1 130px;min-width:120px;background:'+Co.bgA+';border:1px solid '+Co.line+';border-radius:11px;padding:10px 13px">'+
+      '<div style="font-size:10px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;font-weight:700">'+t+'</div>'+
+      '<div style="font-size:17px;font-weight:800;color:#fff;margin-top:2px">'+v+'</div></div>'; }
+  function brDataT(s){ var p=String(s||'').split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):String(s||''); }
+
+  window.__gwaTransfLimparSaidas=async function(){
+    if(!isAdmin()) return;
+    if(!confirm('Liberar todos os vendedores marcados como saída?\n\nEles voltam a aparecer nos seletores.')) return;
+    _cfg.vendedoresSaidos=[];
+    await saveCfg(); render();
+  };
+
+  window.__gwaTransferir=async function(){
+    if(!isAdmin()){ alert('Apenas administradores podem transferir vendas.'); return; }
+    if(!_trDe){ alert('Escolha de quem são as vendas.'); return; }
+    if(!_trPara || !gwaPorLogin(_trPara)){ alert('Escolha o GWA de destino.'); return; }
+    var vs=vendasDe(_trDe);
+    if(!vs.length){ alert('Esta pessoa não tem vendas lançadas.'); return; }
+    var destino=gwaPorLogin(_trPara);
+    var marcar=!!(document.getElementById('trMarcarSaida')||{}).checked;
+    var liq=vs.reduce(function(a,v){ return a+(Number(v.liquido)||0); },0);
+    var txt='TRANSFERIR VENDAS\n\n'+
+      'De: '+nomeVend(_trDe)+'\n'+
+      'Para: '+destino.nome+'\n\n'+
+      vs.length+' venda(s) · '+money(liq)+' líquido\n\n'+
+      'O responsável muda na intranet e na planilha do Google. Cada venda guarda no histórico de quem veio.'+
+      (marcar?('\n\n'+nomeVend(_trDe)+' some dos seletores de vendedor.'):'');
+    if(!confirm(txt)) return;
+
+    _trRodando=true; render();
+    var el=function(){ return document.getElementById('trStatus'); };
+    var eu=loginU(curU()), ok=0, falhou=0;
+    for(var i=0;i<vs.length;i++){
+      var v=vs[i];
+      var de=v.consultor, deNome=v.consultorNome||v.consultor;
+      var deptAntigo=v.dept;
+      /* a Negociacao grava numa planilha separada: se a venda muda de
+         departamento, tira a linha da planilha antiga antes de regravar */
+      if(deptAntigo && deptAntigo!==destino.dept){
+        try{ await gsDelete({id:v.id,dept:deptAntigo}); }catch(e){}
+      }
+      v.hist=v.hist||[];
+      v.hist.push({por:eu,ts:Date.now(),acao:'transferencia',campo:'consultor',de:de,para:destino.login,
+                   motivo:'saída da empresa'});
+      v.consultor=destino.login;
+      v.consultorNome=destino.nome;
+      v.dept=destino.dept;
+      v.transferidaDe=de;
+      v.transferidaDeNome=deNome;
+      v.transferidaEm=Date.now();
+      v.transferidaPor=eu;
+      var r=false;
+      try{ r=await saveVenda(v); }catch(e){ r=false; }
+      if(r) ok++; else falhou++;
+      var e2=el(); if(e2) e2.textContent=(i+1)+' de '+vs.length+' · '+ok+' ok'+(falhou?(' · '+falhou+' com erro'):'');
+    }
+    if(marcar){
+      _cfg.vendedoresSaidos=(_cfg.vendedoresSaidos||[]).slice();
+      if(_cfg.vendedoresSaidos.indexOf(_trDe)<0) _cfg.vendedoresSaidos.push(_trDe);
+    }
+    _cfg.deptVendas=_cfg.deptVendas||{};
+    _cfg.deptVendas['GWA-COMERCIAL']='comercial';
+    _cfg.deptVendas['GWA-NEGOCIACAO']='negociacao';
+    try{ await saveCfg(); }catch(e){}
+
+    _trRodando=false;
+    var msg=ok+' venda(s) transferida(s) para '+destino.nome+'.';
+    if(falhou) msg+='\n\n'+falhou+' não foram salvas — tente de novo com essas.';
+    else msg+='\n\nA planilha do Google também foi atualizada.';
+    alert(msg);
+    _trDe=''; _trPara='';
+    render();
+  };
+
   function boxWrap(t,ic,inner){ return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;box-shadow:0 3px 14px rgba(0,0,0,.28)"><h4 style="margin:0 0 12px;color:#fff;font-size:14px"><i class="fas '+ic+'" style="color:'+Co.orange+'"></i> '+t+'</h4>'+inner+'</div>'; }
   function googleBox(c){ var conectada=!!c.sheetId; var link=conectada?('https://docs.google.com/spreadsheets/d/'+c.sheetId):''; var status=conectada?('<div style="font-size:12px;color:'+Co.green+';margin:8px 0"><i class="fas fa-check-circle"></i> Planilha conectada · <a href="'+link+'" target="_blank" style="color:'+Co.orangeL+'">abrir</a></div>'):'<div style="font-size:12px;color:'+Co.mut+';margin:8px 0">Nenhuma planilha conectada ainda.</div>';
     return boxWrap('Planilha Google','fa-table','<p style="font-size:12px;color:'+Co.mut+';margin:0 0 6px">Conecte sua conta Google, dê as permissões e a planilha é criada com o nome que você escolher — e passa a se alimentar sozinha a cada venda.</p>'+
