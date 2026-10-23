@@ -18764,13 +18764,24 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   };
   var ICONES=['fa-clock','fa-fingerprint','fa-bell','fa-calendar-check','fa-file-signature','fa-id-card','fa-triangle-exclamation','fa-bullhorn','fa-circle-info','fa-user-clock'];
 
+  /* link padrao do ponto eletronico (Madis) */
+  var LINK_PONTO='https://www.mdcomune.com.br/Madis/PedidosJustificativas/Index/115';
+  var LINK_PONTO_TXT='Ponto Eletr\u00f4nico';
+  function ehModeloPonto(id){ return id==='ponto_fechamento' || id==='ponto_ajuste'; }
+  /* link que o aviso mostra: o dele; se for de ponto e estiver vazio, o padrao */
+  function linkDe(c){
+    if(c && c.link) return {url:c.link, txt:c.linkTexto||LINK_PONTO_TXT};
+    if(c && (ehModeloPonto(c.modeloId) || /PONTO/.test(norm(c.titulo)))) return {url:LINK_PONTO, txt:LINK_PONTO_TXT};
+    return null;
+  }
+
   var MODELOS_PADRAO=[
-    {id:'ponto_fechamento', icone:'fa-fingerprint', nivel:'urgente',
+    {id:'ponto_fechamento', icone:'fa-fingerprint', nivel:'urgente', link:LINK_PONTO, linkTexto:LINK_PONTO_TXT,
      titulo:'Ponto eletrônico — fechamento do mês',
      mensagem:'O mês está fechando. Confira o seu ponto eletrônico e valide todas as marcações.\n\n'+
               'Quem tiver ponto em atraso, falta de marcação ou ajuste pendente precisa regularizar até a data de fechamento para não dar erro na folha.\n\n'+
               'Ao clicar em "Dar ciência" você confirma que leu este aviso.'},
-    {id:'ponto_ajuste', icone:'fa-user-clock', nivel:'importante',
+    {id:'ponto_ajuste', icone:'fa-user-clock', nivel:'importante', link:LINK_PONTO, linkTexto:LINK_PONTO_TXT,
      titulo:'Ajustes de ponto pendentes',
      mensagem:'Existem marcações de ponto aguardando ajuste ou justificativa. Acesse o sistema de ponto, confira os seus dias e envie as justificativas até a data limite.'},
     {id:'documentos_rh', icone:'fa-file-signature', nivel:'importante',
@@ -18848,6 +18859,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         var m=await apiGet('/api/'+COL_C+'/modelos');
         var lista=m&&m.data&&m.data.itens;
         _modelos=(Array.isArray(lista)&&lista.length)?lista:MODELOS_PADRAO.map(function(x){ return Object.assign({},x); });
+        _modelos.forEach(function(m){ if(ehModeloPonto(m.id) && !m.link){ m.link=LINK_PONTO; m.linkTexto=m.linkTexto||LINK_PONTO_TXT; } });
       }
       /* minhas ciencias, so das campanhas que me dizem respeito agora */
       var L=meu();
@@ -18950,6 +18962,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         '<div class="gwaAvBarra__prazo"><i class="fas fa-hourglass-half"></i> '+esc(textoPrazo(c.fim))+' · sua ciência está pendente</div>'+
       '</div>'+
       '<div class="gwaAvBarra__acoes">'+
+        (function(){ var lk=linkDe(c); if(!lk) return '';
+          return '<a class="gwaAvBtn gwaAvBtn--sec gwaAvBtn--link" href="'+esc(lk.url)+'" target="_blank" rel="noopener"><i class="fas fa-fingerprint"></i> '+esc(lk.txt)+'</a>'; })()+
         '<button class="gwaAvBtn gwaAvBtn--sec" onclick="__gwaAvAbrir(&#39;'+esc(c.id)+'&#39;)"><i class="fas fa-eye"></i> Ler aviso</button>'+
         '<button class="gwaAvBtn" onclick="__gwaAvCiencia(&#39;'+esc(c.id)+'&#39;)"><i class="fas fa-check"></i> Dar ciência</button>'+
       '</div>';
@@ -18980,7 +18994,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
           '<div class="gwaAvModal__prazo" style="border-color:'+nv.cor+'"><i class="fas fa-calendar-day" style="color:'+nv.cor+'"></i> '+
             '<b>Data de fechamento: '+esc(brData(c.fim))+'</b> — '+esc(textoPrazo(c.fim))+'</div>'+
           '<div class="gwaAvModal__msg">'+esc(c.mensagem).replace(/\n/g,'<br>')+'</div>'+
-          (c.link?('<a class="gwaAvModal__link" href="'+esc(c.link)+'" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i> '+esc(c.linkTexto||'Abrir o sistema de ponto')+'</a>'):'')+
+          (function(){ var lk=linkDe(c); if(!lk) return '';
+            return '<a class="gwaAvModal__link" href="'+esc(lk.url)+'" target="_blank" rel="noopener"><i class="fas fa-fingerprint"></i> '+esc(lk.txt)+' <i class="fas fa-arrow-up-right-from-square" style="font-size:11px;opacity:.8"></i></a>'; })()+
           '<div class="gwaAvModal__rodape">Publicado por '+esc(c.criadoPorNome||nomeDe(c.criadoPor))+' em '+esc(quando(c.criadoEm))+'</div>'+
           (jaDei
             ? '<div class="gwaAvModal__ok"><i class="fas fa-circle-check"></i> Você deu ciência em '+esc(quando(minha.em))+'.</div>'
@@ -19206,7 +19221,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     mod=mod||{};
     return { id:'', titulo:mod.titulo||'', mensagem:mod.mensagem||'', nivel:mod.nivel||'importante',
              icone:mod.icone||'fa-bell', modeloId:mod.id||'', inicio:hojeISO(), fim:fimDoMes(),
-             link:mod.link||'', linkTexto:mod.linkTexto||'',
+             link:(mod.link!=null&&mod.link!=='')?mod.link:LINK_PONTO,
+             linkTexto:(mod.linkTexto!=null&&mod.linkTexto!=='')?mod.linkTexto:LINK_PONTO_TXT,
              publico:{tipo:'todos',depts:[],logins:[],incluirAdmins:true} };
   }
   window.__gwaAvNovoDeModelo=function(id){
@@ -19304,8 +19320,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
           campo('Começa a avisar em','<input id="avf_inicio" type="date" value="'+esc(e.inicio)+'" style="'+inp+'">')+
           campo('Data de fechamento *','<input id="avf_fim" type="date" value="'+esc(e.fim)+'" style="'+inp+'">')+
           campo('Nível',niveis)+campo('Ícone',icones)+
-          campo('Link (opcional)','<input id="avf_link" value="'+esc(e.link||'')+'" style="'+inp+'" placeholder="https://... sistema de ponto">')+
-          campo('Texto do botão do link','<input id="avf_linkTexto" value="'+esc(e.linkTexto||'')+'" style="'+inp+'" placeholder="Abrir o sistema de ponto">')+
+          campo('Link (opcional)','<input id="avf_link" value="'+esc(e.link||'')+'" style="'+inp+'" placeholder="'+esc(LINK_PONTO)+'">')+
+          campo('Texto do botão do link','<input id="avf_linkTexto" value="'+esc(e.linkTexto||'')+'" style="'+inp+'" placeholder="'+esc(LINK_PONTO_TXT)+'">')+
         '</div>'+
         '<div style="font-size:11.5px;color:'+Co.mut+';margin-top:10px"><i class="fas fa-circle-info"></i> O aviso fica aparecendo em toda a intranet — início, Vendas, Documentação, Custos, Premiações, Monitoria — até o fim do dia de fechamento, ou até a pessoa dar ciência.</div>'+
         '</div>')+
@@ -19786,7 +19802,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   '.gwaAvModal__corpo{padding:18px 20px 20px;color:#d4d8de}'+
   '.gwaAvModal__prazo{border:1px solid;border-radius:12px;padding:10px 13px;font-size:13px;color:#fff;margin-bottom:14px;background:rgba(255,255,255,.04)}'+
   '.gwaAvModal__msg{font-size:14px;line-height:1.7;color:#e6e8eb}'+
-  '.gwaAvModal__link{display:inline-flex;gap:8px;align-items:center;margin-top:14px;color:#f0943a;font-weight:700;text-decoration:none;font-size:13.5px}'+
+  '.gwaAvModal__link{display:inline-flex;gap:9px;align-items:center;margin-top:16px;padding:11px 18px;border-radius:12px;'+
+    'background:linear-gradient(135deg,#f0943a,#c4661a);color:#fff;font-weight:800;text-decoration:none;font-size:14px;'+
+    'box-shadow:0 8px 20px rgba(224,120,32,.35);transition:transform .15s ease}'+
+  '.gwaAvModal__link:hover{transform:translateY(-1px)}'+
+  '.gwaAvBtn--link{text-decoration:none;display:inline-flex;align-items:center;gap:7px}'+
   '.gwaAvModal__rodape{font-size:11.5px;color:#949aa4;margin-top:14px}'+
   '.gwaAvModal__rot{display:block;font-size:11.5px;color:#949aa4;margin:16px 0 5px}'+
   '.gwaAvModal__txt{width:100%;box-sizing:border-box;min-height:62px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0d0d0d;color:#fff;font-family:inherit;font-size:13px;resize:vertical}'+
