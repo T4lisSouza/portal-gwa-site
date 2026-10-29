@@ -11761,6 +11761,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     t.push(['lancar','Lancar','fa-plus']);
     t.push(['novos','Novos clientes'+(function(){ var q=qtdMinhaFila(); return q?('<span style="background:#e5533c;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:5px;font-weight:800">'+q+'</span>'):''; })(),'fa-user-plus']);
     t.push(['buscar','Buscar cliente','fa-magnifying-glass']);
+    t.push(['producao','Produção diária','fa-calendar-check']);
     t.push(['cashback','Premiação DOC','fa-wallet']);
     t.push(['orgaos','Orgaos','fa-building-columns']);
     if(ehAdminDoc()||ehSupervisor()){ t.push(['relatorios','Relatorios','fa-chart-column']); }
@@ -11770,7 +11771,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(!temAcesso()){ head.innerHTML='<div style="font-size:18px;font-weight:800">Documentacao GWA</div><button onclick="__gwaDocClose()" style="width:38px;height:38px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:'+Co.sub+';cursor:pointer"><i class="fas fa-times"></i></button>';
       body.innerHTML='<div style="max-width:520px;margin:50px auto;text-align:center;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:34px;color:'+Co.sub+'"><i class="fas fa-lock" style="font-size:36px;color:'+Co.orange+'"></i><h3 style="color:#fff;margin:16px 0 8px">Acesso nao liberado</h3><p style="line-height:1.5">Seu usuario ainda nao tem permissao na Documentacao GWA.<br>Peca ao administrador para liberar em <b style="color:'+Co.orange+'">Documentacao &rarr; Acessos</b>.</p></div>'; return; }
     if(!_view)_view='dash';
-    var mostraSel=(_view!=='dash'&&_view!=='acessos'&&_view!=='correios'&&_view!=='cashback'&&_view!=='relatorios'&&_view!=='orgaos'&&_view!=='ficha'&&_view!=='buscar'&&_view!=='novos');
+    var mostraSel=(_view!=='dash'&&_view!=='producao'&&_view!=='acessos'&&_view!=='correios'&&_view!=='cashback'&&_view!=='relatorios'&&_view!=='orgaos'&&_view!=='ficha'&&_view!=='buscar'&&_view!=='novos');
     var sel=mostraSel?('<select onchange="__gwaDocTipo(this.value)" style="padding:8px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;font-weight:700;cursor:pointer">'+ORDEM.map(function(k){ return '<option value="'+k+'"'+(_tipo===k?' selected':'')+'>'+esc(TIPOS[k].plural.toUpperCase())+'</option>'; }).join('')+'</select>'):'';
     var nv=nivel(); var badge='<span style="background:'+Co.card2+';border:1px solid '+(nv==='admin'?Co.orange:(nv==='supervisor'?Co.blue:Co.line))+';color:'+(nv==='admin'?Co.orangeL:(nv==='supervisor'?Co.blue:Co.sub))+';border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;text-transform:uppercase">'+esc(nv)+'</span>';
     head.innerHTML='<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><img src="'+GWA_LOGO+'" alt="GWA" style="height:42px;width:auto;max-width:120px;object-fit:contain" onerror="this.onerror=null;this.src=\'https://drive.google.com/thumbnail?id=1erF3Vfah-MgTbl2QNLph7oyfIqENLn9m&sz=w240\'"><div><div style="font-size:18px;font-weight:800">Documentacao GWA</div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:1px">Defesas, documentacao e elogios</div></div>'+badge+sel+'</div>'+
@@ -11782,6 +11783,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       else if(_view==='importar'&&ehAdminDoc()) body.innerHTML=viewImportar();
       else if(_view==='correios'&&ehAdminDoc()) body.innerHTML=viewCorreios();
       else if(_view==='relatorios'&&(ehAdminDoc()||ehSupervisor())) body.innerHTML=viewRelatorios();
+      else if(_view==='producao') body.innerHTML=viewProducao();
       else if(_view==='orgaos') body.innerHTML=viewOrgaos();
       else if(_view==='ficha') body.innerHTML=viewFicha();
       else if(_view==='buscar') body.innerHTML=viewBuscarCliente();
@@ -11792,6 +11794,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     }catch(e){ body.innerHTML='<div style="color:'+Co.red+';padding:20px">Erro: '+esc(e&&e.message||e)+'</div>'; }
     if((_view==='lancar'&&_tipo==='defesa')||(_view==='ficha'&&_cliForm==='defesa')){ setTimeout(function(){ var ed=_editId?(regs('defesa').filter(function(x){return x.id===_editId;})[0]||null):null; if(ed&&ed.orgaoId){ __gwaDefOrgao(ed.orgaoId); } else { __gwaDefOrgao(''); } },40); }
     if(_view==='correios'&&!_jobsCarregados){ _jobsCarregados=true; Promise.all([loadJobs(),loadAr()]).then(function(){ if(_view==='correios') render(); }); }
+    if(_view==='producao'&&!_pdOk){ _pdOk=true; loadTodos().then(function(){ if(_view==='producao') render(); }); }
     if(_view==='dash'&&!_dashOk){ _dashOk=true; loadTodos().then(function(){ if(_view==='dash') render(); }); }
     if((_view==='orgaos'||(_view==='lancar'&&_tipo==='defesa')||(_view==='ficha'&&_cliForm==='defesa'))&&!_orgOk&&!_orgCarregando){ _orgCarregando=true; loadOrgaos().then(function(){ _orgCarregando=false; render(); }); }
     if(_view==='relatorios'&&!_relOk){ _relOk=true; Promise.all([loadTodos(),_novosOk?Promise.resolve(null):loadNovos()]).then(function(){ _cliTodosOk=true; _novosOk=true; if(_view==='relatorios') render(); }); }
@@ -13248,6 +13251,157 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       if(w){ w.document.write(comPrint); w.document.close(); }
       else { var b=new Blob([comPrint],{type:'text/html'}); window.open(URL.createObjectURL(b),'_blank'); }
     }catch(e){ alert('Nao foi possivel abrir o relatorio: '+(e&&e.message||e)); } };
+
+
+  /* ================= PRODUCAO DIARIA: Docs OK, Pasta OK, Defesas e Elogios por dia ================= */
+  var _pdPer='mes', _pdIni='', _pdFim='', _pdCons='', _pdOk=false;
+  var PD_COLS=[['docs','Docs OK','#4a9fd5'],['pasta','Pasta OK','#9b7bd4'],['def','Defesas','#3fae5a'],['elo','Elogios','#f0943a']];
+  function pdIso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function pdBr(s){ var p=String(s).split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):s; }
+  var PD_SEM=['dom','seg','ter','qua','qui','sex','sáb'];
+  function pdPeriodo(){
+    var h=new Date(), ini, fim=new Date(h.getFullYear(),h.getMonth(),h.getDate());
+    if(_pdPer==='hoje') ini=new Date(fim);
+    else if(_pdPer==='semana'){ ini=new Date(fim); var w=ini.getDay(); ini.setDate(ini.getDate()-(w===0?6:w-1)); }
+    else if(_pdPer==='mesant'){ ini=new Date(h.getFullYear(),h.getMonth()-1,1); fim=new Date(h.getFullYear(),h.getMonth(),0); }
+    else if(_pdPer==='d30'){ ini=new Date(fim); ini.setDate(ini.getDate()-29); }
+    else if(_pdPer==='custom'){ ini=parseData(_pdIni)||new Date(h.getFullYear(),h.getMonth(),1); if(_pdFim){ var pf=parseData(_pdFim); if(pf) fim=pf; } }
+    else ini=new Date(h.getFullYear(),h.getMonth(),1);
+    ini=new Date(ini.getFullYear(),ini.getMonth(),ini.getDate());
+    fim=new Date(fim.getFullYear(),fim.getMonth(),fim.getDate());
+    if(fim<ini){ var t=ini; ini=fim; fim=t; }
+    var txt=(pdIso(ini)===pdIso(fim))?pdBr(pdIso(ini)):(pdBr(pdIso(ini))+' a '+pdBr(pdIso(fim)));
+    return {ini:ini, fim:fim, txt:txt};
+  }
+  function pdTipoDoc(r){ var v=norm(r&&r.docsOkPasta);
+    if(!v) return '';
+    if(v.indexOf('PASTA')>=0) return 'pasta';
+    if(v.indexOf('DOC')>=0) return 'docs';
+    return ''; }
+  /* junta tudo: por dia e por consultor */
+  function pdDados(){
+    var P=pdPeriodo(), a=P.ini.getTime(), b=P.fim.getTime()+86399999;
+    var dias={}, cons={}, matriz={};
+    for(var d=new Date(P.ini); d<=P.fim; d.setDate(d.getDate()+1)) dias[pdIso(d)]={docs:0,pasta:0,def:0,elo:0};
+    function soma(dt,c,campo,q){
+      if(!dt) return; var t=dt.getTime(); if(t<a||t>b) return;
+      if(_pdCons && !mesmoConsultor(c,_pdCons)) return;
+      var k=pdIso(dt);
+      (dias[k]=dias[k]||{docs:0,pasta:0,def:0,elo:0})[campo]+=q;
+      (cons[c]=cons[c]||{docs:0,pasta:0,def:0,elo:0})[campo]+=q;
+      var mk=c+'|'+k; (matriz[mk]=matriz[mk]||{c:c,dia:k,docs:0,pasta:0,def:0,elo:0})[campo]+=q;
+    }
+    filtraEscopo(regs('doc')).forEach(function(r){ var t=pdTipoDoc(r); if(!t) return;
+      soma(parseData(dataDe('doc',r)),consultorDe(r),t,1); });
+    filtraEscopo(regs('defesa')).forEach(function(r){
+      soma(parseData(dataDe('defesa',r)),consultorDe(r),'def',(typeof qtdDefesas==='function')?qtdDefesas(r):1); });
+    filtraEscopo(regs('elogio')).forEach(function(r){
+      soma(parseData(dataDe('elogio',r)),consultorDe(r),'elo',1); });
+    var lDias=Object.keys(dias).sort().map(function(k){ var o=dias[k]; o.dia=k; o.tot=o.docs+o.pasta+o.def+o.elo; return o; });
+    var lCons=Object.keys(cons).map(function(k){ var o=cons[k]; o.c=k; o.tot=o.docs+o.pasta+o.def+o.elo; return o; })
+      .sort(function(x,y){ return y.tot-x.tot || x.c.localeCompare(y.c); });
+    var lMat=Object.keys(matriz).map(function(k){ return matriz[k]; })
+      .sort(function(x,y){ return x.c.localeCompare(y.c) || (x.dia<y.dia?-1:1); });
+    var tot={docs:0,pasta:0,def:0,elo:0};
+    lDias.forEach(function(o){ PD_COLS.forEach(function(c){ tot[c[0]]+=o[c[0]]; }); });
+    tot.tot=tot.docs+tot.pasta+tot.def+tot.elo;
+    var uteis=lDias.filter(function(o){ var w=parseData(o.dia).getDay(); return w!==0&&w!==6; }).length||1;
+    return {P:P, dias:lDias, cons:lCons, mat:lMat, tot:tot, uteis:uteis};
+  }
+  window.__gwaPd=function(k,v){ if(k==='per')_pdPer=v; else if(k==='ini')_pdIni=v; else if(k==='fim')_pdFim=v; else if(k==='cons')_pdCons=v; render(); };
+
+  function viewProducao(){
+    var g=pdDados();
+    var consList=[]; ORDEM.forEach(function(t){ filtraEscopo(regs(t)).forEach(function(r){ var c=consultorDe(r); if(c&&consList.indexOf(c)<0) consList.push(c); }); }); consList.sort();
+    var podeFiltrar=(ehAdminDoc()||ehSupervisor());
+    var inp='padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff';
+    var filtros='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:14px 16px;margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'+
+      '<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">Período</label><select onchange="__gwaPd(&#39;per&#39;,this.value)" style="'+inp+'">'+
+        [['hoje','Hoje'],['semana','Semana atual'],['mes','Mês atual'],['mesant','Mês anterior'],['d30','Últimos 30 dias'],['custom','Personalizado']].map(function(o){ return '<option value="'+o[0]+'"'+(_pdPer===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('')+'</select></div>'+
+      (_pdPer==='custom'?('<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">De</label><input type="date" value="'+esc(_pdIni)+'" onchange="__gwaPd(&#39;ini&#39;,this.value)" style="'+inp+'"></div>'+
+        '<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">Até</label><input type="date" value="'+esc(_pdFim)+'" onchange="__gwaPd(&#39;fim&#39;,this.value)" style="'+inp+'"></div>'):'')+
+      (podeFiltrar?('<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">Consultor</label><select onchange="__gwaPd(&#39;cons&#39;,this.value)" style="'+inp+';min-width:190px"><option value="">Geral (todos)</option>'+
+        consList.map(function(n){ return '<option value="'+esc(n)+'"'+(norm(_pdCons)===norm(n)?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+'</select></div>'):'')+
+      '<div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button onclick="__gwaPdExcel()" style="background:'+Co.card2+';border:1px solid '+Co.green+';color:'+Co.green+';border-radius:11px;padding:10px 16px;font-weight:700;cursor:pointer"><i class="fas fa-file-excel"></i> Excel</button>'+
+        '<button onclick="__gwaPdPdf()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:11px;padding:10px 16px;font-weight:700;cursor:pointer"><i class="fas fa-file-pdf"></i> PDF</button></div></div>';
+
+    var cards='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">'+PD_COLS.map(function(c){
+      var v=g.tot[c[0]];
+      return '<div style="flex:1 1 150px;min-width:140px;background:linear-gradient(160deg,'+Co.card+','+Co.bgA+');border:1px solid '+Co.line+';border-top:3px solid '+c[2]+';border-radius:16px;padding:14px 16px">'+
+        '<div style="font-size:10.5px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px;font-weight:700">'+c[1]+'</div>'+
+        '<div style="font-size:28px;font-weight:900;color:'+c[2]+';line-height:1.2">'+v+'</div>'+
+        '<div style="font-size:11px;color:'+Co.mut+'">média '+(Math.round(v/g.uteis*10)/10).toString().replace('.',',')+' por dia útil</div></div>'; }).join('')+'</div>';
+
+    var max=1; g.dias.forEach(function(o){ if(o.tot>max) max=o.tot; });
+    var th=function(t,al){ return '<th style="padding:10px;text-align:'+(al||'center')+';font-size:11px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">'+t+'</th>'; };
+    var td=function(v,cor,peso,al){ return '<td style="padding:9px 10px;text-align:'+(al||'center')+';color:'+(cor||Co.sub)+';font-weight:'+(peso||500)+'">'+v+'</td>'; };
+    var cab='<thead><tr style="color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'">';
+    var tabDia='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden;margin-bottom:18px"><div style="padding:14px 16px 8px;color:#fff;font-weight:800"><i class="fas fa-calendar-day" style="color:'+Co.orange+'"></i> Geral por dia '+(_pdCons?('— '+esc(_pdCons)):'')+'</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'+
+      cab+th('Dia','left')+PD_COLS.map(function(c){ return th(c[1]); }).join('')+th('Total')+th('','left')+'</tr></thead><tbody>'+
+      g.dias.map(function(o){ var w=parseData(o.dia).getDay(), fds=(w===0||w===6);
+        return '<tr style="border-bottom:1px solid '+Co.line+(fds?';opacity:.6':'')+'">'+td(pdBr(o.dia)+' <span style="color:'+Co.mut+';font-size:11px">'+PD_SEM[w]+'</span>','#fff',600,'left')+
+          PD_COLS.map(function(c){ return td(o[c[0]]||'<span style="color:'+Co.mut+'">0</span>',o[c[0]]?c[2]:Co.mut,o[c[0]]?800:400); }).join('')+td(o.tot,'#fff',800)+
+          '<td style="padding:9px 10px;min-width:110px"><div style="height:7px;border-radius:20px;background:rgba(255,255,255,.06);overflow:hidden"><div style="height:100%;width:'+Math.round(o.tot/max*100)+'%;background:'+Co.gradO+'"></div></div></td></tr>'; }).join('')+
+      '</tbody><tfoot><tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'">'+td('TOTAL','#fff',900,'left')+PD_COLS.map(function(c){ return td(g.tot[c[0]],c[2],900); }).join('')+td(g.tot.tot,'#fff',900)+'<td></td></tr></tfoot></table></div></div>';
+
+    var tabCons='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="padding:14px 16px 8px;color:#fff;font-weight:800"><i class="fas fa-users" style="color:'+Co.orange+'"></i> Por consultor</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'+
+      cab+th('Consultor','left')+PD_COLS.map(function(c){ return th(c[1]); }).join('')+th('Total')+th('Média/dia útil')+'</tr></thead><tbody>'+
+      (g.cons.length?g.cons.map(function(o){ return '<tr style="border-bottom:1px solid '+Co.line+'">'+td(esc(o.c),'#fff',600,'left')+
+        PD_COLS.map(function(c){ return td(o[c[0]],o[c[0]]?c[2]:Co.mut,o[c[0]]?800:400); }).join('')+td(o.tot,'#fff',900)+td((Math.round(o.tot/g.uteis*10)/10).toString().replace('.',','))+'</tr>'; }).join('')
+        :'<tr><td colspan="7" style="padding:22px;text-align:center;color:'+Co.mut+'">Nada no período.</td></tr>')+
+      '</tbody></table></div></div>';
+
+    return '<div style="font-size:12.5px;color:'+Co.mut+';margin-bottom:12px">Produção de <b style="color:#fff">'+esc(g.P.txt)+'</b>. Docs OK e Pasta OK pela data do registro da documentação; defesas contam cada protocolo; elogios pela data da solicitação.</div>'+
+      filtros+cards+tabDia+tabCons;
+  }
+
+  function pdBaixar(nome,conteudo){
+    try{ var b=new Blob(['﻿'+conteudo],{type:'application/vnd.ms-excel;charset=utf-8'}); var a=document.createElement('a');
+      a.href=URL.createObjectURL(b); a.download=nome; document.body.appendChild(a); a.click();
+      setTimeout(function(){ try{ URL.revokeObjectURL(a.href); a.remove(); }catch(e){} },1500); }catch(e){ alert('Erro: '+(e&&e.message||e)); } }
+  window.__gwaPdExcel=function(){
+    var g=pdDados();
+    var h='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8">'+
+      '<style>td,th{border:1px solid #d9d9d9;padding:5px 8px;font-family:Calibri,Arial;font-size:11pt}th{background:#c4661a;color:#fff}'+
+      '.t{font-size:15pt;font-weight:bold;color:#c4661a;border:none}.s{color:#666;border:none}.tot td{background:#faf3ec;font-weight:bold}.c{text-align:center}</style></head><body>'+
+      '<table><tr><td colspan="7" class="t">Produção diária — Documentação GWA</td></tr>'+
+      '<tr><td colspan="7" class="s">'+esc(g.P.txt)+(_pdCons?(' · '+esc(_pdCons)):' · geral')+' · emitido em '+new Date().toLocaleString('pt-BR')+'</td></tr><tr><td colspan="7" class="s"></td></tr>'+
+      '<tr><th>Dia</th><th>Dia da semana</th>'+PD_COLS.map(function(c){ return '<th>'+c[1]+'</th>'; }).join('')+'<th>Total</th></tr>'+
+      g.dias.map(function(o){ return '<tr><td>'+pdBr(o.dia)+'</td><td>'+PD_SEM[parseData(o.dia).getDay()]+'</td>'+PD_COLS.map(function(c){ return '<td class="c">'+o[c[0]]+'</td>'; }).join('')+'<td class="c">'+o.tot+'</td></tr>'; }).join('')+
+      '<tr class="tot"><td>TOTAL</td><td></td>'+PD_COLS.map(function(c){ return '<td class="c">'+g.tot[c[0]]+'</td>'; }).join('')+'<td class="c">'+g.tot.tot+'</td></tr></table><br>'+
+      '<table><tr><th>Consultor</th>'+PD_COLS.map(function(c){ return '<th>'+c[1]+'</th>'; }).join('')+'<th>Total</th></tr>'+
+      g.cons.map(function(o){ return '<tr><td>'+esc(o.c)+'</td>'+PD_COLS.map(function(c){ return '<td class="c">'+o[c[0]]+'</td>'; }).join('')+'<td class="c">'+o.tot+'</td></tr>'; }).join('')+'</table><br>'+
+      '<table><tr><th>Consultor</th><th>Dia</th>'+PD_COLS.map(function(c){ return '<th>'+c[1]+'</th>'; }).join('')+'<th>Total</th></tr>'+
+      g.mat.map(function(o){ var t=o.docs+o.pasta+o.def+o.elo; return '<tr><td>'+esc(o.c)+'</td><td>'+pdBr(o.dia)+'</td>'+PD_COLS.map(function(c){ return '<td class="c">'+o[c[0]]+'</td>'; }).join('')+'<td class="c">'+t+'</td></tr>'; }).join('')+
+      '</table></body></html>';
+    pdBaixar('producao_diaria_'+pdIso(g.P.ini)+'_a_'+pdIso(g.P.fim)+'.xls',h);
+  };
+  window.__gwaPdPdf=function(){
+    var g=pdDados();
+    var cor={docs:'#1565c0',pasta:'#6d4fae',def:'#2e7d32',elo:'#c4661a'};
+    var tab=function(cab,linhas,rod){ return '<table><tr>'+cab.map(function(c){ return '<th>'+c+'</th>'; }).join('')+'</tr>'+linhas+(rod||'')+'</table>'; };
+    var html='<!doctype html><html><head><meta charset="utf-8"><title>Produção diária</title><style>'+
+      '@page{margin:14mm 12mm}body{font-family:Calibri,Arial,sans-serif;color:#1f2430;margin:0}'+
+      '.capa{display:flex;align-items:center;gap:14px;border-bottom:4px solid #c4661a;padding-bottom:10px;margin-bottom:10px}.capa img{height:46px}'+
+      'h1{color:#c4661a;font-size:19px;margin:0}.sub{color:#6b7280;font-size:11.5px}h2{font-size:14px;margin:18px 0 6px;border-left:5px solid #c4661a;padding-left:8px}'+
+      '.k{display:flex;gap:8px;margin:10px 0}.k div{flex:1;border:1px solid #e6e8ec;border-radius:9px;padding:9px 11px}.k b{display:block;font-size:22px}.k span{font-size:9.5px;color:#8b93a1;text-transform:uppercase;font-weight:bold}'+
+      'table{width:100%;border-collapse:collapse;font-size:10.5px}th{background:#c4661a;color:#fff;padding:6px;text-align:center}th:first-child{text-align:left}'+
+      'td{border-bottom:1px solid #eceef1;padding:5px 6px;text-align:center}td:first-child{text-align:left}tr:nth-child(even) td{background:#fafbfc}'+
+      '.tot td{background:#faf3ec !important;font-weight:bold;border-top:2px solid #c4661a}.fds td{color:#9aa1ad}'+
+      '.rod{margin-top:18px;text-align:center;color:#9aa1ad;font-size:9.5px}</style></head><body>'+
+      '<div class="capa"><img src="'+GWA_LOGO_PDF+'"><div><h1>Produção diária — Documentação</h1>'+
+      '<div class="sub">'+esc(g.P.txt)+(_pdCons?(' · consultor: '+esc(_pdCons)):' · geral')+' · emitido em '+new Date().toLocaleString('pt-BR')+'</div></div></div>'+
+      '<div class="k">'+PD_COLS.map(function(c){ return '<div><span>'+c[1]+'</span><b style="color:'+cor[c[0]]+'">'+g.tot[c[0]]+'</b></div>'; }).join('')+'<div><span>Total</span><b>'+g.tot.tot+'</b></div></div>'+
+      '<h2>Geral por dia</h2>'+tab(['Dia'].concat(PD_COLS.map(function(c){return c[1];})).concat(['Total']),
+        g.dias.map(function(o){ var w=parseData(o.dia).getDay(); return '<tr'+((w===0||w===6)?' class="fds"':'')+'><td>'+pdBr(o.dia)+' ('+PD_SEM[w]+')</td>'+PD_COLS.map(function(c){ return '<td>'+o[c[0]]+'</td>'; }).join('')+'<td><b>'+o.tot+'</b></td></tr>'; }).join(''),
+        '<tr class="tot"><td>TOTAL</td>'+PD_COLS.map(function(c){ return '<td>'+g.tot[c[0]]+'</td>'; }).join('')+'<td>'+g.tot.tot+'</td></tr>')+
+      '<h2>Por consultor</h2>'+tab(['Consultor'].concat(PD_COLS.map(function(c){return c[1];})).concat(['Total']),
+        g.cons.map(function(o){ return '<tr><td><b>'+esc(o.c)+'</b></td>'+PD_COLS.map(function(c){ return '<td>'+o[c[0]]+'</td>'; }).join('')+'<td><b>'+o.tot+'</b></td></tr>'; }).join('')||'<tr><td colspan="6">Nada no período.</td></tr>')+
+      '<div class="rod">Intranet GWA · Documentação · Desenvolvido por Talis Souza</div>'+
+      '<scr'+'ipt>setTimeout(function(){window.print();},450);</scr'+'ipt></body></html>';
+    try{ var w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); } else alert('Libere os pop-ups para gerar o PDF.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); }
+  };
 
   function viewRelatorios(){ if(!(ehAdminDoc()||ehSupervisor())) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito.</div>';
     var base_=filtraEscopo(regs('defesa'));
