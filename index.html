@@ -13274,10 +13274,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return {ini:ini, fim:fim, txt:txt};
   }
   function pdTipoDoc(r){ var v=norm(r&&r.docsOkPasta);
-    if(!v) return '';
     if(v.indexOf('PASTA')>=0) return 'pasta';
-    if(v.indexOf('DOC')>=0) return 'docs';
-    return ''; }
+    return 'docs'; } /* sem status conta como Docs OK: assim bate com o "Detalhamento por operador" */
   /* junta tudo: por dia e por consultor */
   function pdDados(){
     var P=pdPeriodo(), a=P.ini.getTime(), b=P.fim.getTime()+86399999;
@@ -13291,8 +13289,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       (cons[c]=cons[c]||{docs:0,pasta:0,def:0,elo:0})[campo]+=q;
       var mk=c+'|'+k; (matriz[mk]=matriz[mk]||{c:c,dia:k,docs:0,pasta:0,def:0,elo:0})[campo]+=q;
     }
-    filtraEscopo(regs('doc')).forEach(function(r){ var t=pdTipoDoc(r); if(!t) return;
-      soma(parseData(dataDe('doc',r)),consultorDe(r),t,1); });
+    var semSt=0;
+    filtraEscopo(regs('doc')).forEach(function(r){ var t=pdTipoDoc(r), dt=parseData(dataDe('doc',r));
+      if(!norm(r&&r.docsOkPasta) && dt && dt.getTime()>=a && dt.getTime()<=b && (!_pdCons||mesmoConsultor(consultorDe(r),_pdCons))) semSt++;
+      soma(dt,consultorDe(r),t,1); });
     filtraEscopo(regs('defesa')).forEach(function(r){
       soma(parseData(dataDe('defesa',r)),consultorDe(r),'def',(typeof qtdDefesas==='function')?qtdDefesas(r):1); });
     filtraEscopo(regs('elogio')).forEach(function(r){
@@ -13306,8 +13306,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     lDias.forEach(function(o){ PD_COLS.forEach(function(c){ tot[c[0]]+=o[c[0]]; }); });
     tot.tot=tot.docs+tot.pasta+tot.def+tot.elo;
     var uteis=lDias.filter(function(o){ var w=parseData(o.dia).getDay(); return w!==0&&w!==6; }).length||1;
-    return {P:P, dias:lDias, cons:lCons, mat:lMat, tot:tot, uteis:uteis};
+    return {P:P, dias:lDias, cons:lCons, mat:lMat, tot:tot, uteis:uteis, semSt:semSt};
   }
+  function pdMed(v,u){ return (Math.round(v/(u||1)*10)/10).toString().replace('.',','); }
+  var PD_MED=[['docs','Docs OK'],['def','Defesas'],['elo','Elogios']];
   window.__gwaPd=function(k,v){ if(k==='per')_pdPer=v; else if(k==='ini')_pdIni=v; else if(k==='fim')_pdFim=v; else if(k==='cons')_pdCons=v; render(); };
 
   function viewProducao(){
@@ -13346,11 +13348,20 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '</tbody><tfoot><tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'">'+td('TOTAL','#fff',900,'left')+PD_COLS.map(function(c){ return td(g.tot[c[0]],c[2],900); }).join('')+td(g.tot.tot,'#fff',900)+'<td></td></tr></tfoot></table></div></div>';
 
     var tabCons='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="padding:14px 16px 8px;color:#fff;font-weight:800"><i class="fas fa-users" style="color:'+Co.orange+'"></i> Por consultor</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'+
-      cab+th('Consultor','left')+PD_COLS.map(function(c){ return th(c[1]); }).join('')+th('Total')+th('Média/dia útil')+'</tr></thead><tbody>'+
-      (g.cons.length?g.cons.map(function(o){ return '<tr style="border-bottom:1px solid '+Co.line+'">'+td(esc(o.c),'#fff',600,'left')+
-        PD_COLS.map(function(c){ return td(o[c[0]],o[c[0]]?c[2]:Co.mut,o[c[0]]?800:400); }).join('')+td(o.tot,'#fff',900)+td((Math.round(o.tot/g.uteis*10)/10).toString().replace('.',','))+'</tr>'; }).join('')
-        :'<tr><td colspan="7" style="padding:22px;text-align:center;color:'+Co.mut+'">Nada no período.</td></tr>')+
-      '</tbody></table></div></div>';
+      cab+th('Consultor','left')+th('Documentação')+PD_COLS.map(function(c){ return th(c[1]); }).join('')+th('Total')+
+        PD_MED.map(function(m){ return th('Média/dia<br>'+m[1]); }).join('')+th('Média/dia<br>total')+'</tr></thead><tbody>'+
+      (g.cons.length?g.cons.map(function(o){ var cor=function(k){ for(var i=0;i<PD_COLS.length;i++) if(PD_COLS[i][0]===k) return PD_COLS[i][2]; };
+        return '<tr style="border-bottom:1px solid '+Co.line+'">'+td(esc(o.c),'#fff',600,'left')+td(o.docs+o.pasta,'#fff',800)+
+        PD_COLS.map(function(c){ return td(o[c[0]],o[c[0]]?c[2]:Co.mut,o[c[0]]?800:400); }).join('')+td(o.tot,'#fff',900)+
+        PD_MED.map(function(m){ return td(pdMed(o[m[0]],g.uteis),o[m[0]]?cor(m[0]):Co.mut,600); }).join('')+td(pdMed(o.tot,g.uteis),'#fff',700)+'</tr>'; }).join('')+
+        '<tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'">'+td('TOTAL','#fff',900,'left')+td(g.tot.docs+g.tot.pasta,'#fff',900)+
+        PD_COLS.map(function(c){ return td(g.tot[c[0]],c[2],900); }).join('')+td(g.tot.tot,'#fff',900)+
+        PD_MED.map(function(m){ return td(pdMed(g.tot[m[0]],g.uteis),'#fff',800); }).join('')+td(pdMed(g.tot.tot,g.uteis),'#fff',900)+'</tr>'
+        :'<tr><td colspan="12" style="padding:22px;text-align:center;color:'+Co.mut+'">Nada no período.</td></tr>')+
+      '</tbody></table></div>'+
+      '<div style="padding:9px 16px 13px;font-size:11px;color:'+Co.mut+'">Documentação = Docs OK + Pasta OK (é o número da coluna "Documentacao" do Detalhamento por operador). '+
+        (g.semSt?('<b style="color:'+Co.orangeL+'">'+g.semSt+'</b> documentação(ões) sem o campo DocsOK/Pasta preenchido foram contadas como Docs OK. '):'')+
+        'Média por dia útil = total ÷ '+g.uteis+' dia(s) útil(eis) do período.</div></div>';
 
     return '<div style="font-size:12.5px;color:'+Co.mut+';margin-bottom:12px">Produção de <b style="color:#fff">'+esc(g.P.txt)+'</b>. Docs OK e Pasta OK pela data do registro da documentação; defesas contam cada protocolo; elogios pela data da solicitação.</div>'+
       filtros+cards+tabDia+tabCons;
@@ -13370,8 +13381,12 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<tr><th>Dia</th><th>Dia da semana</th>'+PD_COLS.map(function(c){ return '<th>'+c[1]+'</th>'; }).join('')+'<th>Total</th></tr>'+
       g.dias.map(function(o){ return '<tr><td>'+pdBr(o.dia)+'</td><td>'+PD_SEM[parseData(o.dia).getDay()]+'</td>'+PD_COLS.map(function(c){ return '<td class="c">'+o[c[0]]+'</td>'; }).join('')+'<td class="c">'+o.tot+'</td></tr>'; }).join('')+
       '<tr class="tot"><td>TOTAL</td><td></td>'+PD_COLS.map(function(c){ return '<td class="c">'+g.tot[c[0]]+'</td>'; }).join('')+'<td class="c">'+g.tot.tot+'</td></tr></table><br>'+
-      '<table><tr><th>Consultor</th>'+PD_COLS.map(function(c){ return '<th>'+c[1]+'</th>'; }).join('')+'<th>Total</th></tr>'+
-      g.cons.map(function(o){ return '<tr><td>'+esc(o.c)+'</td>'+PD_COLS.map(function(c){ return '<td class="c">'+o[c[0]]+'</td>'; }).join('')+'<td class="c">'+o.tot+'</td></tr>'; }).join('')+'</table><br>'+
+      '<table><tr><th>Consultor</th><th>Documentação</th>'+PD_COLS.map(function(c){ return '<th>'+c[1]+'</th>'; }).join('')+'<th>Total</th>'+PD_MED.map(function(m){ return '<th>Média/dia útil '+m[1]+'</th>'; }).join('')+'<th>Média/dia útil total</th></tr>'+
+      g.cons.map(function(o){ return '<tr><td>'+esc(o.c)+'</td><td class="c">'+(o.docs+o.pasta)+'</td>'+PD_COLS.map(function(c){ return '<td class="c">'+o[c[0]]+'</td>'; }).join('')+'<td class="c">'+o.tot+'</td>'+
+        PD_MED.map(function(m){ return '<td class="c">'+pdMed(o[m[0]],g.uteis)+'</td>'; }).join('')+'<td class="c">'+pdMed(o.tot,g.uteis)+'</td></tr>'; }).join('')+
+      '<tr class="tot"><td>TOTAL</td><td class="c">'+(g.tot.docs+g.tot.pasta)+'</td>'+PD_COLS.map(function(c){ return '<td class="c">'+g.tot[c[0]]+'</td>'; }).join('')+'<td class="c">'+g.tot.tot+'</td>'+
+        PD_MED.map(function(m){ return '<td class="c">'+pdMed(g.tot[m[0]],g.uteis)+'</td>'; }).join('')+'<td class="c">'+pdMed(g.tot.tot,g.uteis)+'</td></tr>'+
+      '<tr><td colspan="12" class="s">Dias úteis no período: '+g.uteis+'. Documentação = Docs OK + Pasta OK.</td></tr></table><br>'+
       '<table><tr><th>Consultor</th><th>Dia</th>'+PD_COLS.map(function(c){ return '<th>'+c[1]+'</th>'; }).join('')+'<th>Total</th></tr>'+
       g.mat.map(function(o){ var t=o.docs+o.pasta+o.def+o.elo; return '<tr><td>'+esc(o.c)+'</td><td>'+pdBr(o.dia)+'</td>'+PD_COLS.map(function(c){ return '<td class="c">'+o[c[0]]+'</td>'; }).join('')+'<td class="c">'+t+'</td></tr>'; }).join('')+
       '</table></body></html>';
@@ -13396,8 +13411,12 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<h2>Geral por dia</h2>'+tab(['Dia'].concat(PD_COLS.map(function(c){return c[1];})).concat(['Total']),
         g.dias.map(function(o){ var w=parseData(o.dia).getDay(); return '<tr'+((w===0||w===6)?' class="fds"':'')+'><td>'+pdBr(o.dia)+' ('+PD_SEM[w]+')</td>'+PD_COLS.map(function(c){ return '<td>'+o[c[0]]+'</td>'; }).join('')+'<td><b>'+o.tot+'</b></td></tr>'; }).join(''),
         '<tr class="tot"><td>TOTAL</td>'+PD_COLS.map(function(c){ return '<td>'+g.tot[c[0]]+'</td>'; }).join('')+'<td>'+g.tot.tot+'</td></tr>')+
-      '<h2>Por consultor</h2>'+tab(['Consultor'].concat(PD_COLS.map(function(c){return c[1];})).concat(['Total']),
-        g.cons.map(function(o){ return '<tr><td><b>'+esc(o.c)+'</b></td>'+PD_COLS.map(function(c){ return '<td>'+o[c[0]]+'</td>'; }).join('')+'<td><b>'+o.tot+'</b></td></tr>'; }).join('')||'<tr><td colspan="6">Nada no período.</td></tr>')+
+      '<h2>Por consultor</h2>'+tab(['Consultor','Documentação'].concat(PD_COLS.map(function(c){return c[1];})).concat(['Total']).concat(PD_MED.map(function(m){ return 'Média/dia '+m[1]; })).concat(['Média/dia total']),
+        (g.cons.map(function(o){ return '<tr><td><b>'+esc(o.c)+'</b></td><td>'+(o.docs+o.pasta)+'</td>'+PD_COLS.map(function(c){ return '<td>'+o[c[0]]+'</td>'; }).join('')+'<td><b>'+o.tot+'</b></td>'+
+          PD_MED.map(function(m){ return '<td>'+pdMed(o[m[0]],g.uteis)+'</td>'; }).join('')+'<td><b>'+pdMed(o.tot,g.uteis)+'</b></td></tr>'; }).join('')||'<tr><td colspan="12">Nada no período.</td></tr>'),
+        g.cons.length?('<tr class="tot"><td>TOTAL</td><td>'+(g.tot.docs+g.tot.pasta)+'</td>'+PD_COLS.map(function(c){ return '<td>'+g.tot[c[0]]+'</td>'; }).join('')+'<td>'+g.tot.tot+'</td>'+
+          PD_MED.map(function(m){ return '<td>'+pdMed(g.tot[m[0]],g.uteis)+'</td>'; }).join('')+'<td>'+pdMed(g.tot.tot,g.uteis)+'</td></tr>'):'')+
+      '<div class="sub" style="margin-top:6px">Dias úteis no período: '+g.uteis+'. Documentação = Docs OK + Pasta OK.</div>'+
       '<div class="rod">Intranet GWA · Documentação · Desenvolvido por Talis Souza</div>'+
       '<scr'+'ipt>setTimeout(function(){window.print();},450);</scr'+'ipt></body></html>';
     try{ var w=window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); } else alert('Libere os pop-ups para gerar o PDF.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); }
