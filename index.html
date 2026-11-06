@@ -22566,5 +22566,183 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 })();
 </script>
 
+<script>
+/* ===== INTRANET GWA :: MENUS LATERAIS RECOLHIVEIS + TEMA CLARO SUAVE + ACABAMENTO DA DOCUMENTACAO =====
+   1) Correcao: no menu lateral dos paineis o cabecalho tinha altura fixa e flex-wrap:wrap (estilo
+      inline) -> as abas que nao cabiam pulavam para uma 2a coluna escondida a direita. Agora nowrap
+      e a barra rola sozinha.
+   2) Botao para esconder/mostrar em todos os menus laterais: o da intranet (data-gwa-menu="lateral")
+      e o dos paineis Documentacao, Vendas, Custos e Premiacoes (data-gwa-paineis="lateral").
+      Fica lembrado no navegador (gwaMenuOculto / gwaPnlOculto). No celular nao se aplica.
+   3) Tema claro menos branco (variaveis do bloco ACABAMENTO VISUAL) e barra lateral em tom quente.
+   4) Documentacao: tabelas sem quebra feia de linha, cabecalho fixo, zebra e destaque ao passar. */
+(function(){
+  if(window.__gwaLatRecolhe) return; window.__gwaLatRecolhe=true;
+
+  var HEADS=['gwaDocHead','gwaVendasHead','gwaCustosHead','gwaPremHead'];
+  var OVS=['gwaDocOverlay','gwaVendasOverlay','gwaCustosOverlay','gwaPremOv'];
+  var RL='html[data-gwa-paineis="lateral"]';
+  function hs(pre,suf){ return HEADS.map(function(h){ return pre+' #'+h+(suf||''); }).join(','); }
+  var ESC='html.gwaPnlOculto[data-gwa-paineis="lateral"]';
+
+  var css=
+  /* ---------- 1. correcao das abas sumindo ---------- */
+  '@media(min-width:769px){'+
+    hs(RL)+'{flex-wrap:nowrap !important;transition:width .32s cubic-bezier(.2,.8,.2,1),min-width .32s cubic-bezier(.2,.8,.2,1),padding .32s !important}'+
+    hs(RL,' .gwaTabs')+'{flex-wrap:nowrap !important;flex-shrink:0 !important}'+
+    hs(RL,' > *')+'{flex-shrink:0}'+
+    /* aba sem fundo no claro, so a ativa ganha cor */
+  '}'+
+  /* celular no tema claro: o botao do menu do painel ficava branco no branco */
+  '@media(max-width:768px){'+
+    'html[data-gwa-tema="claro"] .gwaMobPnlBtn{background:#ffffff !important;border-color:rgba(17,24,39,.12) !important;color:#1e2430 !important;box-shadow:0 2px 8px rgba(16,24,40,.06)}'+
+    'html[data-gwa-tema="claro"] .gwaMobPnlTxt{color:#1e2430 !important}'+
+    hs('')+'{box-sizing:border-box !important;max-width:100vw !important}'+
+    hs('',' .gwaSair')+'{flex-shrink:0 !important}'+
+    hs('html[data-gwa-paineis]',' > button.gwaSair[onclick]')+'{width:auto !important;min-width:64px !important;padding:0 14px !important}'+
+  '}'+
+
+  /* ---------- 2a. esconder o menu lateral dos paineis ---------- */
+  '@media(min-width:769px){'+
+    hs(ESC)+'{width:0 !important;min-width:0 !important;padding-left:0 !important;padding-right:0 !important;border-right:none !important;box-shadow:none !important;overflow:hidden !important}'+
+    hs(ESC,' > *')+'{opacity:0;pointer-events:none}'+
+  '}'+
+  '.gwaPnlRecolher{display:none}'+
+  '@media(min-width:769px){'+
+    RL+' .gwaPnlRecolher{display:flex;align-items:center;justify-content:center;position:absolute;top:12px;right:10px;width:32px;height:32px;padding:0;border-radius:10px;cursor:pointer;z-index:5;'+
+      'font-size:13px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:#aab0ba;transition:all .2s}'+
+    RL+' .gwaPnlRecolher:hover{border-color:#e07820;color:#f0943a;background:rgba(224,120,32,.08)}'+
+    'html[data-gwa-tema="claro"]'+RL.slice(4)+' .gwaPnlRecolher{border-color:rgba(17,24,39,.18);color:#5d6470}'+
+  '}'+
+  /* botao flutuante para mostrar de novo */
+  '.gwaPnlMostrar{position:absolute;left:14px;top:14px;z-index:30;display:none;align-items:center;gap:8px;height:40px;padding:0 15px 0 12px;border-radius:12px;cursor:pointer;'+
+    'font:700 13px/1 inherit;font-family:inherit;border:1px solid rgba(224,120,32,.55);background:rgba(20,20,22,.92);color:#fff;'+
+    'box-shadow:0 10px 26px rgba(0,0,0,.35);backdrop-filter:blur(8px);animation:gwaPnlEntra .35s cubic-bezier(.2,.8,.2,1)}'+
+  '.gwaPnlMostrar i{color:#f0943a}.gwaPnlMostrar:hover{background:#e07820;border-color:#e07820}.gwaPnlMostrar:hover i{color:#fff}'+
+  '@keyframes gwaPnlEntra{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}'+
+  'html[data-gwa-tema="claro"] .gwaPnlMostrar{background:rgba(255,255,255,.95);color:#1e2430;box-shadow:0 10px 26px rgba(16,24,40,.14)}'+
+  '@media(min-width:769px){'+ESC+' .gwaPnlMostrar{display:inline-flex}'+
+    OVS.map(function(o){ return ESC+' #'+o.replace('Overlay','Body').replace('gwaPremOv','gwaPremBody'); }).join(',')+'{padding-top:66px !important}}'+
+
+  /* ---------- 2b. esconder o menu lateral da intranet ---------- */
+  '@media(min-width:769px){'+
+    'html[data-gwa-menu="lateral"] .mc-header{transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s !important}'+
+    'html[data-gwa-menu="lateral"] body{transition:padding-left .35s cubic-bezier(.2,.8,.2,1)}'+
+    'html.gwaMenuOculto[data-gwa-menu="lateral"] .mc-header{transform:translateX(-102%) !important;box-shadow:none !important}'+
+    'html.gwaMenuOculto[data-gwa-menu="lateral"] body{padding-left:0 !important}'+
+    'html[data-gwa-menu="lateral"] .gwaMenuRecolher{display:flex}'+
+    'html.gwaMenuOculto[data-gwa-menu="lateral"] .gwaMenuMostrar{display:inline-flex}'+
+  '}'+
+  '.gwaMenuRecolher{display:none;align-items:center;justify-content:center;position:absolute;top:12px;right:10px;width:32px;height:32px;border-radius:10px;cursor:pointer;z-index:5;'+
+    'font-size:13px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:#aab0ba;transition:all .2s}'+
+  '.gwaMenuRecolher:hover{border-color:#e07820;color:#f0943a;background:rgba(224,120,32,.08)}'+
+  '.gwaMenuMostrar{position:fixed;left:18px;bottom:18px;z-index:1200;display:none;align-items:center;gap:8px;height:42px;padding:0 15px 0 12px;border-radius:12px;cursor:pointer;'+
+    'font:700 13px/1 inherit;font-family:inherit;border:1px solid rgba(224,120,32,.55);background:rgba(20,20,22,.92);color:#fff;'+
+    'box-shadow:0 10px 26px rgba(0,0,0,.35);backdrop-filter:blur(8px);animation:gwaPnlEntra .35s cubic-bezier(.2,.8,.2,1)}'+
+  '.gwaMenuMostrar i{color:#f0943a}.gwaMenuMostrar:hover{background:#e07820;border-color:#e07820}.gwaMenuMostrar:hover i{color:#fff}'+
+
+  /* ---------- 3. tema claro menos branco ---------- */
+  'html[data-gwa-tema="claro"]{'+
+    '--gwaC1:#fbfbfc;--gwaC2:#f2f3f6;'+
+    '--gwaBorda:rgba(17,24,39,.10);--gwaBordaForte:rgba(17,24,39,.18);'+
+    '--gwaSombra:0 14px 34px rgba(16,24,40,.10);'+
+    '--gwaSombraLeve:0 1px 2px rgba(16,24,40,.06),0 8px 22px rgba(16,24,40,.06);'+
+    '--gwaHero1:#fbefe2;--gwaHero2:#f6f4f1;'+
+    '--gwaFundo1:#f8f8f9;--gwaFundo2:#eef0f3;'+
+    '--gwaZebra:rgba(17,24,39,.03);--gwaHover:rgba(224,120,32,.06)}'+
+  OVS.map(function(o){ return 'html[data-gwa-tema="claro"] #'+o; }).join(',')+
+    '{background:radial-gradient(70% 50% at 100% 0%,rgba(240,148,58,.13) 0%,transparent 55%),'+
+    'radial-gradient(60% 50% at 0% 100%,rgba(240,148,58,.06) 0%,transparent 60%),'+
+    'linear-gradient(180deg,#eceef2 0%,#e6e9ee 100%) !important}'+
+  /* barra do painel no claro: tom quente, nao branco */
+  hs('html[data-gwa-tema="claro"]')+'{background:linear-gradient(180deg,rgba(252,249,245,.96),rgba(245,240,233,.96)) !important}'+
+  hs('html[data-gwa-tema="claro"]'+RL.slice(4))+'{background:linear-gradient(180deg,#fbf8f4 0%,#f3eee7 100%) !important;'+
+    'border-right:1px solid rgba(196,102,26,.22) !important;box-shadow:1px 0 0 rgba(224,120,32,.35),10px 0 30px rgba(16,24,40,.07) !important}'+
+  hs('html[data-gwa-tema="claro"]'+RL.slice(4),' .gwaTabs > button[style*="f0943a,#c4661a"]')+'{background:rgba(224,120,32,.14) !important;color:#9a4d0c !important}'+
+  hs('html[data-gwa-tema="claro"]'+RL.slice(4),' .gwaTabs > button:not([style*="f0943a,#c4661a"])')+'{color:#3c4350 !important;background:transparent !important;box-shadow:none !important;border-color:transparent !important}'+
+  hs('html[data-gwa-tema="claro"]'+RL.slice(4),' .gwaTabs > button:hover')+'{background:rgba(224,120,32,.08) !important;color:#1e2430 !important}'+
+  /* cartoes e campos no claro */
+  'html[data-gwa-tema="claro"] #gwaDocOverlay input,html[data-gwa-tema="claro"] #gwaDocOverlay select,html[data-gwa-tema="claro"] #gwaDocOverlay textarea,'+
+  'html[data-gwa-tema="claro"] #gwaVendasOverlay input,html[data-gwa-tema="claro"] #gwaVendasOverlay select,html[data-gwa-tema="claro"] #gwaVendasOverlay textarea'+
+    '{background:#f4f5f8 !important;border-color:rgba(17,24,39,.13) !important}'+
+  'html[data-gwa-tema="claro"] #gwaDocOverlay input:focus,html[data-gwa-tema="claro"] #gwaDocOverlay select:focus,html[data-gwa-tema="claro"] #gwaVendasOverlay input:focus,html[data-gwa-tema="claro"] #gwaVendasOverlay select:focus'+
+    '{background:#fff !important;border-color:#e07820 !important;box-shadow:0 0 0 3px rgba(224,120,32,.15) !important;outline:none}'+
+
+  /* ---------- 4. tabelas da Documentacao ---------- */
+  '#gwaDocBody table{border-collapse:separate !important;border-spacing:0 !important}'+
+  '#gwaDocBody table th,#gwaDocBody table td{white-space:nowrap}'+
+  '#gwaDocBody table td{padding-top:12px !important;padding-bottom:12px !important;vertical-align:middle}'+
+  '#gwaDocBody table thead th{position:sticky;top:0;z-index:2;background:var(--gwaC2,#1c1c1c)}'+
+  '#gwaDocBody table tbody tr{transition:background .15s}'+
+  '#gwaDocBody table tbody tr:nth-child(even){background:var(--gwaZebra,rgba(255,255,255,.025))}'+
+  '#gwaDocBody table tbody tr:hover{background:var(--gwaHover,rgba(255,255,255,.04)) !important}'+
+  '#gwaDocBody table tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #e07820}'+
+  /* rolagem horizontal visivel e bonita */
+  '#gwaDocBody div[style*="overflow-x:auto"]::-webkit-scrollbar,#gwaDocBody div[style*="overflow:auto"]::-webkit-scrollbar{height:9px;width:9px}'+
+  '#gwaDocBody div[style*="overflow-x:auto"]::-webkit-scrollbar-thumb,#gwaDocBody div[style*="overflow:auto"]::-webkit-scrollbar-thumb{background:rgba(224,120,32,.45);border-radius:9px}'+
+  '#gwaDocBody div[style*="overflow-x:auto"]::-webkit-scrollbar-track,#gwaDocBody div[style*="overflow:auto"]::-webkit-scrollbar-track{background:rgba(127,127,127,.08);border-radius:9px}'+
+  /* telas medias: o corpo respira menos */
+  '@media(min-width:769px) and (max-width:1200px){'+RL+' #gwaDocBody,'+RL+' #gwaVendasBody{padding:22px 20px 44px !important}}';
+
+  var st=document.createElement('style'); st.id='gwaLatRecolheCss'; st.textContent=css;
+  (document.head||document.documentElement).appendChild(st);
+
+  function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+  var H=document.documentElement;
+
+  window.gwaPainelMenuOculto=function(on){
+    H.classList.toggle('gwaPnlOculto',!!on); lsSet('gwaPnlOculto',on?'1':'0'); };
+  window.gwaMenuLateralOculto=function(on){
+    H.classList.toggle('gwaMenuOculto',!!on); lsSet('gwaMenuOculto',on?'1':'0'); };
+  if(lsGet('gwaPnlOculto')==='1') H.classList.add('gwaPnlOculto');
+  if(lsGet('gwaMenuOculto')==='1') H.classList.add('gwaMenuOculto');
+
+  function garantir(){
+    /* paineis: botao "Esconder menu" na barra e "Mostrar menu" flutuante no painel */
+    HEADS.forEach(function(h,i){
+      var head=document.getElementById(h);
+      if(head && !head.querySelector('.gwaPnlRecolher')){
+        var b=document.createElement('button'); b.type='button'; b.className='gwaPnlRecolher'; b.title='Esconder o menu lateral';
+        b.innerHTML='<i class="fas fa-angles-left"></i>'; b.setAttribute('aria-label','Esconder o menu lateral');
+        b.onclick=function(e){ e.stopPropagation(); window.gwaPainelMenuOculto(true); };
+        var sair=head.querySelector('.gwaSair')||head.querySelector('button[onclick*="Close"]');
+        head.insertBefore(b,head.firstChild);
+      }
+      var ov=document.getElementById(OVS[i]);
+      if(ov && !ov.querySelector(':scope > .gwaPnlMostrar')){
+        var m=document.createElement('button'); m.type='button'; m.className='gwaPnlMostrar'; m.title='Mostrar o menu lateral';
+        m.innerHTML='<i class="fas fa-bars"></i> Menu';
+        m.onclick=function(e){ e.stopPropagation(); window.gwaPainelMenuOculto(false); };
+        ov.appendChild(m);
+      }
+    });
+    /* intranet */
+    var inner=document.querySelector('.mc-header');
+    if(inner && !inner.querySelector('.gwaMenuRecolher')){
+      var r=document.createElement('button'); r.type='button'; r.className='gwaMenuRecolher'; r.title='Esconder o menu lateral';
+      r.innerHTML='<i class="fas fa-angles-left"></i>'; r.setAttribute('aria-label','Esconder o menu lateral');
+      r.onclick=function(e){ e.stopPropagation(); window.gwaMenuLateralOculto(true); };
+      inner.appendChild(r);
+    }
+    if(!document.querySelector('body > .gwaMenuMostrar')){
+      var s=document.createElement('button'); s.type='button'; s.className='gwaMenuMostrar'; s.title='Mostrar o menu lateral';
+      s.innerHTML='<i class="fas fa-bars"></i> Menu';
+      s.onclick=function(e){ e.stopPropagation(); window.gwaMenuLateralOculto(false); };
+      document.body.appendChild(s);
+    }
+  }
+  var t=null;
+  function agendar(){ if(t) clearTimeout(t); t=setTimeout(garantir,120); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',garantir); else garantir();
+  try{ new MutationObserver(function(ms){
+    for(var i=0;i<ms.length;i++){ var n=ms[i].target; if(n && n.id && (HEADS.indexOf(n.id)>=0 || OVS.indexOf(n.id)>=0 || n===document.body)){ agendar(); return; } }
+  }).observe(document.body,{childList:true,subtree:true}); }catch(e){}
+  setInterval(garantir,4000);
+})();
+</script>
+
+
+
 </body>
 </html>
