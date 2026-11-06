@@ -16836,7 +16836,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function meuNome(){ var u=cur(); return u.nome||u.login||meu(); }
   function papel(){ return String((cur()||{}).role||'').toLowerCase(); }
   function ehMaster(){ return meu()==='TALIS' || papel()==='master'; }
-  function ehGestor(){ return ehMaster() || ['admin','gestor','supervisor'].indexOf(papel())>=0; }
+  function ehGestorPapel(){ return ehMaster() || ['admin','gestor','supervisor'].indexOf(papel())>=0; }
+  /* acessos definidos pelo Master (aba Acessos) passam a valer depois do 1o salvamento */
+  function acessosOn(){ return !!(typeof _cfg!=='undefined' && _cfg && _cfg.acessosAtivo && _cfg.acessos); }
+  function meuAcesso(){ var a=acessosOn()?_cfg.acessos[meu()]:null; return (a&&(a.nivel==='supervisor'||a.nivel==='monitor'))?a:null; }
+  function ehGestor(){ if(ehMaster()) return true; if(acessosOn()) return !!meuAcesso(); return ehGestorPapel(); }
   function usuarios(){ try{ if(typeof getUsers==='function'){ var g=getUsers(); if(g&&g.length) return g; } }catch(e){}
     return window._usersCache||[]; }
   function usuario(l){ var us=usuarios(); for(var i=0;i<us.length;i++){ if(login(us[i])===String(l).toUpperCase()) return us[i]; } return null; }
@@ -16853,7 +16857,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   /* ---------------- permissoes (fonte: Vendas > Ajustes) ---------------- */
   var _cfgV=null;
   function deptsPermitidos(l){
-    if(typeof window.gwaDeptsPermitidos==='function') return window.gwaDeptsPermitidos(l||meu());
+    var L0=String(l||meu()).toUpperCase();
+    if(L0==='TALIS'||String((usuario(L0)||{}).role||'').toLowerCase()==='master') return ['comercial','negociacao','documentacao'];
+    if(acessosOn()){ var ac=_cfg.acessos[L0]; return (ac&&ac.nivel&&ac.nivel!=='nenhum'&&Array.isArray(ac.depts))?ac.depts.slice():[]; }
+    /* le o Vendas > Ajustes que a propria Monitoria carregou (antes dependia do Perfil ter sido aberto) */
+    if(!_cfgV && typeof window.gwaDeptsPermitidos==='function') return window.gwaDeptsPermitidos(l||meu());
     var L=String(l||meu()).toUpperCase();
     if(L==='TALIS'||String((usuario(L)||{}).role||'').toLowerCase()==='master') return ['comercial','negociacao','documentacao'];
     var pd=(_cfgV&&_cfgV.permissoesDept&&_cfgV.permissoesDept[L])||{};
@@ -16861,7 +16869,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(!a.length){ var d=deptDe(L); if(d) a.push(d); }
     return a; }
   function deptDe(l){
-    if(typeof window.gwaDeptDoUsuario==='function') return window.gwaDeptDoUsuario(l);
+    if(!_cfgV && typeof window.gwaDeptDoUsuario==='function') return window.gwaDeptDoUsuario(l);
     var L=String(l||'').toUpperCase();
     var ov=_cfgV&&_cfgV.deptVendas&&_cfgV.deptVendas[L];
     if(ov==='comercial'||ov==='negociacao'||ov==='documentacao') return ov;
@@ -16873,17 +16881,18 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(t.indexOf('DOCUMENTA')>=0) return 'documentacao';
     return ''; }
   function podeVer(l){
-    if(typeof window.gwaPodeVerConsultor==='function') return window.gwaPodeVerConsultor(l);
     if(ehMaster()) return true;
-    var L=String(l).toUpperCase(); if(L===meu()) return true;
+    var L=String(l||'').toUpperCase(); if(L===meu()) return true;
     if(!ehGestor()) return false;
+    if(L==='TALIS'||String((usuario(L)||{}).role||'').toLowerCase()==='master') return false;
     var d=deptDe(L); if(!d) return false;
     return deptsPermitidos().indexOf(d)>=0; }
 
   /* quem pode mexer no formulario: Master + quem o Master liberar */
   function podeConfigurar(){ return ehMaster() || ((_cfg.gestores||[]).indexOf(meu())>=0); }
   /* quem pode aplicar monitoria: gestor com departamento, ou liberado pelo Master */
-  function podeMonitorar(){ return ehGestor() || ((_cfg.monitores||[]).indexOf(meu())>=0); }
+  function podeMonitorar(){ if(ehMaster()) return true; if(acessosOn()){ var a=meuAcesso(); return !!(a&&a.nivel==='monitor'); }
+    return ehGestorPapel() || ((_cfg.monitores||[]).indexOf(meu())>=0); }
   /* quem o Master liberou para ver as respostas de NPS dos consultores */
   function podeVerNps(m){
     if(ehMaster()) return true;
@@ -16918,8 +16927,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   ];
   /* Quem responde o NPS é o CONSULTOR, avaliando o monitor e o feedback. */
   var NPS_PADRAO=[
-    {id:'n1', texto:'Qual é a probabilidade de você recomendar a forma como esta monitoria foi conduzida?'},
-    {id:'n2', texto:'O quanto este feedback te ajudou a melhorar no próximo atendimento?'}
+    {id:'n1', tipo:'escala',  obrig:true, texto:'Em uma escala de 0 a 10, o quanto você recomendaria essa monitoria para outro colega?'},
+    {id:'n2', tipo:'escolha', obrig:true, outro:true, opcoes:['Sim','Parcialmente','Não'], texto:'O feedback foi claro e fácil de entender?'},
+    {id:'n3', tipo:'texto',   obrig:true, texto:'O que mais te ajudou nesse feedback?'},
+    {id:'n4', tipo:'texto',   obrig:true, texto:'O que poderia ter sido melhor explicado?'},
+    {id:'n5', tipo:'escolha', obrig:true, outro:true, opcoes:['Sim','Mais ou menos','Não'], texto:'Após a monitoria, você se sente mais confiante para vender?'}
   ];
   var CANAIS=['Telefone','WhatsApp','Presencial','E-mail','Chat','Vídeo','Outro'];
 
@@ -17012,6 +17024,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     c.forms=it.forms||base_.forms;
     Object.keys(base_.forms).forEach(function(k){ if(!c.forms[k]) c.forms[k]=base_.forms[k]; });
     c.nps=it.nps||base_.nps;
+    /* formato antigo (so escalas sem tipo): passa para o modelo novo de 5 perguntas */
+    if(!(c.nps.perguntas||[]).some(function(q){ return q&&q.tipo; })) c.nps={ativo:c.nps.ativo!==false, perguntas:cfgPadrao().nps.perguntas};
     c.hist=it.hist||[];
     ['gestores','monitores','avaliadoresNps','verNps'].forEach(function(k){ if(!Array.isArray(c[k])) c[k]=[]; });
     return c;
@@ -17067,7 +17081,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return (lista||[]).filter(function(m){ var d=dataMon(m); return d && d.getFullYear()===ano; });
   }
   function visiveisParaMim(){
-    return (_mons||[]).filter(function(m){ return podeVer(m.consultor); });
+    return (_mons||[]).filter(function(m){ return podeVer(m.consultor) || String(m.monitor||'').toUpperCase()===meu(); });
   }
   function contarTextos(lista,campo){
     var m={};
@@ -17204,25 +17218,28 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     painel();
     _alvo=String(consultor||'').toUpperCase();
     _view=vista||(_alvo?'consultor':'lista');
-    if(_alvo && !podeVer(_alvo)){ alert('Você não tem acesso a este consultor.'); return; }
+    function seguir(){ if(_alvo && !podeVer(_alvo)){ alert('Você não tem acesso a este consultor.'); _alvo=''; _view='lista'; } desenhar(); }
     document.getElementById('gwaMonOv').style.display='flex';
-    if(!_mons) carregar().then(desenhar); else desenhar();
+    if(!_mons){ desenhar(); carregar().then(seguir); } else seguir();
   };
   window.__gwaMonClose=function(){ var o=document.getElementById('gwaMonOv'); if(o)o.style.display='none'; };
-  window.__gwaMonView=function(v){ _view=v; _edit=null; desenhar(); window.scrollTo&&window.scrollTo(0,0);
+  window.__gwaMonView=function(v){ if(_view==='acessos' && v!=='acessos') _acDraft=null; _view=v; _edit=null; desenhar(); window.scrollTo&&window.scrollTo(0,0);
     var b=document.getElementById('gwaMonOv'); if(b) b.scrollTop=0; };
   window.__gwaMonConsultor=function(l){ if(!podeVer(l)){ alert('Sem acesso a este consultor.'); return; }
     _alvo=String(l).toUpperCase(); _view='consultor'; desenhar(); };
   window.__gwaMonFiltro=function(k,v){ if(k==='de')_fDe=v; else if(k==='ate')_fAte=v; else if(k==='cons')_fCons=v;
-    else if(k==='mon')_fMon=v; else if(k==='res')_fRes=v;
-    else if(k==='limpar'){ _fDe='';_fAte='';_fCons='';_fMon='';_fRes=''; } desenhar(); };
+    else if(k==='mon')_fMon=v; else if(k==='res')_fRes=v; else if(k==='cic')_fCic=v;
+    else if(k==='limpar'){ _fDe='';_fAte='';_fCons='';_fMon='';_fRes='';_fCic=''; } desenhar(); };
 
   function abas(){
     var its=[['lista','Monitorias','fa-headset']];
     if(_alvo) its.push(['consultor','Perfil de qualidade','fa-user-check']);
     if(ehGestor()||podeMonitorar()) its.push(['dash','Dashboard','fa-chart-pie']);
     if(ehGestor()||podeMonitorar()) its.push(['rel','Relatórios','fa-file-arrow-down']);
+    if(ehGestor()||podeMonitorar()) its.splice(1,0,['ciclos','Ciclos','fa-arrows-rotate']);
+    if(podeRelNps()) its.push(['npsrel','Relatório de NPS','fa-face-smile']);
     if(podeConfigurar()) its.push(['form','Formulário','fa-sliders']);
+    if(ehMaster()) its.push(['acessos','Acessos','fa-user-shield']);
     return '<div class="gwaTabs" style="display:flex;gap:4px;flex-wrap:wrap">'+its.map(function(t){
       var on=(_view===t[0])||(_view==='aplicar'&&t[0]==='lista')||(_view==='ver'&&t[0]==='lista');
       return '<button class="gwaMonAba" onclick="__gwaMonView(&#39;'+t[0]+'&#39;)" style="padding:10px 15px;border:none;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;position:relative;'+
@@ -17251,6 +17268,9 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     else if(_view==='dash') h=viewDash();
     else if(_view==='rel') h=viewRel();
     else if(_view==='form') h=viewForm();
+    else if(_view==='ciclos') h=viewCiclos();
+    else if(_view==='npsrel') h=viewNpsRel();
+    else if(_view==='acessos') h=viewAcessos();
     else if(_view==='consultor') h=viewConsultor(_alvo);
     else h=viewLista();
     body.innerHTML=h;
@@ -17270,10 +17290,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       if(_fAte){ var b=dt(_fAte); if(b&&d&&d>new Date(b.getFullYear(),b.getMonth(),b.getDate(),23,59,59)) return false; }
       if(_fCons && String(m.consultor||'').toUpperCase()!==_fCons) return false;
       if(_fMon && String(m.monitor||'').toUpperCase()!==_fMon) return false;
+      if(_fCic){ if(_fCic==='sem'){ if(cicloDe(m)) return false; } else if(tipoDe(m)+cicloDe(m)!==_fCic) return false; }
       if(_fRes){
         var n=Number(m.nota)||0;
         if(_fRes==='rascunho' && m.status!=='rascunho') return false;
-        if(_fRes==='pend' && !(m.feedback && m.feedback.aplicado && !(m.ciencia&&m.ciencia.em))) return false;
+        if(_fRes==='pend' && !(fbLib(m) && !(m.ciencia&&m.ciencia.em))) return false;
         if(_fRes==='bom' && !(m.status==='finalizada' && n>=75)) return false;
         if(_fRes==='ruim' && !(m.status==='finalizada' && n<60)) return false;
       }
@@ -17298,6 +17319,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<select onchange="__gwaMonFiltro(&#39;res&#39;,this.value)" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff">'+
       [['','Todos'],['bom','Nota 75 ou mais'],['ruim','Abaixo de 60'],['rascunho','Rascunhos'],['pend','Feedback sem ciência']]
         .map(function(o){ return '<option value="'+o[0]+'"'+(_fRes===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('')+'</select></div>'+
+      cicloFiltroSel()+
       '<button onclick="__gwaMonFiltro(&#39;limpar&#39;,&#39;&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:10px;padding:10px 14px;cursor:pointer">Limpar</button></div>';
   }
 
@@ -17305,7 +17327,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var d=dataMon(m);
     var nota=(m.status==='finalizada')?('<div style="font-size:20px;font-weight:900;color:'+corNota(m.nota)+';line-height:1">'+n1(m.nota)+'</div><div style="font-size:9.5px;color:'+Co.mut+';text-transform:uppercase">de 100</div>')
       :('<div style="font-size:12px;color:'+Co.amarelo+';font-weight:700">em aberto</div>');
-    var pend=(m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em));
+    var pend=(fbLib(m)&&!(m.ciencia&&m.ciencia.em));
     return '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:13px 15px;border-bottom:1px solid '+Co.line+'">'+
       '<div style="width:62px;text-align:center;flex-shrink:0">'+nota+'</div>'+
       '<div style="flex:1;min-width:190px">'+
@@ -17315,9 +17337,9 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         ((m.atendimento&&m.atendimento.hora)?(' · '+esc(m.atendimento.hora)):'')+
         ((m.atendimento&&m.atendimento.canal)?(' · '+esc(m.atendimento.canal)):'')+
         ' · monitor: '+esc(nomeDe(m.monitor))+'</div></div>'+
-      '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+statusChip(m)+
+      '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+cicloChip(m)+statusChip(m)+
         (pend?chip('<i class="fas fa-hourglass-half"></i> sem ciência',Co.orangeL):'')+
-        ((m.nps&&Object.keys(m.nps).length)?chip('NPS',Co.roxo):'')+'</div>'+
+        (npsRespondido(m)?chip('NPS',Co.roxo):((String(m.consultor||'').toUpperCase()===meu()&&podeResponderNps(m))?chip('<i class="fas fa-star"></i> responder NPS',Co.roxo):''))+'</div>'+
       '<div style="display:flex;gap:6px;margin-left:auto">'+
         btn('<i class="fas fa-eye"></i> Abrir','__gwaMonAbrir(&#39;'+esc(m.id)+'&#39;)','sec')+
         ((m.status==='rascunho'&&(String(m.monitor||'').toUpperCase()===meu()||ehMaster()))?btn('<i class="fas fa-pen"></i>','__gwaMonEditar(&#39;'+esc(m.id)+'&#39;)','ghost'):'')+
@@ -17330,7 +17352,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var fin=finalizadas(todas);
     var med=mediaDe(todas);
     var nps=npsDe(fin);
-    var semCiencia=todas.filter(function(m){ return m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em); }).length;
+    var semCiencia=todas.filter(function(m){ return fbLib(m)&&!(m.ciencia&&m.ciencia.em); }).length;
     var topo='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+
       card('Monitorias no filtro',todas.length,fin.length+' finalizada(s)',Co.orangeL)+
       card('Média de qualidade',med==null?'—':n1(med),med==null?'sem nota ainda':faixaNota(med),med==null?Co.mut:corNota(med))+
@@ -17359,8 +17381,9 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       atendimento:{ data:hoje(), hora:agoraHM(), canal:'Telefone', cliente:'', ref:'', obs:'' },
       respostas:{}, pontosFortes:'', oportunidades:'', recomendacao:'',
       anexos:[], nps:{}, nota:0, status:'rascunho',
-      feedback:{ aplicado:false, resumo:'', positivos:'', melhorar:'', orientacoes:'', plano:'', prazo:'', acompanhar:false },
+      feedback:{ aplicado:true, resumo:'', positivos:'', melhorar:'', orientacoes:'', plano:'', prazo:'', acompanhar:false },
       ciencia:null, hist:[{em:Date.now(),quem:meu(),quemNome:meuNome(),oque:'criou a monitoria'}],
+      tipoMon:'voz', ciclo:0, cicloMes:hoje().slice(0,7),
       ts:Date.now() };
   }
   window.__gwaMonNova=function(l){
@@ -17372,7 +17395,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       alvo=login(cs[0]);
     }
     if(!podeVer(alvo)){ alert('Sem acesso a este consultor.'); return; }
-    _edit=novaMon(alvo); _passo=1; _view='aplicar'; desenhar();
+    _edit=novaMon(alvo); sugerirCiclo(_edit); _passo=1; _view='aplicar'; desenhar();
   };
   window.__gwaMonEditar=function(id){
     var m=(_mons||[]).filter(function(x){return x.id===id;})[0]; if(!m) return;
@@ -17391,6 +17414,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       _edit.snapshot=JSON.parse(JSON.stringify(f.perguntas));
       _edit.respostas={};
     }
+    sugerirCiclo(_edit);
     desenhar();
   };
   window.__gwaMonPasso=function(n){ if(!_edit) return; colher();
@@ -17434,6 +17458,9 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(document.getElementById('atCliente')) a.cliente=gv('atCliente');
     if(document.getElementById('atRef')) a.ref=gv('atRef');
     if(document.getElementById('atObs')) a.obs=gv('atObs');
+    if(document.getElementById('atTipo')) _edit.tipoMon=(gv('atTipo')==='whats')?'whats':'voz';
+    if(document.getElementById('atCiclo')) _edit.ciclo=Number(gv('atCiclo'))||0;
+    if(document.getElementById('atCicloMes') && /^\d{4}-\d{2}$/.test(gv('atCicloMes'))) _edit.cicloMes=gv('atCicloMes');
     (_edit.snapshot||[]).forEach(function(q){
       var e=document.getElementById('obs_'+q.id);
       if(e){ var r=_edit.respostas[q.id]||(_edit.respostas[q.id]={}); r.obs=String(e.value||'').trim(); }
@@ -17523,6 +17550,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         '<div><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">Consultor avaliado</label>'+
         '<select onchange="__gwaMonTrocaConsultor(this.value)" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff">'+
         cs.map(function(u){ var L=login(u); return '<option value="'+esc(L)+'"'+(L===_edit.consultor?' selected':'')+'>'+esc(u.nome||u.login)+' · '+esc(rotDept(deptDe(L)))+'</option>'; }).join('')+'</select></div>'+
+        cicloCampos()+
         inp('atData','Data do atendimento',_edit.atendimento.data,'','date')+
         inp('atHora','Horário',_edit.atendimento.hora,'','time')+
         sel('atCanal','Canal de atendimento',CANAIS,_edit.atendimento.canal)+
@@ -17580,7 +17608,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px">'+
       '<label style="display:flex;align-items:center;gap:9px;font-size:13px;color:'+Co.sub+';cursor:pointer;margin-bottom:12px">'+
       '<input type="checkbox" id="fb_aplicado"'+(f.aplicado?' checked':'')+' style="width:17px;height:17px;accent-color:'+Co.orange+';cursor:pointer"> '+
-      'Aplicar o feedback ao consultor (ele passa a ver e precisa dar ciência)</label>'+
+      'Liberar o feedback ao consultor (ele passa a ver e precisa dar ciência). Com o feedback escrito, ele é liberado ao finalizar.</label>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px">'+
       txa('fb_resumo','Resumo da avaliação',f.resumo,'Como foi o atendimento, em poucas linhas',70)+
       txa('fb_positivos','O que manteve bem',f.positivos,'',70)+
@@ -17715,9 +17743,13 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       alert('Faltam '+r.faltando.length+' critério(s) obrigatório(s):\n\n'+r.faltando.slice(0,8).map(function(q){return '• '+q.texto;}).join('\n'));
       _passo=2; desenhar(); return;
     }
-    var msg='Finalizar a monitoria de '+nomeDe(_edit.consultor)+' com nota '+n1(r.nota)+'?\n\n'+
+    if(!cicloDe(_edit)){ alert('Escolha o tipo (Voz ou WhatsApp) e o ciclo no passo 1.'); _passo=1; desenhar(); return; }
+    _edit.tipoMon=tipoDe(_edit); _edit.cicloMes=mesDe(_edit);
+    var dupC=noCiclo(String(_edit.consultor).toUpperCase(),_edit.cicloMes,_edit.tipoMon,cicloDe(_edit),_edit.id).filter(function(x){ return x.status==='finalizada'; });
+    if(dupC.length && !confirm(nomeDe(_edit.consultor)+' já tem '+rotCiclo(_edit.tipoMon,cicloDe(_edit))+' em '+rotMes(_edit.cicloMes)+'.\n\nRegistrar outra monitoria no mesmo ciclo mesmo assim?')) return;
+    var msg='Finalizar a monitoria de '+nomeDe(_edit.consultor)+' ('+rotCiclo(tipoDe(_edit),cicloDe(_edit))+' · '+rotMes(mesDe(_edit))+') com nota '+n1(r.nota)+'?\n\n'+
       'Depois de finalizada ela não pode mais ser editada — só o Master pode abrir revisão.';
-    if(_edit.feedback&&_edit.feedback.aplicado) msg+='\n\nO feedback será liberado para o consultor dar ciência.';
+    if(_edit.feedback&&(_edit.feedback.aplicado||temTextoFb(_edit.feedback))) msg+='\n\nO feedback será liberado para o consultor dar ciência.';
     if(!confirm(msg)) return;
     _edit.nota=r.nota; _edit.status='finalizada'; _edit.finalizadaEm=Date.now();
     _edit.finalizadaPor=meu(); _edit.finalizadaPorNome=meuNome();
@@ -17825,7 +17857,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         brData(at.data)+(at.hora?(' às '+esc(at.hora)):'')+(at.canal?(' · '+esc(at.canal)):'')+
         (at.cliente?(' · cliente: '+esc(at.cliente)):'')+(at.ref?(' · ref.: '+esc(at.ref)):'')+'</div>'+
       '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px">monitor: <b style="color:'+Co.sub+'">'+esc(nomeDe(m.monitor))+'</b> · '+esc(rotDept(m.dept))+'</div>'+
-      '<div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap">'+statusChip(m)+
+      '<div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap">'+cicloChip(m)+statusChip(m)+
         (m.resultado&&m.resultado.zerouPor?chip('<i class="fas fa-triangle-exclamation"></i> zerada por item crítico',Co.red):'')+'</div>'+
       '</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">'+
@@ -17862,50 +17894,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       blocoTexto('Oportunidades de melhoria',m.oportunidades,Co.orangeL,'fa-arrow-trend-up')+
       blocoTexto('Recomendação do monitor',m.recomendacao,Co.blue,'fa-lightbulb')+'</div>';
 
-    /* ---- avaliação do consultor sobre o monitor e o feedback (NPS) ---- */
-    var npsB=(function(){
-      if(!(_cfg.nps&&_cfg.nps.ativo)) return '';
-      var perguntas=_cfg.nps.perguntas||[];
-      var respondeu=m.nps&&Object.keys(m.nps).length;
-      var podeResp=podeResponderNps(m);
-      if(!respondeu && !podeResp) return '';
-      if(respondeu && !podeResp && !podeVerNps(m)) return '';   /* resposta restrita */
-      var n=respondeu?npsDe([m]):null;
-
-      var linhas=perguntas.map(function(q){
-        var v=(m.nps||{})[q.id];
-        var bolas='';
-        for(var i2=0;i2<=10;i2++){
-          var on=(String(v)===String(i2));
-          var cor=(i2>=9)?Co.green:((i2>=7)?Co.amarelo:Co.red);
-          bolas+= podeResp
-            ? ('<button onclick="__gwaMonNpsResp(&#39;'+esc(m.id)+'&#39;,&#39;'+esc(q.id)+'&#39;,'+i2+')" style="width:36px;height:36px;border-radius:10px;cursor:pointer;font-weight:800;font-size:13px;border:1px solid '+(on?cor:Co.line)+';background:'+(on?cor:Co.bgA)+';color:'+(on?'#fff':Co.sub)+'">'+i2+'</button>')
-            : ('<span style="width:36px;height:36px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;border:1px solid '+(on?cor:Co.line)+';background:'+(on?cor:Co.bgA)+';color:'+(on?'#fff':Co.mut)+'">'+i2+'</span>');
-        }
-        return '<div style="margin-bottom:13px"><div style="font-size:13px;color:#fff;font-weight:600;margin-bottom:8px">'+esc(q.texto)+'</div>'+
-          '<div style="display:flex;gap:5px;flex-wrap:wrap">'+bolas+'</div></div>';
-      }).join('');
-
-      var resumo = n
-        ? ('<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding-top:12px;margin-top:4px;border-top:1px solid '+Co.line+'">'+
-           '<div style="font-size:30px;font-weight:900;color:'+corNps(n.nps)+'">'+(n.nps>0?'+':'')+n.nps+'</div>'+
-           '<div style="font-size:12.5px;color:'+Co.mut+'">média dada: <b style="color:#fff">'+n1(n.media)+'</b> de 10'+
-           (m.npsPorNome?('<br>respondido por '+esc(m.npsPorNome)+(m.npsEm?(' em '+quando(m.npsEm)):'')):'')+'</div>'+
-           (m.npsComentario?('<div style="flex:1;min-width:200px;font-size:12.5px;color:'+Co.sub+';background:'+Co.card2+';border-radius:10px;padding:9px 12px;white-space:pre-wrap">"'+esc(m.npsComentario)+'"</div>'):'')+
-           '</div>')
-        : '';
-
-      return sec('O consultor avalia a monitoria e o feedback','fa-face-smile',
-        '<div style="background:'+Co.card+';border:1px solid '+(podeResp?Co.roxo:Co.line)+';border-radius:16px;padding:16px 18px">'+
-        '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:13px">'+
-        (podeResp
-          ? 'De 0 a 10, como foi para você receber esta monitoria e este feedback? É anônimo para a equipe — serve para medir a qualidade do trabalho do monitor, e <b>não</b> mexe na sua nota técnica.'
-          : 'Avaliação feita pelo consultor sobre a conduta do monitor e a utilidade do feedback. Não tem relação com a nota técnica da monitoria.')+
-        '</div>'+linhas+
-        '<div style="font-size:11px;color:'+Co.mut+';margin-top:-4px;margin-bottom:10px">0 a 6 detrator · 7 e 8 neutro · 9 e 10 promotor</div>'+
-        (podeResp?('<div>'+btn((m.npsComentario?'<i class="fas fa-pen"></i> Editar recado':'<i class="fas fa-comment"></i> Deixar um recado para o monitor'),'__gwaMonNpsComentario(&#39;'+esc(m.id)+'&#39;)','sec')+'</div>'):'')+
-        resumo+'</div>');
-    })();
+    /* ---- NPS: o consultor responde o formulario (modelo Google Forms) ---- */
+    var npsB=npsBloco(m);
 
     var anx='';
     if((m.anexos||[]).length){
@@ -17920,7 +17910,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
     var fb=m.feedback||{};
     var fbB='';
-    if(fb.aplicado){
+    if(fbLib(m)){
       var cie=m.ciencia;
       fbB=sec('Feedback aplicado','fa-comments',
         '<div style="background:'+Co.card+';border:1px solid '+Co.orangeD+';border-radius:16px;padding:18px">'+
@@ -18035,7 +18025,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         visiveis.map(function(m){ return linhaMon(m,false); }).join('')+'</div>'
       : '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:34px;text-align:center;color:'+Co.mut+'">Nenhuma monitoria registrada ainda.</div>');
 
-    var pend=visiveis.filter(function(m){ return m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em); });
+    var pend=visiveis.filter(function(m){ return fbLib(m)&&!(m.ciencia&&m.ciencia.em); });
     var aviso=pend.length?('<div style="background:#2a1f14;border:1px solid '+Co.orangeD+';border-radius:14px;padding:14px 18px;margin-bottom:16px">'+
       '<div style="color:'+Co.orangeL+';font-weight:800"><i class="fas fa-hourglass-half"></i> '+pend.length+' feedback(s) aguardando ciência</div>'+
       '<div style="font-size:12.5px;color:'+Co.sub+';margin-top:4px">'+(L===meu()?'Abra o feedback, leia e registre sua ciência.':'O consultor ainda não registrou a ciência.')+'</div></div>'):'';
@@ -18085,8 +18075,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var opo=contarTextos(fin,'oportunidades').slice(0,7).map(function(x){ return {k:x.k, v:x.v, txt:x.v+'x', cor:Co.orangeL}; });
 
     /* pendencias */
-    var semCiencia=todas.filter(function(m){ return m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em); });
-    var planos=todas.filter(function(m){ return m.feedback&&m.feedback.aplicado&&String(m.feedback.plano||'').trim(); });
+    var semCiencia=todas.filter(function(m){ return fbLib(m)&&!(m.ciencia&&m.ciencia.em); });
+    var planos=todas.filter(function(m){ return fbLib(m)&&String(m.feedback.plano||'').trim(); });
     var atrasados=planos.filter(function(m){ return atrasado(m.feedback.prazo,m.ciencia); });
     var rascunhos=todas.filter(function(m){ return m.status==='rascunho'; });
 
@@ -18158,7 +18148,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
           return '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 15px;border-bottom:1px solid '+Co.line+'">'+
             '<div style="flex:1;min-width:180px"><div style="color:#fff;font-weight:600;font-size:13.5px">'+esc(nomeDe(m.consultor))+'</div>'+
             '<div style="font-size:11.5px;color:'+Co.mut+'">monitoria de '+brData(m.atendimento&&m.atendimento.data)+' · nota '+n1(m.nota)+'</div></div>'+
-            (m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em)?chip('<i class="fas fa-hourglass-half"></i> sem ciência',Co.orangeL):'')+
+            (fbLib(m)&&!(m.ciencia&&m.ciencia.em)?chip('<i class="fas fa-hourglass-half"></i> sem ciência',Co.orangeL):'')+
             (atr?chip('<i class="fas fa-calendar-xmark"></i> plano vencido em '+brData(m.feedback.prazo),Co.red):'')+
             btn('abrir','__gwaMonAbrir(&#39;'+esc(m.id)+'&#39;)','sec')+'</div>'; }).join('')+'</div>');
     }
@@ -18226,12 +18216,19 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<label style="display:flex;align-items:center;gap:9px;font-size:13px;color:'+Co.sub+';cursor:pointer;margin-bottom:11px">'+
       '<input type="checkbox" id="cfgNpsAtivo"'+((_cfg.nps&&_cfg.nps.ativo)?' checked':'')+' style="width:17px;height:17px;accent-color:'+Co.orange+'"> Usar NPS nas monitorias</label>'+
       '<div id="npsRows">'+((_cfg.nps&&_cfg.nps.perguntas)||[]).map(function(q,i){
-        return '<div class="gwaNRow" style="display:flex;gap:9px;align-items:center;margin-bottom:8px">'+
-          '<input class="nTexto" value="'+esc(q.texto)+'" style="flex:1;padding:9px 12px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff">'+
+        q=normPerg(q);
+        var nS='padding:9px 12px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;box-sizing:border-box';
+        return '<div class="gwaNRow" style="display:flex;gap:9px;align-items:center;margin-bottom:10px;flex-wrap:wrap;background:'+Co.bgA+';border:1px solid '+Co.line+';border-radius:12px;padding:10px">'+
+          '<input class="nTexto" value="'+esc(q.texto)+'" placeholder="Pergunta" style="flex:1 1 320px;'+nS+'">'+
+          '<select class="nTipo" style="'+nS+'">'+[['escala','Escala 0 a 10 (entra no NPS)'],['escolha','Múltipla escolha'],['texto','Resposta escrita']].map(function(o){ return '<option value="'+o[0]+'"'+(q.tipo===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('')+'</select>'+
+          '<input class="nOpc" value="'+esc(q.opcoes.join('; '))+'" placeholder="Opções separadas por ; (só múltipla escolha)" style="flex:1 1 240px;'+nS+'">'+
+          '<label style="font-size:12px;color:'+Co.sub+';display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" class="nOutro"'+(q.outro?' checked':'')+' style="accent-color:'+Co.orange+'"> opção Outro</label>'+
+          '<label style="font-size:12px;color:'+Co.sub+';display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" class="nObrig"'+(q.obrig?' checked':'')+' style="accent-color:'+Co.orange+'"> obrigatória</label>'+
           '<input class="nId" type="hidden" value="'+esc(q.id)+'">'+
           '<button onclick="__gwaMonNpsTirar('+i+')" style="background:transparent;border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:8px 11px;cursor:pointer"><i class="fas fa-trash"></i></button></div>'; }).join('')+'</div>'+
-      btn('<i class="fas fa-plus"></i> Nova pergunta de NPS','__gwaMonNpsNova()','sec')+
-      '<div style="font-size:11.5px;color:'+Co.mut+';margin-top:9px">Escala fixa de 0 a 10. O cálculo segue o padrão: % de promotores (9-10) menos % de detratores (0-6).</div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap">'+btn('<i class="fas fa-plus"></i> Nova pergunta de NPS','__gwaMonNpsNova()','sec')+
+      btn('<i class="fas fa-rotate-left"></i> Usar o modelo padrão (5 perguntas)','__gwaMonNpsPadrao()','ghost')+'</div>'+
+      '<div style="font-size:11.5px;color:'+Co.mut+';margin-top:9px">Quem responde é o consultor, dentro da monitoria finalizada. O NPS é calculado só com as perguntas de escala 0 a 10: % de promotores (9-10) menos % de detratores (0-6). As respostas aparecem na aba Relatório de NPS.</div>'+
       '</div>');
 
     var permBox=ehMaster()?sec('Quem pode o quê','fa-user-shield',
@@ -18320,7 +18317,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var nps=[];
     Array.prototype.forEach.call(nr,function(tr){
       var t=String((tr.querySelector('.nTexto')||{}).value||'').trim();
-      if(t) nps.push({ id:String((tr.querySelector('.nId')||{}).value||uid('n')), texto:t });
+      if(t){ var tp=String((tr.querySelector('.nTipo')||{}).value||'escala');
+        nps.push({ id:String((tr.querySelector('.nId')||{}).value||uid('n')), texto:t, tipo:tp,
+          opcoes:tp==='escolha'?String((tr.querySelector('.nOpc')||{}).value||'').split(';').map(function(x){ return x.trim(); }).filter(Boolean):[],
+          outro:!!(tr.querySelector('.nOutro')||{}).checked, obrig:!!(tr.querySelector('.nObrig')||{}).checked }); }
     });
     _cfg.nps=_cfg.nps||{};
     _cfg.nps.perguntas=nps;
@@ -18397,7 +18397,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   window.__gwaMonNpsNova=function(){
     colherForm();
     _cfg.nps=_cfg.nps||{ativo:true,perguntas:[]};
-    _cfg.nps.perguntas=(_cfg.nps.perguntas||[]).concat([{id:uid('n'),texto:''}]);
+    _cfg.nps.perguntas=(_cfg.nps.perguntas||[]).concat([{id:uid('n'),texto:'',tipo:'texto',obrig:true}]);
     desenhar();
   };
   window.__gwaMonNpsTirar=function(i){
@@ -18447,8 +18447,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
              consultores:lista(porCons), monitores:lista(porMon), depts:lista(porDept),
              criterios:porCriterio(fin), falhas:contarTextos(fin,'oportunidades'),
              fortes:contarTextos(fin,'pontosFortes'),
-             semCiencia:todas.filter(function(m){ return m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em); }),
-             atrasados:todas.filter(function(m){ return m.feedback&&m.feedback.aplicado&&atrasado(m.feedback.prazo,m.ciencia); }) };
+             semCiencia:todas.filter(function(m){ return fbLib(m)&&!(m.ciencia&&m.ciencia.em); }),
+             atrasados:todas.filter(function(m){ return fbLib(m)&&atrasado(m.feedback.prazo,m.ciencia); }) };
   }
   function periodoTxt(){
     if(_fDe&&_fAte) return 'de '+brData(_fDe)+' a '+brData(_fAte);
@@ -18558,7 +18558,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       if(!podeVerNps()) corpo='<div style="padding:20px;color:'+Co.red+'">Você não tem acesso às respostas de NPS.</div>';
       else {
         var comNps=g.fin.filter(function(m){ return m.nps&&Object.keys(m.nps).length; });
-        var perg=(_cfg.nps&&_cfg.nps.perguntas)||[];
+        var perg=npsPerguntas().filter(function(q){ return q.tipo==='escala'; });
         corpo=sec('O que os consultores responderam','fa-face-smile',
           (g.nps?('<div style="display:flex;gap:13px;flex-wrap:wrap;margin-bottom:14px">'+
             card('NPS',(g.nps.nps>0?'+':'')+g.nps.nps,faixaNps(g.nps.nps),corNps(g.nps.nps))+
@@ -18594,8 +18594,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
               td(esc((m.atendimento&&m.atendimento.canal)||'—'))+
               td(m.status==='finalizada'?n1(m.nota):'—','center',m.status==='finalizada'?corNota(m.nota):Co.mut,900)+
               td(m.status==='finalizada'?'Finalizada':(m.status==='revisao'?'Em revisão':'Rascunho'),'left',m.status==='finalizada'?Co.green:Co.amarelo,700)+
-              td((m.feedback&&m.feedback.aplicado)?'aplicado':'—')+
-              td(cie?brData(new Date(m.ciencia.em).toISOString().slice(0,10)):((m.feedback&&m.feedback.aplicado)?'pendente':'—'),'left',cie?Co.green:((m.feedback&&m.feedback.aplicado)?Co.orangeL:Co.mut),700)+
+              td((fbLib(m))?'aplicado':'—')+
+              td(cie?brData(new Date(m.ciencia.em).toISOString().slice(0,10)):((fbLib(m))?'pendente':'—'),'left',cie?Co.green:((fbLib(m))?Co.orangeL:Co.mut),700)+
               '</tr>'; }).join(''):'', 'Nenhuma monitoria no filtro.'));
     }
     return capa+caixaFiltros()+escolha+resumo+corpo;
@@ -18667,7 +18667,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
           '<td class="num '+classeNota(c.media)+'">'+n1(c.media)+'</td></tr>'; }).join('')+
       '</table><br>';
 
-    var perg=(_cfg.nps&&_cfg.nps.perguntas)||[];
+    var perg=npsPerguntas().filter(function(q){ return q.tipo==='escala'; });
     h+='<table><tr><th colspan="'+(9+(podeVerNps()?perg.length+1:0))+'">Monitoria a monitoria</th></tr>'+
       '<tr><th>Data</th><th>Hora</th><th>Consultor</th><th>Departamento</th><th>Monitor</th><th>Canal</th><th>Cliente</th><th>Nota</th><th>Situação</th>'+
       (podeVerNps()?(perg.map(function(q,i){ return '<th>NPS P'+(i+1)+'</th>'; }).join('')+'<th>Recado do consultor</th>'):'')+'</tr>'+
@@ -18693,7 +18693,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   /* ---- relatorio em PDF ---- */
   window.__gwaMonRelPdf=function(){
     var g=dadosRel();
-    var perg=(_cfg.nps&&_cfg.nps.perguntas)||[];
+    var perg=npsPerguntas().filter(function(q){ return q.tipo==='escala'; });
     function cn(v){ v=Number(v)||0; return v>=90?'#2e7d32':(v>=75?'#1565c0':(v>=60?'#b58900':'#c62828')); }
     function barra(v,cor){ return '<div class="bar"><span style="width:'+Math.max(2,Math.round(v))+'%;background:'+(cor||cn(v))+'"></span></div>'; }
 
@@ -18799,7 +18799,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
           '<td>'+esc(nomeDe(m.monitor))+'</td><td>'+esc(at.canal||'')+'</td>'+
           '<td class="c b" style="color:'+cn(m.nota)+'">'+(m.status==='finalizada'?n1(m.nota):'-')+'</td>'+
           '<td>'+(m.status==='finalizada'?'Finalizada':(m.status==='revisao'?'Em revisão':'Rascunho'))+'</td>'+
-          '<td>'+(cie?'dada':((m.feedback&&m.feedback.aplicado)?'pendente':'-'))+'</td></tr>'; }).join('')
+          '<td>'+(cie?'dada':((fbLib(m))?'pendente':'-'))+'</td></tr>'; }).join('')
         :'<tr><td colspan="7" class="c" style="color:#8b93a1">Nenhuma monitoria no período.</td></tr>')+'</table>'+
 
       '<div class="rod">Documento gerado pela Intranet GWA · Monitoria e Qualidade · Desenvolvido por Talis Souza</div>'+
@@ -18850,8 +18850,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       (m.pontosFortes?('<div class="box"><b>Pontos positivos</b>'+esc(m.pontosFortes).replace(/\n/g,'<br>')+'</div>'):'')+
       (m.oportunidades?('<div class="box"><b>Oportunidades de melhoria</b>'+esc(m.oportunidades).replace(/\n/g,'<br>')+'</div>'):'')+
       (m.recomendacao?('<div class="box"><b>Recomendação do monitor</b>'+esc(m.recomendacao).replace(/\n/g,'<br>')+'</div>'):'')+
-      (n?('<div class="box"><b>Satisfação (NPS)</b>Nota dada pelo cliente: '+n1(n.media)+' de 10 · NPS '+(n.nps>0?'+':'')+n.nps+'</div>'):'')+
-      (fb.aplicado?('<h3 style="font-size:14px;margin-top:16px;border-left:5px solid #c4661a;padding-left:9px">Feedback aplicado</h3>'+
+      (n?('<div class="box"><b>Satisfação (NPS)</b>Avaliação do consultor sobre a monitoria: '+n1(n.media)+' de 10 · NPS '+(n.nps>0?'+':'')+n.nps+'</div>'):'')+
+      (fbLib(m)?('<h3 style="font-size:14px;margin-top:16px;border-left:5px solid #c4661a;padding-left:9px">Feedback aplicado</h3>'+
         (fb.resumo?('<div class="box"><b>Resumo</b>'+esc(fb.resumo).replace(/\n/g,'<br>')+'</div>'):'')+
         (fb.positivos?('<div class="box"><b>Manteve bem</b>'+esc(fb.positivos).replace(/\n/g,'<br>')+'</div>'):'')+
         (fb.melhorar?('<div class="box"><b>Precisa melhorar</b>'+esc(fb.melhorar).replace(/\n/g,'<br>')+'</div>'):'')+
@@ -18885,6 +18885,579 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   var st=document.createElement('style'); st.id='gwaMonCss'; st.textContent=css;
   (document.head||document.documentElement).appendChild(st);
 
+
+  /* ================= CICLOS, ACESSOS E RELATORIO DE NPS (06/11/2026) =================
+     Ciclos por mes: Voz 1-4 e WhatsApp 1-2 (m.tipoMon, m.ciclo, m.cicloMes 'AAAA-MM').
+     Acessos (so o Master): _cfg.acessos[LOGIN]={nivel:'supervisor'|'monitor'|'nenhum',cargo,depts[]};
+       vale depois que o Master salva a tela pela 1a vez (_cfg.acessosAtivo).
+     NPS no formato do Google Forms: m.nps (so escala 0-10), m.npsResp (escolha/texto), m.npsPerg (copia das perguntas). */
+  var TIPOS={ voz:{nome:'Voz',ciclos:4,ic:'fa-phone',cor:'#4a9fd5'}, whats:{nome:'WhatsApp',ciclos:2,ic:'fa-comment-dots',cor:'#3fae5a'} };
+  var DEPTS_TODOS=['comercial','negociacao','documentacao'];
+  var _fCic='', _cMes='', _cDept='', _npsVista='resumo', _nDe='', _nAte='', _nMon='', _nDept='', _nTipo='', _npsEdit={}, _acDraft=null, _acExtra=[];
+
+  /* ---------- feedback liberado ---------- */
+  function temTextoFb(f){ f=f||{}; return ['resumo','positivos','melhorar','orientacoes','plano'].some(function(k){ return String(f[k]||'').trim().length>0; }); }
+  /* liberado quando marcado OU quando a monitoria saiu do rascunho com feedback escrito */
+  function fbLib(m){ var f=m&&m.feedback; if(!f) return false; return f.aplicado===true || (m.status!=='rascunho' && temTextoFb(f)); }
+
+  /* ---------- ciclos ---------- */
+  function mesDe(m){
+    if(m && /^\d{4}-\d{2}$/.test(String(m.cicloMes||''))) return m.cicloMes;
+    var d=String((m&&m.atendimento&&m.atendimento.data)||'');
+    if(/^\d{4}-\d{2}/.test(d)) return d.slice(0,7);
+    var t=(m&&m.ts)?new Date(m.ts):new Date();
+    return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0');
+  }
+  function tipoDe(m){ if(m && (m.tipoMon==='voz'||m.tipoMon==='whats')) return m.tipoMon;
+    return /whats/i.test(String((m&&m.atendimento&&m.atendimento.canal)||''))?'whats':'voz'; }
+  function cicloDe(m){ var t=tipoDe(m), c=Number(m&&m.ciclo)||0; return (c>=1&&c<=TIPOS[t].ciclos)?c:0; }
+  function rotCiclo(t,c){ return TIPOS[t].nome+' '+c; }
+  function rotMes(mes){ var p=String(mes||'').split('-'); return p.length===2?(MES[+p[1]-1]+' de '+p[0]):String(mes||''); }
+  function rotMesC(mes){ var p=String(mes||'').split('-'); return p.length===2?(MESc[+p[1]-1]+'/'+p[0].slice(2)):''; }
+  function cicloChip(m){
+    var t=tipoDe(m), c=cicloDe(m);
+    if(!c) return chip('<i class="fas fa-circle-question"></i> sem ciclo',Co.mut);
+    return chip('<i class="fas '+TIPOS[t].ic+'"></i> '+rotCiclo(t,c)+' · '+rotMesC(mesDe(m)),TIPOS[t].cor);
+  }
+  function noCiclo(L,mes,t,c,exceto){
+    return (_mons||[]).filter(function(m){ return m.id!==exceto && String(m.consultor||'').toUpperCase()===L &&
+      mesDe(m)===mes && tipoDe(m)===t && cicloDe(m)===c; });
+  }
+  function sugerirCiclo(m){
+    var L=String(m.consultor||'').toUpperCase(), t=(m.tipoMon==='whats')?'whats':'voz';
+    m.tipoMon=t; if(!/^\d{4}-\d{2}$/.test(String(m.cicloMes||''))) m.cicloMes=mesDe(m);
+    for(var c=1;c<=TIPOS[t].ciclos;c++){ if(!noCiclo(L,m.cicloMes,t,c,m.id).length){ m.ciclo=c; return; } }
+    m.ciclo=TIPOS[t].ciclos;
+  }
+  function cicloCampos(){
+    var e=_edit, t=tipoDe(e), mes=e.cicloMes||mesDe(e), L=String(e.consultor||'').toUpperCase();
+    var st='width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.orangeD+';background:'+Co.bgA+';color:#fff';
+    var ops='';
+    for(var c=1;c<=TIPOS[t].ciclos;c++){
+      var ja=noCiclo(L,mes,t,c,e.id).filter(function(x){ return x.status!=='rascunho'; }).length;
+      ops+='<option value="'+c+'"'+(cicloDe(e)===c?' selected':'')+'>Ciclo '+c+(ja?' (já aplicado)':'')+'</option>';
+    }
+    if(!cicloDe(e)) ops='<option value="0" selected>Escolha o ciclo</option>'+ops;
+    function lb(t2){ return '<label style="font-size:11.5px;color:'+Co.orangeL+';display:block;margin-bottom:4px;font-weight:700">'+t2+'</label>'; }
+    return '<div>'+lb('Tipo de monitoria')+'<select id="atTipo" onchange="__gwaMonTipo(this.value)" style="'+st+'">'+
+        '<option value="voz"'+(t==='voz'?' selected':'')+'>Voz (4 por mês)</option>'+
+        '<option value="whats"'+(t==='whats'?' selected':'')+'>WhatsApp (2 por mês)</option></select></div>'+
+      '<div>'+lb('Ciclo')+'<select id="atCiclo" style="'+st+'">'+ops+'</select></div>'+
+      '<div>'+lb('Mês do ciclo')+'<input id="atCicloMes" type="month" value="'+esc(mes)+'" onchange="__gwaMonTipo(document.getElementById(&#39;atTipo&#39;).value)" style="'+st+'"></div>';
+  }
+  window.__gwaMonTipo=function(t){
+    if(!_edit) return; colher();
+    _edit.tipoMon=(t==='whats')?'whats':'voz';
+    var a=_edit.atendimento||{};
+    if(_edit.tipoMon==='whats' && a.canal!=='WhatsApp') a.canal='WhatsApp';
+    if(_edit.tipoMon==='voz' && a.canal==='WhatsApp') a.canal='Telefone';
+    sugerirCiclo(_edit); desenhar();
+  };
+  window.__gwaMonNovaCiclo=function(l,t,c,mes){
+    if(!podeMonitorar()){ alert('Você não tem permissão para aplicar monitorias.'); return; }
+    var L=String(l||'').toUpperCase();
+    if(!podeVer(L)){ alert('Sem acesso a este consultor.'); return; }
+    _edit=novaMon(L); _edit.tipoMon=(t==='whats')?'whats':'voz'; _edit.ciclo=Number(c)||0; _edit.cicloMes=mes||hoje().slice(0,7);
+    if(_edit.tipoMon==='whats') _edit.atendimento.canal='WhatsApp';
+    if(_edit.cicloMes!==hoje().slice(0,7)) _edit.atendimento.data=_edit.cicloMes+'-01';
+    _passo=1; _view='aplicar'; desenhar();
+    var b=document.getElementById('gwaMonOv'); if(b) b.scrollTop=0;
+  };
+  function cicloFiltroSel(){
+    var ops=[['','Todos'],['voz1','Voz 1'],['voz2','Voz 2'],['voz3','Voz 3'],['voz4','Voz 4'],['whats1','WhatsApp 1'],['whats2','WhatsApp 2'],['sem','Sem ciclo']];
+    return '<div><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">Ciclo</label>'+
+      '<select onchange="__gwaMonFiltro(&#39;cic&#39;,this.value)" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff">'+
+      ops.map(function(o){ return '<option value="'+o[0]+'"'+(_fCic===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('')+'</select></div>';
+  }
+
+  /* ---------- aba CICLOS ---------- */
+  function ehCargoGestao(u){ var r=String((u&&u.role)||'').toLowerCase(); return r==='master'||r==='admin'||r==='gestor'||r==='supervisor'; }
+  function viewCiclos(){
+    if(!(ehGestor()||podeMonitorar())) return '<div style="padding:20px;color:'+Co.red+'">Acesso restrito.</div>';
+    if(!_cMes) _cMes=hoje().slice(0,7);
+    var depts=ehMaster()?DEPTS_TODOS.slice():deptsPermitidos();
+    if(_cDept && depts.indexOf(_cDept)<0) _cDept='';
+    var doMes=(_mons||[]).filter(function(m){ return mesDe(m)===_cMes && (podeVer(m.consultor)||String(m.monitor||'').toUpperCase()===meu()); });
+    var com={}; doMes.forEach(function(m){ com[String(m.consultor||'').toUpperCase()]=1; });
+    var gente=consultoresVisiveis().filter(function(u){ var L=login(u); return !ehCargoGestao(u) || com[L]; })
+      .filter(function(u){ return !_cDept || deptDe(login(u))===_cDept; });
+    var cols=[]; ['voz','whats'].forEach(function(t){ for(var c=1;c<=TIPOS[t].ciclos;c++) cols.push([t,c]); });
+    var feitos={}, totF=0;
+    cols.forEach(function(k){ feitos[k[0]+k[1]]=0; });
+    var linhas=gente.map(function(u){
+      var L=login(u), notas=[], qtd=0;
+      var tds=cols.map(function(k){
+        var ms=noCiclo(L,_cMes,k[0],k[1],null).filter(function(m){ return podeVer(m.consultor)||String(m.monitor||'').toUpperCase()===meu(); });
+        var fin=ms.filter(function(m){ return m.status==='finalizada'; }), m=fin[0]||ms[0];
+        var borda=(k[0]==='whats'&&k[1]===1)?('border-left:2px solid '+Co.line+';'):'';
+        if(!m){
+          return '<td style="padding:8px;text-align:center;'+borda+'">'+(podeMonitorar()&&podeVer(L)
+            ?'<button title="Aplicar '+rotCiclo(k[0],k[1])+'" onclick="__gwaMonNovaCiclo(&#39;'+esc(L)+'&#39;,&#39;'+k[0]+'&#39;,'+k[1]+',&#39;'+_cMes+'&#39;)" style="width:44px;height:34px;border-radius:9px;border:1px dashed '+Co.line+';background:transparent;color:'+Co.mut+';cursor:pointer;font-size:14px">+</button>'
+            :'<span style="color:'+Co.mut+'">—</span>')+'</td>';
+        }
+        if(m.status==='finalizada'){ feitos[k[0]+k[1]]++; totF++; qtd++; notas.push(Number(m.nota)||0); }
+        var corp=m.status==='finalizada'
+          ? '<b style="font-size:15px;color:'+corNota(m.nota)+'">'+n1(m.nota)+'</b>'
+          : '<span style="font-size:10.5px;color:'+Co.amarelo+';font-weight:800">rascunho</span>';
+        return '<td style="padding:8px;text-align:center;'+borda+'"><button onclick="__gwaMonAbrir(&#39;'+esc(m.id)+'&#39;)" title="'+esc(rotCiclo(k[0],k[1])+' · '+brData(m.atendimento&&m.atendimento.data)+' · monitor '+nomeDe(m.monitor))+'" style="min-width:52px;height:38px;border-radius:10px;border:1px solid '+(m.status==='finalizada'?corNota(m.nota)+'66':Co.line)+';background:'+(m.status==='finalizada'?corNota(m.nota)+'1c':Co.bgA)+';cursor:pointer;padding:0 8px">'+corp+
+          (fbLib(m)&&!(m.ciencia&&m.ciencia.em)?'<i class="fas fa-hourglass-half" title="sem ciência" style="color:'+Co.orangeL+';font-size:9px;margin-left:4px"></i>':'')+'</button></td>';
+      }).join('');
+      var med=notas.length?notas.reduce(function(a,b){return a+b;},0)/notas.length:null;
+      return '<tr style="border-top:1px solid '+Co.line+'"><td style="padding:10px 12px;white-space:nowrap"><div style="color:#fff;font-weight:700;font-size:13px">'+esc(u.nome||u.login)+'</div>'+
+        '<div style="font-size:10.5px;color:'+Co.mut+'">'+esc(rotDept(deptDe(L)))+'</div></td>'+tds+
+        '<td style="padding:8px 12px;text-align:center;color:'+(qtd===cols.length?Co.green:Co.sub)+';font-weight:800">'+qtd+'/'+cols.length+'</td>'+
+        '<td style="padding:8px 12px;text-align:center;font-weight:900;color:'+(med==null?Co.mut:corNota(med))+'">'+(med==null?'—':n1(med))+'</td></tr>';
+    }).join('');
+    var tot=gente.length, esperado=tot*cols.length;
+    var resumo='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">'+
+      card('Ciclos feitos no mês',totF+' / '+esperado,esperado?Math.round(totF/esperado*100)+'% concluído':'sem consultores',totF>=esperado&&esperado?Co.green:Co.orangeL)+
+      cols.map(function(k){ var f=feitos[k[0]+k[1]];
+        return card(rotCiclo(k[0],k[1]),f+' / '+tot,f>=tot&&tot?'completo':(tot-f)+' faltando',TIPOS[k[0]].cor); }).join('')+'</div>';
+    var p=_cMes.split('-');
+    var topo='<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px">'+
+      '<button onclick="__gwaMonCMes(-1)" style="width:38px;height:38px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;cursor:pointer"><i class="fas fa-chevron-left"></i></button>'+
+      '<div style="min-width:170px;text-align:center;font-size:17px;font-weight:900;color:#fff">'+esc(rotMes(_cMes))+'</div>'+
+      '<button onclick="__gwaMonCMes(1)" style="width:38px;height:38px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;cursor:pointer"><i class="fas fa-chevron-right"></i></button>'+
+      (_cMes!==hoje().slice(0,7)?btn('Mês atual','__gwaMonCMes(0)','ghost'):'')+
+      (depts.length>1?('<select onchange="__gwaMonCDept(this.value)" style="margin-left:auto;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff"><option value="">Todos os departamentos</option>'+
+        depts.map(function(d){ return '<option value="'+d+'"'+(_cDept===d?' selected':'')+'>'+esc(rotDept(d))+'</option>'; }).join('')+'</select>'):'')+'</div>';
+    var th='<th style="padding:11px 8px;font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px;text-align:center;white-space:nowrap">';
+    var tabela=gente.length
+      ? '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:auto"><table style="width:100%;border-collapse:collapse;min-width:760px">'+
+        '<thead><tr style="background:'+Co.card2+'"><th style="padding:11px 12px;font-size:11px;color:'+Co.mut+';text-transform:uppercase;text-align:left">Consultor</th>'+
+        cols.map(function(k){ return '<th style="padding:11px 8px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;text-align:center;white-space:nowrap;color:'+TIPOS[k[0]].cor+';'+((k[0]==='whats'&&k[1]===1)?('border-left:2px solid '+Co.line):'')+'"><i class="fas '+TIPOS[k[0]].ic+'"></i> '+rotCiclo(k[0],k[1])+'</th>'; }).join('')+
+        th+'Feitos</th>'+th+'Média</th></tr></thead><tbody>'+linhas+'</tbody></table></div>'
+      : '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:34px;text-align:center;color:'+Co.mut+'">Nenhum consultor no seu acesso'+(_cDept?' neste departamento':'')+'.</div>';
+    var semCic=doMes.filter(function(m){ return !cicloDe(m); });
+    var podeDef=ehMaster()||podeMonitorar();
+    var semBox=semCic.length?sec('Monitorias deste mês sem ciclo definido','fa-circle-question',
+      '<div style="background:'+Co.card+';border:1px solid '+Co.orangeD+';border-radius:16px;overflow:hidden">'+
+      '<div style="padding:11px 15px;font-size:12px;color:'+Co.sub+';border-bottom:1px solid '+Co.line+'">Foram aplicadas antes da separação por ciclos. '+(podeDef?'Escolha o ciclo de cada uma — só esse campo muda, a nota continua a mesma.':'O monitor ou o Master define o ciclo.')+'</div>'+
+      semCic.map(function(m){
+        var opc=''; ['voz','whats'].forEach(function(t){ for(var c=1;c<=TIPOS[t].ciclos;c++){
+          var ja=noCiclo(String(m.consultor).toUpperCase(),_cMes,t,c,m.id).length;
+          opc+='<option value="'+t+c+'"'+((t===tipoDe(m)&&!ja&&opc.indexOf('selected')<0)?' selected':'')+'>'+rotCiclo(t,c)+(ja?' (já tem)':'')+'</option>'; } });
+        return '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:11px 15px;border-bottom:1px solid '+Co.line+'">'+
+          '<div style="flex:1;min-width:180px"><div style="color:#fff;font-weight:700;font-size:13px">'+esc(nomeDe(m.consultor))+'</div>'+
+          '<div style="font-size:11.5px;color:'+Co.mut+'">'+brData(m.atendimento&&m.atendimento.data)+' · '+esc((m.atendimento&&m.atendimento.canal)||'')+' · nota '+n1(m.nota)+' · monitor '+esc(nomeDe(m.monitor))+'</div></div>'+
+          (podeDef?('<select id="dc_'+esc(m.id)+'" style="padding:9px 11px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff">'+opc+'</select>'+
+            btn('Salvar','__gwaMonDefCiclo(&#39;'+esc(m.id)+'&#39;)')):'')+
+          btn('<i class="fas fa-eye"></i>','__gwaMonAbrir(&#39;'+esc(m.id)+'&#39;)','ghost')+'</div>'; }).join('')+'</div>'):'';
+    return topo+resumo+semBox+sec('Ciclos por consultor','fa-arrows-rotate',tabela,
+      '<span style="font-size:11.5px;color:'+Co.mut+'">Voz: 4 ciclos no mês · WhatsApp: 2 ciclos no mês</span>');
+  }
+  window.__gwaMonCMes=function(d){
+    if(!d){ _cMes=hoje().slice(0,7); desenhar(); return; }
+    var p=(_cMes||hoje().slice(0,7)).split('-'), dt_=new Date(+p[0],+p[1]-1+d,1);
+    _cMes=dt_.getFullYear()+'-'+String(dt_.getMonth()+1).padStart(2,'0'); desenhar();
+  };
+  window.__gwaMonCDept=function(v){ _cDept=v||''; desenhar(); };
+  window.__gwaMonDefCiclo=async function(id){
+    var m=(_mons||[]).filter(function(x){return x.id===id;})[0]; if(!m) return;
+    if(!(ehMaster()||podeMonitorar())){ alert('Só o monitor ou o Master define o ciclo.'); return; }
+    var v=gv('dc_'+id), t=v.indexOf('whats')===0?'whats':'voz', c=Number(v.replace(/\D/g,''))||0;
+    if(!c) return;
+    m.tipoMon=t; m.ciclo=c; m.cicloMes=mesDe(m);
+    m.hist=(m.hist||[]).concat([{em:Date.now(),quem:meu(),quemNome:meuNome(),oque:'definiu o ciclo: '+rotCiclo(t,c)+' de '+rotMes(m.cicloMes)}]);
+    var ok=await salvarMon(m);
+    if(!ok) alert('Não consegui salvar o ciclo.');
+    desenhar();
+  };
+
+  /* ---------- aba ACESSOS (so o Master) ---------- */
+  var NIVEIS=[['nenhum','Sem acesso'],['monitor','Monitor'],['supervisor','Supervisor']];
+  function pessoasAcesso(){
+    var vistos={}, out=[];
+    usuarios().forEach(function(u){
+      var L=login(u), r=String(u.role||'').toLowerCase();
+      if(!L || L==='TALIS' || r==='master' || vistos[L]) return;
+      if(ehCargoGestao(u) || (_cfg.acessos&&_cfg.acessos[L]) || (_cfg.monitores||[]).indexOf(L)>=0 ||
+         (_cfg.verNps||[]).indexOf(L)>=0 || _acExtra.indexOf(L)>=0){ vistos[L]=1; out.push(u); }
+    });
+    return out.sort(function(a,b){ return String(a.nome||a.login).localeCompare(String(b.nome||b.login)); });
+  }
+  function acessoSugerido(L){
+    var a=_cfg.acessos&&_cfg.acessos[L];
+    if(a) return {nivel:a.nivel||'nenhum', cargo:a.cargo||'', depts:(a.depts||[]).slice()};
+    var pd=(_cfgV&&_cfgV.permissoesDept&&_cfgV.permissoesDept[L])||{}, ds=[];
+    if(pd.admComercial) ds.push('comercial'); if(pd.admNegociacao) ds.push('negociacao');
+    if(!ds.length){ var d=deptDe(L); if(d) ds.push(d); }
+    var aplicou=(_mons||[]).some(function(m){ return String(m.monitor||'').toUpperCase()===L; }) || (_cfg.monitores||[]).indexOf(L)>=0;
+    var u=usuario(L);
+    var nivel=aplicou?'monitor':((ehCargoGestao(u)&&ds.length)?'supervisor':'nenhum');
+    return {nivel:nivel, cargo:'', depts:ds};
+  }
+  function colherAcessos(){
+    if(!_acDraft) return;
+    Array.prototype.forEach.call(document.querySelectorAll('.acLinha'),function(tr){
+      var L=tr.getAttribute('data-l'); if(!L) return;
+      var d=_acDraft[L]||(_acDraft[L]={});
+      d.nivel=String((tr.querySelector('.acNivel')||{}).value||'nenhum');
+      d.cargo=String((tr.querySelector('.acCargo')||{}).value||'').trim();
+      d.depts=Array.prototype.filter.call(tr.querySelectorAll('.acDept'),function(c){ return c.checked; }).map(function(c){ return c.value; });
+      d.nps=!!(tr.querySelector('.acNps')||{}).checked;
+    });
+  }
+  function viewAcessos(){
+    if(!ehMaster()) return '<div style="padding:20px;color:'+Co.red+'">Só o Master define os acessos.</div>';
+    var gente=pessoasAcesso();
+    if(!_acDraft){ _acDraft={}; }
+    gente.forEach(function(u){ var L=login(u); if(!_acDraft[L]){ var s=acessoSugerido(L); s.nps=(_cfg.verNps||[]).indexOf(L)>=0; _acDraft[L]=s; } });
+    var ativo=!!_cfg.acessosAtivo;
+    var aviso=ativo
+      ? '<div style="background:rgba(63,174,90,.1);border:1px solid rgba(63,174,90,.45);border-radius:14px;padding:12px 16px;margin-bottom:14px;font-size:12.5px;color:#bfe8c8"><i class="fas fa-circle-check"></i> Os acessos abaixo estão valendo. Quem estiver como <b>Sem acesso</b> vê só as próprias monitorias.</div>'
+      : '<div style="background:#2a1f14;border:1px solid '+Co.orangeD+';border-radius:14px;padding:12px 16px;margin-bottom:14px;font-size:12.5px;color:'+Co.sub+'"><b style="color:'+Co.orangeL+'"><i class="fas fa-circle-info"></i> Ainda vale a regra antiga</b> (todo admin vê o próprio departamento, pelo Vendas › Ajustes). Os níveis abaixo já vêm sugeridos a partir de hoje — confira e clique em <b>Salvar acessos</b> para passarem a valer.</div>';
+    var legenda='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-bottom:16px">'+
+      [['Supervisor','fa-user-tie',Co.blue,'Vê todas as monitorias, ciclos, dashboard e relatórios dos departamentos marcados e acompanha a ciência. Não aplica monitoria.'],
+       ['Monitor','fa-headset',Co.orangeL,'Aplica monitorias nos departamentos marcados e vê todas as monitorias deles.'],
+       ['Sem acesso','fa-user',Co.mut,'Vê só as próprias monitorias, como consultor.'],
+       ['Relatório de NPS','fa-face-smile',Co.roxo,'Libera a aba Relatório de NPS (dos departamentos marcados).']].map(function(x){
+        return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-left:4px solid '+x[2]+';border-radius:12px;padding:11px 14px">'+
+          '<div style="font-weight:800;color:#fff;font-size:13px"><i class="fas '+x[1]+'" style="color:'+x[2]+';margin-right:6px"></i>'+x[0]+'</div>'+
+          '<div style="font-size:11.5px;color:'+Co.mut+';margin-top:3px;line-height:1.45">'+x[3]+'</div></div>'; }).join('')+'</div>';
+    var inS='padding:9px 11px;border-radius:9px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff;font-size:13px;box-sizing:border-box';
+    var linhas=gente.map(function(u){
+      var L=login(u), d=_acDraft[L]||{};
+      var cor=d.nivel==='supervisor'?Co.blue:(d.nivel==='monitor'?Co.orangeL:Co.line);
+      return '<div class="acLinha" data-l="'+esc(L)+'" style="display:grid;grid-template-columns:minmax(170px,1.2fr) 150px minmax(150px,1fr) minmax(250px,1.6fr) 120px;gap:10px;align-items:center;padding:11px 14px;border-bottom:1px solid '+Co.line+';border-left:3px solid '+cor+'">'+
+        '<div style="min-width:0"><div style="color:#fff;font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u.nome||u.login)+'</div>'+
+          '<div style="font-size:10.5px;color:'+Co.mut+'">'+esc(L)+' · '+esc(u.role||'usuário')+'</div></div>'+
+        '<select class="acNivel" style="'+inS+';width:100%">'+NIVEIS.map(function(n){ return '<option value="'+n[0]+'"'+(d.nivel===n[0]?' selected':'')+'>'+n[1]+'</option>'; }).join('')+'</select>'+
+        '<input class="acCargo" value="'+esc(d.cargo||'')+'" placeholder="Cargo (ex.: Supervisor comercial)" style="'+inS+';width:100%">'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">'+DEPTS_TODOS.map(function(dp){ var on=(d.depts||[]).indexOf(dp)>=0;
+          return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:'+(on?'#fff':Co.sub)+';background:'+(on?'rgba(224,120,32,.16)':Co.bgA)+';border:1px solid '+(on?Co.orangeD:Co.line)+';border-radius:9px;padding:6px 9px;cursor:pointer">'+
+            '<input type="checkbox" class="acDept" value="'+dp+'"'+(on?' checked':'')+' style="accent-color:'+Co.orange+'">'+esc(rotDept(dp))+'</label>'; }).join('')+'</div>'+
+        '<label style="display:inline-flex;align-items:center;gap:7px;font-size:12px;color:'+(d.nps?'#fff':Co.sub)+';cursor:pointer"><input type="checkbox" class="acNps"'+(d.nps?' checked':'')+' style="width:16px;height:16px;accent-color:'+Co.roxo+'"> NPS</label>'+
+        '</div>';
+    }).join('');
+    var outros=usuarios().filter(function(u){ var L=login(u); return L && L!=='TALIS' && !gente.some(function(g){ return login(g)===L; }) && String(u.role||'').toLowerCase()!=='master'; })
+      .sort(function(a,b){ return String(a.nome||a.login).localeCompare(String(b.nome||b.login)); });
+    var cab='<div style="display:grid;grid-template-columns:minmax(170px,1.2fr) 150px minmax(150px,1fr) minmax(250px,1.6fr) 120px;gap:10px;padding:10px 14px;background:'+Co.card2+';font-size:10.5px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px;font-weight:800">'+
+      '<div>Pessoa</div><div>Nível</div><div>Cargo</div><div>Departamento(s)</div><div>Relatório NPS</div></div>';
+    return aviso+legenda+
+      sec('Acessos da monitoria','fa-user-shield',
+        '<div class="gwaAcTabela" style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:auto"><div style="min-width:880px">'+cab+linhas+'</div></div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px">'+
+          btn('<i class="fas fa-floppy-disk"></i> Salvar acessos','__gwaMonAcSalvar()')+
+          '<select id="acAddSel" style="'+inS+';min-width:220px"><option value="">Adicionar outra pessoa…</option>'+
+            outros.map(function(u){ return '<option value="'+esc(login(u))+'">'+esc(u.nome||u.login)+' ('+esc(login(u))+')</option>'; }).join('')+'</select>'+
+          btn('<i class="fas fa-plus"></i> Adicionar','__gwaMonAcAdd()','sec')+'</div>',
+        '<span style="font-size:11.5px;color:'+Co.mut+'">O Master (TALIS) sempre vê tudo</span>');
+  }
+  window.__gwaMonAcAdd=function(){
+    var L=String(gv('acAddSel')||'').toUpperCase(); if(!L) return;
+    colherAcessos(); if(_acExtra.indexOf(L)<0) _acExtra.push(L);
+    if(_acDraft && !_acDraft[L]) _acDraft[L]={nivel:'supervisor',cargo:'',depts:(deptDe(L)?[deptDe(L)]:[]),nps:false};
+    desenhar();
+  };
+  window.__gwaMonAcSalvar=async function(){
+    if(!ehMaster()){ alert('Só o Master define os acessos.'); return; }
+    colherAcessos();
+    var falta=Object.keys(_acDraft).filter(function(L){ var d=_acDraft[L]; return d.nivel!=='nenhum' && !(d.depts||[]).length; });
+    if(falta.length){ alert('Marque pelo menos um departamento para: '+falta.map(nomeDe).join(', ')); return; }
+    var ac={}, vn=(_cfg.verNps||[]).slice();
+    Object.keys(_acDraft).forEach(function(L){ var d=_acDraft[L];
+      ac[L]={nivel:d.nivel, cargo:d.cargo||'', depts:(d.depts||[]).slice(), em:Date.now(), por:meu()};
+      var i=vn.indexOf(L); if(d.nps && i<0) vn.push(L); if(!d.nps && i>=0) vn.splice(i,1); });
+    var antes=JSON.stringify({a:_cfg.acessos||{},v:_cfg.verNps||[],on:!!_cfg.acessosAtivo});
+    _cfg.acessos=ac; _cfg.verNps=vn; _cfg.acessosAtivo=true;
+    var resumo=Object.keys(ac).filter(function(L){ return ac[L].nivel!=='nenhum'; }).map(function(L){ return nomeDe(L)+': '+ac[L].nivel+' ('+ac[L].depts.map(rotDept).join('+')+')'; }).join('; ');
+    var ok=await salvarCfg('atualizou os acessos da monitoria'+(resumo?(' — '+resumo):''));
+    if(ok){ _acDraft=null; alert('Acessos salvos. Já valem para todo mundo.'); }
+    else { var x=JSON.parse(antes); _cfg.acessos=x.a; _cfg.verNps=x.v; _cfg.acessosAtivo=x.on; alert('Não consegui salvar. Confira a conexão e tente de novo.'); }
+    desenhar();
+  };
+
+  /* ---------- NPS no formato do formulario ---------- */
+  var NPS_ANTIGO={n1:'Qual é a probabilidade de você recomendar a forma como esta monitoria foi conduzida?',
+                  n2:'O quanto este feedback te ajudou a melhorar no próximo atendimento?'};
+  function normPerg(q){ q=q||{}; var t=(q.tipo==='escolha'||q.tipo==='texto')?q.tipo:'escala';
+    return {id:String(q.id||''), texto:String(q.texto||''), tipo:t, opcoes:(t==='escolha'?(q.opcoes||[]).slice():[]), outro:!!q.outro, obrig:q.obrig!==false}; }
+  function npsPerguntas(){ return ((_cfg.nps&&_cfg.nps.perguntas)||[]).map(normPerg); }
+  function npsRespondido(m){ return !!(m && ((m.nps&&Object.keys(m.nps).length)||(m.npsResp&&Object.keys(m.npsResp).length))); }
+  function perguntasDaResposta(m){
+    if(m && m.npsPerg && m.npsPerg.length) return m.npsPerg.map(normPerg);
+    return Object.keys((m&&m.nps)||{}).map(function(k){ return {id:k, texto:NPS_ANTIGO[k]||k, tipo:'escala', opcoes:[], outro:false, obrig:false, antigo:true}; });
+  }
+  function valorResp(m,q){
+    if(q.tipo==='escala'){ var v=(m.nps||{})[q.id]; return (v===undefined||v===null||v==='')?null:Number(v); }
+    var r=(m.npsResp||{})[q.id]; return (r===undefined||r===null||String(r).trim()==='')?null:String(r);
+  }
+  function corEscala(i){ return i>=9?Co.green:(i>=7?Co.amarelo:Co.red); }
+  function npsBloco(m){
+    if(!(_cfg.nps&&_cfg.nps.ativo)) return '';
+    var respondeu=npsRespondido(m), podeResp=podeResponderNps(m);
+    if(!respondeu && !podeResp) return '';
+    if(respondeu && !podeResp && !podeVerNps(m)) return '';
+    var editando=podeResp && (!respondeu || _npsEdit[m.id]);
+    var titulo='<div style="height:10px;background:'+Co.gradO+'"></div>'+
+      '<div style="padding:18px 22px 14px;border-bottom:1px solid '+Co.line+'">'+
+      '<div style="font-size:22px;font-weight:900;color:#fff">NPS da monitoria</div>'+
+      '<div style="font-size:12.5px;color:'+Co.mut+';margin-top:5px;line-height:1.5">'+
+        (podeResp?'Sua opinião sobre esta monitoria e o feedback que você recebeu. Serve para melhorar o trabalho da monitoria e <b>não</b> mexe na sua nota.'
+                 :'Avaliação feita pelo consultor sobre a monitoria e o feedback. Não tem relação com a nota técnica.')+'</div>'+
+      (editando?'<div style="font-size:11.5px;color:'+Co.red+';margin-top:8px">* Indica uma pergunta obrigatória</div>':'')+'</div>';
+    if(editando){
+      var ps=npsPerguntas();
+      var corpo=ps.map(function(q){
+        var v=respondeu?valorResp(m,q):null, nm='np_'+esc(m.id)+'_'+esc(q.id), inp_='';
+        if(q.tipo==='escala'){
+          var bs=''; for(var i=0;i<=10;i++){
+            bs+='<label class="gwaNpsEsc"><input type="radio" name="'+nm+'" value="'+i+'"'+(v===i?' checked':'')+'><span style="--c:'+corEscala(i)+'">'+i+'</span></label>'; }
+          inp_='<div style="display:flex;gap:5px;flex-wrap:wrap">'+bs+'</div>'+
+            '<div style="display:flex;justify-content:space-between;font-size:11px;color:'+Co.mut+';margin-top:6px;max-width:470px"><span>0 · nada provável</span><span>10 · com certeza</span></div>';
+        } else if(q.tipo==='escolha'){
+          var ehOutro=v!=null && q.opcoes.indexOf(v)<0;
+          inp_=q.opcoes.map(function(o){
+            return '<label class="gwaNpsOp"><input type="radio" name="'+nm+'" value="'+esc(o)+'"'+(v===o?' checked':'')+'><span>'+esc(o)+'</span></label>'; }).join('')+
+            (q.outro?('<label class="gwaNpsOp"><input type="radio" name="'+nm+'" value="__outro"'+(ehOutro?' checked':'')+'><span>Outro:</span>'+
+              '<input type="text" id="'+nm+'_outro" value="'+esc(ehOutro?String(v).replace(/^Outro:\s*/,''):'')+'" oninput="var r=document.querySelector(&#39;input[name=&quot;'+nm+'&quot;][value=&quot;__outro&quot;]&#39;);if(r)r.checked=true" class="gwaNpsLinha" style="flex:1;min-width:120px"></label>'):'');
+        } else {
+          inp_='<input type="text" id="'+nm+'" value="'+esc(v||'')+'" placeholder="Sua resposta" class="gwaNpsLinha" style="width:100%;max-width:560px">';
+        }
+        return '<div class="gwaNpsCard" id="npc_'+esc(m.id)+'_'+esc(q.id)+'">'+
+          '<div style="font-size:14.5px;color:#fff;font-weight:600;margin-bottom:12px;line-height:1.45">'+esc(q.texto)+(q.obrig?' <span style="color:'+Co.red+'">*</span>':'')+'</div>'+inp_+
+          '<div class="gwaNpsErro"><i class="fas fa-circle-exclamation"></i> Esta pergunta é obrigatória</div></div>';
+      }).join('');
+      return sec('O consultor avalia a monitoria e o feedback','fa-face-smile',
+        '<div style="background:'+Co.card+';border:1px solid '+Co.roxo+';border-radius:16px;overflow:hidden">'+titulo+
+        '<div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">'+corpo+'</div>'+
+        '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:4px 16px 18px">'+
+          '<div style="display:flex;gap:10px;flex-wrap:wrap">'+btn('<i class="fas fa-paper-plane"></i> Enviar','__gwaMonNpsEnviar(&#39;'+esc(m.id)+'&#39;)')+
+          (respondeu?btn('Cancelar','__gwaMonNpsEditar(&#39;'+esc(m.id)+'&#39;,0)','ghost'):'')+'</div>'+
+          btn('Limpar formulário','__gwaMonNpsLimpar(&#39;'+esc(m.id)+'&#39;)','ghost')+'</div></div>');
+    }
+    var n=npsDe([m]);
+    var ps2=perguntasDaResposta(m);
+    var lista=ps2.map(function(q){
+      var v=valorResp(m,q), val;
+      if(v==null) val='<span style="color:'+Co.mut+'">sem resposta</span>';
+      else if(q.tipo==='escala') val='<span style="display:inline-flex;align-items:center;justify-content:center;min-width:38px;height:34px;border-radius:9px;background:'+corEscala(v)+';color:#fff;font-weight:900">'+v+'</span>';
+      else val='<span style="color:#fff;font-size:13.5px;white-space:pre-wrap">'+esc(v)+'</span>';
+      return '<div style="padding:11px 0;border-bottom:1px solid '+Co.line+'"><div style="font-size:12.5px;color:'+Co.mut+';margin-bottom:6px">'+esc(q.texto)+'</div>'+val+'</div>';
+    }).join('');
+    return sec('O consultor avalia a monitoria e o feedback','fa-face-smile',
+      '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden">'+titulo+
+      '<div style="padding:6px 22px 16px">'+lista+
+      (m.npsComentario?('<div style="padding:11px 0;border-bottom:1px solid '+Co.line+'"><div style="font-size:12.5px;color:'+Co.mut+';margin-bottom:6px">Recado ao monitor</div><span style="color:#fff;font-size:13.5px;white-space:pre-wrap">'+esc(m.npsComentario)+'</span></div>'):'')+
+      '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding-top:12px">'+
+        (n?('<div style="font-size:12.5px;color:'+Co.mut+'">NPS desta resposta <b style="font-size:20px;color:'+corNps(n.nps)+';margin-left:6px">'+(n.nps>0?'+':'')+n.nps+'</b></div>'):'')+
+        '<div style="font-size:12px;color:'+Co.mut+'">'+(m.npsPorNome?('respondido por '+esc(m.npsPorNome)+(m.npsEm?(' em '+quando(m.npsEm)):'')):'')+'</div>'+
+        (podeResp?('<div style="margin-left:auto">'+btn('<i class="fas fa-pen"></i> Editar respostas','__gwaMonNpsEditar(&#39;'+esc(m.id)+'&#39;,1)','sec')+'</div>'):'')+
+      '</div></div></div>');
+  }
+  window.__gwaMonNpsEditar=function(id,on){ if(on) _npsEdit[id]=1; else delete _npsEdit[id]; desenhar(); };
+  window.__gwaMonNpsLimpar=function(id){
+    Array.prototype.forEach.call(document.querySelectorAll('input[name^="np_'+id+'_"],input[id^="np_'+id+'_"]'),function(e){
+      if(e.type==='radio') e.checked=false; else e.value=''; });
+    Array.prototype.forEach.call(document.querySelectorAll('[id^="npc_'+id+'_"]'),function(c){ c.classList.remove('erro'); });
+  };
+  window.__gwaMonNpsEnviar=async function(id){
+    var m=(_mons||[]).filter(function(x){return x.id===id;})[0]; if(!m) return;
+    if(!podeResponderNps(m)){ alert('Esta avaliação é do consultor que recebeu a monitoria.'); return; }
+    var ps=npsPerguntas(), nps={}, resp={}, faltou=null;
+    ps.forEach(function(q){
+      var nm='np_'+id+'_'+q.id, card_=document.getElementById('npc_'+id+'_'+q.id), v=null;
+      if(q.tipo==='texto'){ var e=document.getElementById(nm); v=e?String(e.value||'').trim():''; if(!v) v=null; }
+      else { var r=document.querySelector('input[name="'+nm+'"]:checked');
+        if(r){ if(r.value==='__outro'){ var o=document.getElementById(nm+'_outro'); var t=o?String(o.value||'').trim():''; v=t?('Outro: '+t):null; }
+               else v=r.value; } }
+      var ok=!(q.obrig && v==null);
+      if(card_) card_.classList.toggle('erro',!ok);
+      if(!ok && !faltou) faltou=card_;
+      if(v!=null){ if(q.tipo==='escala') nps[q.id]=Number(v); else resp[q.id]=v; }
+    });
+    if(faltou){ try{ faltou.scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} return; }
+    var antes={nps:m.nps,npsResp:m.npsResp,npsPerg:m.npsPerg,npsPor:m.npsPor,npsPorNome:m.npsPorNome,npsEm:m.npsEm};
+    m.nps=nps; m.npsResp=resp; m.npsPerg=ps; m.npsPor=meu(); m.npsPorNome=meuNome(); m.npsEm=Date.now();
+    var ok=await salvarMon(m);
+    if(ok){ delete _npsEdit[id]; desenhar(); alert('Obrigado! Sua resposta foi enviada.'); }
+    else { Object.assign(m,antes); alert('Não consegui enviar. Confira a conexão e tente de novo.'); }
+  };
+  window.__gwaMonNpsPadrao=function(){
+    if(!confirm('Trocar as perguntas de NPS pelo modelo padrão (5 perguntas, igual ao formulário do Google)?')) return;
+    colherForm();
+    _cfg.nps=_cfg.nps||{ativo:true};
+    _cfg.nps.perguntas=NPS_PADRAO.map(function(x){ return JSON.parse(JSON.stringify(x)); });
+    desenhar();
+  };
+
+  /* ---------- aba RELATORIO DE NPS ---------- */
+  function podeRelNps(){ return ehMaster() || (_cfg.verNps||[]).indexOf(meu())>=0; }
+  function npsEscopo(){
+    var a=_cfg.acessos&&_cfg.acessos[meu()];
+    var ds=(!ehMaster() && _cfg.acessosAtivo && a && (a.depts||[]).length)?a.depts:null;
+    return (_mons||[]).filter(function(m){
+      if(m.status!=='finalizada' || !npsRespondido(m)) return false;
+      var d=m.dept||deptDe(m.consultor);
+      if(ds && ds.indexOf(d)<0) return false;
+      if(_nDept && d!==_nDept) return false;
+      if(_nMon && String(m.monitor||'').toUpperCase()!==_nMon) return false;
+      if(_nTipo && tipoDe(m)!==_nTipo) return false;
+      var dd=dataMon(m);
+      if(_nDe){ var a1=dt(_nDe); if(a1&&dd&&dd<a1) return false; }
+      if(_nAte){ var b1=dt(_nAte); if(b1&&dd&&dd>new Date(b1.getFullYear(),b1.getMonth(),b1.getDate(),23,59,59)) return false; }
+      return true;
+    }).sort(function(a,b){ return (b.npsEm||b.ts||0)-(a.npsEm||a.ts||0); });
+  }
+  function grafEscala(q,lista){
+    var cont=[0,0,0,0,0,0,0,0,0,0,0], n=0, soma=0;
+    lista.forEach(function(m){ var v=valorResp(m,q); if(v==null||isNaN(v)) return; v=Math.max(0,Math.min(10,Math.round(v))); cont[v]++; n++; soma+=v; });
+    var mx=Math.max.apply(null,cont)||1;
+    var cols=cont.map(function(c,i){
+      var h=Math.round(c/mx*130);
+      return '<div style="flex:1;min-width:22px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px">'+
+        '<div style="font-size:11px;font-weight:800;color:'+(c?'#fff':Co.mut)+'">'+(c||'')+'</div>'+
+        '<div title="'+c+' resposta(s) com '+i+'" style="width:100%;max-width:34px;height:'+Math.max(c?6:2,h)+'px;border-radius:6px 6px 2px 2px;background:'+(c?corEscala(i):'rgba(255,255,255,.06)')+'"></div>'+
+        '<div style="font-size:11px;color:'+Co.sub+'">'+i+'</div></div>'; }).join('');
+    return {n:n, html:'<div style="display:flex;gap:6px;align-items:flex-end;height:175px;padding-top:4px">'+cols+'</div>'+
+      '<div style="font-size:12px;color:'+Co.mut+';margin-top:10px">Média <b style="color:#fff">'+(n?n1(soma/n):'—')+'</b> de 10</div>'};
+  }
+  function grafEscolha(q,lista){
+    var cont={}, outros=[], n=0;
+    q.opcoes.forEach(function(o){ cont[o]=0; });
+    lista.forEach(function(m){ var v=valorResp(m,q); if(v==null) return; n++;
+      if(q.opcoes.indexOf(v)>=0) cont[v]++; else { cont['Outro']=(cont['Outro']||0)+1; outros.push({t:String(v).replace(/^Outro:\s*/,''),m:m}); } });
+    var cores=['#3fae5a','#e3b341','#e5533c','#4a9fd5','#9b7bd4','#f0943a'];
+    var ks=Object.keys(cont);
+    var bar='<div style="display:flex;height:16px;border-radius:20px;overflow:hidden;background:rgba(255,255,255,.06);margin-bottom:14px">'+
+      ks.map(function(k,i){ var p=n?cont[k]/n*100:0; return p?('<div title="'+esc(k)+'" style="width:'+p+'%;background:'+cores[i%cores.length]+'"></div>'):''; }).join('')+'</div>';
+    var linhas=ks.map(function(k,i){ var p=n?Math.round(cont[k]/n*100):0;
+      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px"><span style="width:12px;height:12px;border-radius:50%;background:'+cores[i%cores.length]+';flex-shrink:0"></span>'+
+        '<span style="flex:1;color:'+Co.sub+';font-size:13px">'+esc(k)+'</span>'+
+        '<div style="flex:2;height:9px;border-radius:20px;background:rgba(255,255,255,.06);overflow:hidden;max-width:260px"><div style="height:100%;width:'+p+'%;background:'+cores[i%cores.length]+'"></div></div>'+
+        '<b style="color:#fff;font-size:13px;min-width:74px;text-align:right">'+cont[k]+' · '+p+'%</b></div>'; }).join('');
+    var outrosH=outros.length?('<div style="margin-top:8px;font-size:11.5px;color:'+Co.mut+'">Respostas em “Outro”:</div>'+
+      outros.map(function(o){ return '<div style="font-size:12.5px;color:'+Co.sub+';padding:6px 10px;background:'+Co.bgA+';border-radius:8px;margin-top:5px">'+esc(o.t)+'</div>'; }).join('')):'';
+    return {n:n, html:bar+linhas+outrosH};
+  }
+  function grafTexto(q,lista){
+    var r=lista.map(function(m){ return {v:valorResp(m,q),m:m}; }).filter(function(x){ return x.v!=null; });
+    return {n:r.length, html:r.length?('<div style="max-height:330px;overflow:auto;display:flex;flex-direction:column;gap:7px">'+
+      r.map(function(x){ return '<div style="background:'+Co.bgA+';border:1px solid '+Co.line+';border-radius:10px;padding:10px 13px">'+
+        '<div style="color:#fff;font-size:13px;white-space:pre-wrap;line-height:1.45">'+esc(x.v)+'</div>'+
+        '<div style="font-size:10.5px;color:'+Co.mut+';margin-top:5px">'+esc(nomeDe(x.m.consultor))+' · monitor '+esc(nomeDe(x.m.monitor))+' · '+brData(x.m.atendimento&&x.m.atendimento.data)+'</div></div>'; }).join('')+'</div>')
+      :'<div style="color:'+Co.mut+';font-size:12.5px">Nenhuma resposta ainda.</div>'};
+  }
+  function viewNpsRel(){
+    if(!podeRelNps()) return '<div style="padding:20px;color:'+Co.red+'">O Master ainda não liberou o Relatório de NPS para você.</div>';
+    var lista=npsEscopo(), total=lista.length, n=npsDe(lista);
+    var mons=[]; (_mons||[]).forEach(function(m){ var L=String(m.monitor||'').toUpperCase(); if(L&&npsRespondido(m)&&!mons.some(function(x){return x.v===L;})) mons.push({v:L,t:nomeDe(L)}); });
+    var a=_cfg.acessos&&_cfg.acessos[meu()];
+    var depts=(ehMaster()||!_cfg.acessosAtivo||!a||!(a.depts||[]).length)?DEPTS_TODOS:a.depts;
+    var sS='width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.bgA+';color:#fff';
+    function lb(t){ return '<label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">'+t+'</label>'; }
+    var filtros='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:14px 16px;margin-bottom:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;align-items:end">'+
+      '<div>'+lb('De')+'<input type="date" value="'+esc(_nDe)+'" onchange="__gwaMonNF(&#39;de&#39;,this.value)" style="'+sS+'"></div>'+
+      '<div>'+lb('Até')+'<input type="date" value="'+esc(_nAte)+'" onchange="__gwaMonNF(&#39;ate&#39;,this.value)" style="'+sS+'"></div>'+
+      '<div>'+lb('Monitor')+'<select onchange="__gwaMonNF(&#39;mon&#39;,this.value)" style="'+sS+'"><option value="">Todos</option>'+mons.map(function(o){ return '<option value="'+esc(o.v)+'"'+(_nMon===o.v?' selected':'')+'>'+esc(o.t)+'</option>'; }).join('')+'</select></div>'+
+      '<div>'+lb('Departamento')+'<select onchange="__gwaMonNF(&#39;dept&#39;,this.value)" style="'+sS+'"><option value="">Todos</option>'+depts.map(function(d){ return '<option value="'+d+'"'+(_nDept===d?' selected':'')+'>'+esc(rotDept(d))+'</option>'; }).join('')+'</select></div>'+
+      '<div>'+lb('Tipo')+'<select onchange="__gwaMonNF(&#39;tipo&#39;,this.value)" style="'+sS+'"><option value="">Voz e WhatsApp</option><option value="voz"'+(_nTipo==='voz'?' selected':'')+'>Voz</option><option value="whats"'+(_nTipo==='whats'?' selected':'')+'>WhatsApp</option></select></div>'+
+      '<button onclick="__gwaMonNF(&#39;limpar&#39;,&#39;&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:10px;padding:10px 14px;cursor:pointer">Limpar</button></div>';
+    var cab='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden;margin-bottom:16px">'+
+      '<div style="height:10px;background:'+Co.gradO+'"></div>'+
+      '<div style="padding:18px 22px;display:flex;gap:22px;flex-wrap:wrap;align-items:center">'+
+      '<div style="flex:1;min-width:220px"><div style="font-size:22px;font-weight:900;color:#fff">NPS MONITORIA</div>'+
+        '<div style="font-size:30px;font-weight:900;color:'+Co.orangeL+';margin-top:6px">'+total+' <span style="font-size:15px;color:'+Co.sub+';font-weight:700">resposta'+(total===1?'':'s')+'</span></div></div>'+
+      (n?('<div style="text-align:center"><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px;font-weight:800">NPS</div>'+
+        '<div style="font-size:42px;font-weight:900;color:'+corNps(n.nps)+';line-height:1.1">'+(n.nps>0?'+':'')+n.nps+'</div>'+
+        '<div style="font-size:11.5px;color:'+Co.mut+'">'+faixaNps(n.nps)+'</div></div>'+
+        '<div style="flex:1;min-width:240px">'+
+          [['Promotores (9-10)',n.promotores,Co.green],['Neutros (7-8)',n.neutros,Co.amarelo],['Detratores (0-6)',n.detratores,Co.red]].map(function(x){
+            var p=n.respostas?Math.round(x[1]/n.respostas*100):0;
+            return '<div style="display:flex;align-items:center;gap:9px;margin-bottom:7px"><span style="flex:0 0 120px;font-size:12px;color:'+Co.sub+'">'+x[0]+'</span>'+
+              '<div style="flex:1;height:9px;border-radius:20px;background:rgba(255,255,255,.06);overflow:hidden"><div style="height:100%;width:'+p+'%;background:'+x[2]+'"></div></div>'+
+              '<b style="font-size:12px;color:#fff;min-width:58px;text-align:right">'+x[1]+' · '+p+'%</b></div>'; }).join('')+'</div>'):'')+
+      '</div>'+
+      '<div style="display:flex;gap:4px;padding:0 16px;border-top:1px solid '+Co.line+'">'+
+        [['resumo','Resumo'],['individual','Individual'],['monitor','Por monitor']].map(function(t){ var on=_npsVista===t[0];
+          return '<button onclick="__gwaMonNF(&#39;vista&#39;,&#39;'+t[0]+'&#39;)" style="padding:12px 16px;border:none;background:transparent;cursor:pointer;font-weight:800;font-size:13px;color:'+(on?Co.orangeL:Co.mut)+';border-bottom:3px solid '+(on?Co.orange:'transparent')+'">'+t[1]+'</button>'; }).join('')+
+        '<div style="margin-left:auto;display:flex;align-items:center">'+btn('<i class="fas fa-file-excel"></i> Excel','__gwaMonNpsExcel()','sec')+'</div>'+
+      '</div></div>';
+    if(!total) return filtros+cab+'<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:40px;text-align:center;color:'+Co.mut+'">Nenhuma resposta de NPS '+((_nDe||_nAte||_nMon||_nDept||_nTipo)?'com esses filtros':'ainda')+'.</div>';
+    var corpo='';
+    if(_npsVista==='individual'){
+      corpo=lista.map(function(m){
+        return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px;margin-bottom:12px">'+
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
+          '<div style="flex:1;min-width:200px"><div style="color:#fff;font-weight:800">'+esc(nomeDe(m.consultor))+'</div>'+
+          '<div style="font-size:11.5px;color:'+Co.mut+'">monitor '+esc(nomeDe(m.monitor))+' · monitoria de '+brData(m.atendimento&&m.atendimento.data)+(m.npsEm?(' · respondido em '+quando(m.npsEm)):'')+'</div></div>'+
+          cicloChip(m)+btn('<i class="fas fa-eye"></i> Monitoria','__gwaMonAbrir(&#39;'+esc(m.id)+'&#39;)','ghost')+'</div>'+
+          perguntasDaResposta(m).map(function(q){ var v=valorResp(m,q);
+            return '<div style="padding:9px 0;border-top:1px solid '+Co.line+'"><div style="font-size:12px;color:'+Co.mut+'">'+esc(q.texto)+'</div>'+
+              '<div style="margin-top:4px;color:'+(v==null?Co.mut:'#fff')+';font-size:13.5px;white-space:pre-wrap">'+
+              (v==null?'sem resposta':(q.tipo==='escala'?('<b style="color:'+corEscala(v)+';font-size:16px">'+v+'</b> de 10'):esc(v)))+'</div></div>'; }).join('')+
+          (m.npsComentario?('<div style="padding:9px 0;border-top:1px solid '+Co.line+'"><div style="font-size:12px;color:'+Co.mut+'">Recado ao monitor</div><div style="margin-top:4px;color:#fff;font-size:13.5px;white-space:pre-wrap">'+esc(m.npsComentario)+'</div></div>'):'')+
+          '</div>'; }).join('');
+    } else if(_npsVista==='monitor'){
+      var g={}; lista.forEach(function(m){ var L=String(m.monitor||'').toUpperCase(); (g[L]=g[L]||[]).push(m); });
+      var ls=Object.keys(g).map(function(L){ return {L:L,n:npsDe(g[L]),q:g[L].length}; }).sort(function(a,b){ return ((b.n&&b.n.nps)||-999)-((a.n&&a.n.nps)||-999); });
+      corpo='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:auto"><table style="width:100%;border-collapse:collapse;min-width:520px">'+
+        '<thead><tr style="background:'+Co.card2+'">'+['Monitor','Respostas','NPS','Média (0-10)','Promotores','Detratores'].map(function(t,i){ return '<th style="padding:11px 12px;font-size:11px;color:'+Co.mut+';text-transform:uppercase;text-align:'+(i?'center':'left')+'">'+t+'</th>'; }).join('')+'</tr></thead><tbody>'+
+        ls.map(function(x){ return '<tr style="border-top:1px solid '+Co.line+'"><td style="padding:11px 12px;color:#fff;font-weight:700">'+esc(nomeDe(x.L))+'</td>'+
+          '<td style="text-align:center;color:'+Co.sub+'">'+x.q+'</td>'+
+          '<td style="text-align:center;font-weight:900;color:'+(x.n?corNps(x.n.nps):Co.mut)+'">'+(x.n?((x.n.nps>0?'+':'')+x.n.nps):'—')+'</td>'+
+          '<td style="text-align:center;color:#fff">'+(x.n?n1(x.n.media):'—')+'</td>'+
+          '<td style="text-align:center;color:'+Co.green+'">'+(x.n?x.n.promotores:0)+'</td>'+
+          '<td style="text-align:center;color:'+Co.red+'">'+(x.n?x.n.detratores:0)+'</td></tr>'; }).join('')+'</tbody></table></div>';
+    } else {
+      var ps=npsPerguntas();
+      var antigas=lista.filter(function(m){ return !(m.npsPerg&&m.npsPerg.length) && m.nps && m.nps.n2!=null; });
+      corpo=ps.map(function(q){
+        var r=q.tipo==='escala'?grafEscala(q,lista):(q.tipo==='escolha'?grafEscolha(q,lista):grafTexto(q,lista));
+        return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px 20px;margin-bottom:14px">'+
+          '<div style="font-size:15px;color:#fff;font-weight:700;line-height:1.4">'+esc(q.texto)+'</div>'+
+          '<div style="font-size:12px;color:'+Co.mut+';margin:4px 0 14px">'+r.n+' resposta'+(r.n===1?'':'s')+'</div>'+r.html+'</div>'; }).join('')+
+        (antigas.length?('<div style="background:'+Co.card+';border:1px dashed '+Co.line+';border-radius:16px;padding:18px 20px;margin-bottom:14px">'+
+          '<div style="font-size:14px;color:'+Co.sub+';font-weight:700">'+esc(NPS_ANTIGO.n2)+'</div>'+
+          '<div style="font-size:12px;color:'+Co.mut+';margin:4px 0 14px">pergunta do formato antigo · '+antigas.length+' resposta(s)</div>'+
+          grafEscala({id:'n2',tipo:'escala'},antigas).html+'</div>'):'');
+    }
+    return filtros+cab+corpo;
+  }
+  window.__gwaMonNF=function(k,v){
+    if(k==='de')_nDe=v; else if(k==='ate')_nAte=v; else if(k==='mon')_nMon=v; else if(k==='dept')_nDept=v;
+    else if(k==='tipo')_nTipo=v; else if(k==='vista')_npsVista=v;
+    else if(k==='limpar'){ _nDe='';_nAte='';_nMon='';_nDept='';_nTipo=''; }
+    desenhar();
+  };
+  window.__gwaMonNpsExcel=function(){
+    if(!podeRelNps()) return;
+    var lista=npsEscopo(), ps=npsPerguntas();
+    function c(v){ return '<td>'+esc(v==null?'':v)+'</td>'; }
+    var cab=['Respondido em','Consultor','Departamento','Monitor','Tipo','Ciclo','Mês do ciclo','Data da monitoria','Nota técnica'].concat(ps.map(function(q){ return q.texto; })).concat(['Classificação NPS']);
+    var linhas=lista.map(function(m){
+      var e=npsDe([m]), v0=ps.filter(function(q){return q.tipo==='escala';})[0], nv=v0?valorResp(m,v0):null;
+      return '<tr>'+c(m.npsEm?quando(m.npsEm):'')+c(nomeDe(m.consultor))+c(rotDept(m.dept||deptDe(m.consultor)))+c(nomeDe(m.monitor))+
+        c(TIPOS[tipoDe(m)].nome)+c(cicloDe(m)||'')+c(rotMes(mesDe(m)))+c(brData(m.atendimento&&m.atendimento.data))+c(n1(m.nota))+
+        ps.map(function(q){ return c(valorResp(m,q)); }).join('')+
+        c(nv==null?'':(nv>=9?'Promotor':(nv>=7?'Neutro':'Detrator')))+'</tr>'; }).join('');
+    var html='<html><head><meta charset="utf-8"></head><body><table border="1"><tr>'+cab.map(function(t){ return '<th style="background:#e07820;color:#fff">'+esc(t)+'</th>'; }).join('')+'</tr>'+linhas+'</table></body></html>';
+    baixar('relatorio-nps-monitoria-'+hoje()+'.xls',html,'application/vnd.ms-excel');
+  };
+
+  /* estilos do formulario de NPS (parecido com o Google Forms) */
+  (function(){
+    var s=document.createElement('style'); s.id='gwaMonNpsCss';
+    s.textContent=
+      '.gwaNpsCard{background:'+Co.bgA+';border:1px solid '+Co.line+';border-radius:12px;padding:18px 20px;border-left:4px solid transparent;transition:border-color .2s}'+
+      '.gwaNpsCard:focus-within{border-left-color:'+Co.orange+'}'+
+      '.gwaNpsCard.erro{border-color:'+Co.red+';border-left-color:'+Co.red+'}'+
+      '.gwaNpsErro{display:none;color:'+Co.red+';font-size:12px;margin-top:10px}.gwaNpsCard.erro .gwaNpsErro{display:block}'+
+      '.gwaNpsEsc{position:relative;cursor:pointer}.gwaNpsEsc input{position:absolute;opacity:0;pointer-events:none}'+
+      '.gwaNpsEsc span{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:'+Co.sub+';font-weight:800;font-size:13px;transition:all .15s}'+
+      '.gwaNpsEsc:hover span{border-color:var(--c)}'+
+      '.gwaNpsEsc input:checked+span{background:var(--c);border-color:var(--c);color:#fff;transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.35)}'+
+      '.gwaNpsEsc input:focus-visible+span{outline:2px solid #fff}'+
+      '.gwaNpsOp{display:flex;align-items:center;gap:11px;padding:8px 0;cursor:pointer;color:'+Co.sub+';font-size:13.5px}'+
+      '.gwaNpsOp input[type=radio]{width:18px;height:18px;accent-color:'+Co.orange+';cursor:pointer;flex-shrink:0}'+
+      '.gwaNpsLinha{background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.25);color:#fff;padding:8px 2px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box}'+
+      '.gwaNpsLinha:focus{border-bottom:2px solid '+Co.orange+'}'+
+      '@media(max-width:768px){.gwaNpsEsc span{width:34px;height:34px}.gwaNpsCard{padding:14px}}';
+    (document.head||document.documentElement).appendChild(s);
+  })();
+
+
   /* API para os outros blocos */
   window.gwaMonitoriaResumo=function(l){
     var fin=finalizadas(doConsultor(l));
@@ -18896,7 +19469,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
              geral:mediaDe(fin),
              ultima:fin[0]?fin[0].nota:null,
              nps:npsDe(fin),
-             semCiencia:doConsultor(l).filter(function(m){ return m.feedback&&m.feedback.aplicado&&!(m.ciencia&&m.ciencia.em); }).length };
+             semCiencia:doConsultor(l).filter(function(m){ return fbLib(m)&&!(m.ciencia&&m.ciencia.em); }).length };
   };
   window.gwaMonitoriaPronta=function(){ return !!_mons; };
   window.gwaMonitoriaCarregar=function(forcar){ return carregar(!!forcar); };
