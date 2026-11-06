@@ -9822,7 +9822,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   window.gwaPreviewComunicado=async function(){ try{ var f=document.getElementById('spFile'); var dataUrl=''; if(f&&f.files&&f.files[0]){ try{dataUrl=await readFileB64(f.files[0]);}catch(e){} } var cfg={titulo:document.getElementById('spTitulo').value||'Pre-visualizacao',descricao:document.getElementById('spDesc').value||'',link:(document.getElementById('spLink').value||'').trim(),dataUrl:dataUrl||undefined}; try{closeM();}catch(e){} showSplash(cfg); }catch(e){} };
 
   /* botao flutuante para admin abrir o gerenciador */
-  function addAdminBtn(){ try{ if(!isAdm()||document.getElementById('gwaSplashAdminBtn')) return; var b=document.createElement('button'); b.id='gwaSplashAdminBtn'; b.title='Comunicado do dia (admin)'; b.innerHTML='<i class="fas fa-bullhorn"></i>'; b.style.cssText='position:fixed;bottom:22px;left:22px;z-index:9998;width:52px;height:52px;border-radius:50%;background:#111;color:#FF8000;border:2px solid #FF8000;font-size:19px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.3)'; b.onclick=function(){ gwaComunicadoDiarioAdmin(); }; document.body.appendChild(b); }catch(e){} }
+  function addAdminBtn(){ return; /* megafone removido em 06/11/2026: o Comunicado do dia abre em Painel Administrativo > Avisos */ try{ if(!isAdm()||document.getElementById('gwaSplashAdminBtn')) return; var b=document.createElement('button'); b.id='gwaSplashAdminBtn'; b.title='Comunicado do dia (admin)'; b.innerHTML='<i class="fas fa-bullhorn"></i>'; b.style.cssText='position:fixed;bottom:22px;left:22px;z-index:9998;width:52px;height:52px;border-radius:50%;background:#111;color:#FF8000;border:2px solid #FF8000;font-size:19px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.3)'; b.onclick=function(){ gwaComunicadoDiarioAdmin(); }; document.body.appendChild(b); }catch(e){} }
   setInterval(addAdminBtn,2000); document.addEventListener('DOMContentLoaded',function(){setTimeout(addAdminBtn,2500);});
   var _ep2=window.enterPortal; if(typeof _ep2==='function'){ window.enterPortal=function(){ var r=_ep2.apply(this,arguments); setTimeout(addAdminBtn,1200); return r; }; }
 })();
@@ -20724,5 +20724,793 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   }catch(e){}
 })();
 </script>
+<script>
+/* ===== INTRANET GWA :: FERIAS (contagem regressiva com calendario de mesa) =====
+   Colecao: ferias_contagem, id "atual"
+     { id, titulo, inicio:'AAAA-MM-DD', fim:'AAAA-MM-DD', status:'ativa'|'cancelada',
+       notificacoes:true|false, versao, atualizadoEm, atualizadoPor, atualizadoPorNome, hist:[] }
+   - fim = dia em que as ferias chegam (contagem zero)
+   - dias restantes = fim - hoje, recalculado sozinho todo dia (confere a cada minuto)
+   - aparece para todos entre "inicio" e "fim"; o ADM ve sempre
+   - notificacao diaria: uma por pessoa por dia, no painel de notificacoes da intranet
+   - visto/notificado ficam no navegador por LOGIN (computador compartilhado funciona) */
+(function(){
+  if(window.__gwaFerias) return; window.__gwaFerias=true;
+
+  var COL='ferias_contagem', ID='atual';
+  var LS_CFG='gwaFerCfg', LS_VISTO='gwaFerVisto', LS_NOTIF='gwaFerNotif';
+  var MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  var MESES_L=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  var SEMANA=['dom','seg','ter','qua','qui','sex','sáb'];
+  var SEMANA_L=['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+  var TITULO_PADRAO='Contagem regressiva para as férias';
+
+  /* ---------------- util ---------------- */
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function base(){ return (typeof API_URL!=='undefined')?API_URL:''; }
+  function H(){ return {'Content-Type':'application/json','X-MC-Token':(typeof API_TOKEN!=='undefined'?API_TOKEN:'')}; }
+  function cur(){ return window.currentUser||(typeof getSession==='function'?getSession():null)||null; }
+  function loginDe(u){ return String((u&&(u.login||u.user||u.email||u.nome))||'').toUpperCase(); }
+  function meu(){ return loginDe(cur()); }
+  function meuNome(){ var u=cur()||{}; return u.nome||u.name||u.login||meu(); }
+  function papel(){ return String(((cur()||{}).role)||'').toLowerCase(); }
+  function ehAdm(){ var p=papel(); return meu()==='TALIS' || p==='master' || p==='admin' || p==='gestor'; }
+  function lsGet(k,def){ try{ var v=JSON.parse(localStorage.getItem(k)||'null'); return v==null?def:v; }catch(e){ return def; } }
+  function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+  function toastOk(m,t){ try{ if(typeof toast==='function') toast(m,t||'success'); }catch(e){} }
+  function semMovimento(){ try{ return window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){ return false; } }
+
+  /* datas sempre ao meio-dia local (new Date('AAAA-MM-DD') volta um dia no Brasil) */
+  function iso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function dt(s){ var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m?new Date(+m[1],+m[2]-1,+m[3],12,0,0):null; }
+  function hoje(){ return window.__gwaFerHoje || iso(new Date()); }   /* __gwaFerHoje: so para teste */
+  function somaDias(s,n){ var d=dt(s); d.setDate(d.getDate()+n); return iso(d); }
+  function entre(a,b){ var x=dt(a), y=dt(b); if(!x||!y) return null; return Math.round((y-x)/86400000); }
+  function br(s){ var d=dt(s); return d?(String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()):''; }
+  function porExtenso(s){ var d=dt(s); return d?(SEMANA_L[d.getDay()]+', '+d.getDate()+' de '+MESES_L[d.getMonth()]):''; }
+
+  /* ---------------- regras da contagem ---------------- */
+  /* off | agendada | contando | chegou | encerrada */
+  function situacao(cfg,dia){
+    dia=dia||hoje();
+    if(!cfg || !cfg.inicio || !cfg.fim || cfg.status==='cancelada') return {fase:'off'};
+    var dias=entre(dia,cfg.fim), total=entre(cfg.inicio,cfg.fim);
+    if(total==null || total<1) return {fase:'off'};
+    var fase = entre(cfg.inicio,dia)<0 ? 'agendada' : (dias>0 ? 'contando' : (dias===0 ? 'chegou' : 'encerrada'));
+    return {fase:fase, dias:dias, total:total, passados:Math.max(0,Math.min(total,total-dias))};
+  }
+  function visivel(s){ return s.fase==='contando' || s.fase==='chegou'; }
+
+  function msgPrincipal(d){
+    if(d<=0) return 'As férias chegaram! Aproveitem! 🌴🎉';
+    if(d===1) return 'É amanhã! Prepare as malas! 🧳✈️';
+    return 'Faltam '+d+' dias para as férias! 🌴☀️';
+  }
+  function msgClima(d,total){
+    if(d<=0) return 'Desliga o computador, passa o protetor e vai curtir. Você mereceu! 🏖️';
+    if(d===1) return 'Última folha do calendário. Amanhã o despertador pode ficar desligado. 😎';
+    if(total && d===total) return 'A contagem começou! Cada folha arrancada é um dia a menos. 📆';
+    if(d<=3) return 'Preparem as malas! A reta final chegou. 🧳';
+    if(d<=7) return 'Está chegando! Última semana para fechar tudo com chave de ouro. 🌴';
+    if(d<=15) return 'Menos de duas semanas. Já pensou no roteiro? 🗺️';
+    if(d<=30) return 'Menos de um mês! A contagem regressiva continua. ☀️';
+    if(d<=60) return 'Já dá para começar a sonhar com o destino. 🌊';
+    return 'Ainda tem chão, mas cada dia conta. Bora com foco! 💪';
+  }
+  function msgNotif(d){
+    if(d<=0) return 'Chegou o grande dia! Boas férias! 🏖️';
+    if(d===1) return 'É amanhã! 🎉';
+    if(d<=3) return 'Faltam '+d+' dias! Preparem as malas! 🧳';
+    if(d<=7) return 'Faltam '+d+' dias! Está chegando! 🌴';
+    if(d<=15) return 'Faltam '+d+' dias! A contagem regressiva continua! ☀️';
+    return 'Faltam '+d+' dias para as férias! 📅';
+  }
+
+  /* ---------------- API ---------------- */
+  var _cfg=lsGet(LS_CFG,null), _carregou=false;
+  async function carregar(){
+    var c=null;
+    try{
+      var r=await fetch(base()+'/api/'+COL+'/'+ID,{headers:H()});
+      if(r.ok){ var j=await r.json(); c=(j&&j.data)||null; }
+      else{
+        var r2=await fetch(base()+'/api/'+COL,{headers:H()});
+        if(r2.ok){ var j2=await r2.json(); c=((j2&&j2.data)||[]).filter(function(x){ return x&&x.id===ID; })[0]||null; }
+        else return _cfg;   /* sem rede: fica com a copia local */
+      }
+    }catch(e){ return _cfg; }
+    _cfg=c; _carregou=true; lsSet(LS_CFG,c); return c;
+  }
+  async function gravar(obj){
+    try{
+      var r=await fetch(base()+'/api/'+COL+'/'+ID,{method:'PUT',headers:H(),body:JSON.stringify(obj)});
+      if(!r.ok) r=await fetch(base()+'/api/'+COL,{method:'POST',headers:H(),body:JSON.stringify(obj)});
+      if(!r.ok) return false;
+      _cfg=obj; lsSet(LS_CFG,obj); return true;
+    }catch(e){ return false; }
+  }
+
+  /* ---------------- CSS ---------------- */
+  var css=
+  /* painel */
+  '#gwaFerOv{position:fixed;inset:0;z-index:99995;display:none;flex-direction:column;background:#0d0d0d;color:#fff;font-family:Inter,system-ui,sans-serif;overflow:hidden}'+
+  '#gwaFerOv.on{display:flex;animation:fcEntra .35s ease}'+
+  '@keyframes fcEntra{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}'+
+  '#gwaFerHead{display:flex;align-items:center;gap:12px;padding:12px 20px;background:rgba(13,13,13,.86);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,.07);position:relative;z-index:5;flex-wrap:wrap}'+
+  '#gwaFerHead .fcLogo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#f0943a,#c4661a);display:flex;align-items:center;justify-content:center;font-size:19px;box-shadow:0 4px 14px rgba(224,120,32,.35)}'+
+  '#gwaFerHead .fcTit{font-weight:800;font-size:16px;line-height:1.15}#gwaFerHead .fcTit small{display:block;font-weight:500;font-size:11.5px;color:#8a8a8a}'+
+  '.fcTabs{display:flex;gap:6px;margin-left:auto}'+
+  '.fcTab{background:transparent;border:1px solid rgba(255,255,255,.1);color:#c8c8c8;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:650;cursor:pointer;font-family:inherit;transition:all .18s}'+
+  '.fcTab:hover{border-color:#e07820;color:#fff}.fcTab.on{background:linear-gradient(135deg,#f0943a,#c4661a);border-color:transparent;color:#fff}'+
+  '.fcFechar{background:rgba(229,83,60,.14);border:1px solid rgba(229,83,60,.55);color:#ff7a63;border-radius:11px;height:38px;padding:0 14px;font-weight:750;font-size:13px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:7px}'+
+  '.fcFechar:hover{background:rgba(229,83,60,.26);color:#fff}'+
+  '#gwaFerBody{flex:1;overflow:auto;position:relative}'+
+
+  /* cena */
+  '.fcCena{position:relative;min-height:100%;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:40px 24px 120px;box-sizing:border-box;'+
+    'background:radial-gradient(ellipse 70% 55% at 50% 118%,rgba(224,120,32,.42),transparent 70%),radial-gradient(ellipse 40% 30% at 82% 12%,rgba(240,148,58,.16),transparent 70%),linear-gradient(180deg,#0d0d0d 0%,#151110 52%,#2a1608 100%)}'+
+  '.fcCena.mini{min-height:520px;border-radius:18px;border:1px solid rgba(255,255,255,.08);padding:30px 16px 110px}'+
+  '.fcEstrela{position:absolute;width:2px;height:2px;border-radius:50%;background:#fff;opacity:.5;animation:fcPisca 3.4s ease-in-out infinite}'+
+  '@keyframes fcPisca{0%,100%{opacity:.12}50%{opacity:.7}}'+
+  '.fcSol{position:absolute;top:9%;right:11%;width:96px;height:96px;border-radius:50%;background:radial-gradient(circle at 40% 38%,#ffe2a3,#f7b04f 45%,#e07820 100%);box-shadow:0 0 60px 18px rgba(240,148,58,.32),0 0 140px 40px rgba(224,120,32,.16);transition:transform 1.6s cubic-bezier(.2,.8,.2,1)}'+
+  '.fcSol::before{content:"";position:absolute;inset:-46px;border-radius:50%;background:repeating-conic-gradient(rgba(255,200,120,.13) 0 6deg,transparent 6deg 22deg);-webkit-mask:radial-gradient(circle,transparent 52px,#000 54px,transparent 96px);mask:radial-gradient(circle,transparent 52px,#000 54px,transparent 96px);animation:fcGira 70s linear infinite}'+
+  '@keyframes fcGira{to{transform:rotate(360deg)}}'+
+  '.fcCena.festa .fcSol{transform:translateY(-6px) scale(1.25)}'+
+  '.fcCoqueiro{position:absolute;left:3%;bottom:54px;width:190px;height:300px;transform-origin:50% 100%;animation:fcBalanca 6.5s ease-in-out infinite;opacity:.9;pointer-events:none}'+
+  '@keyframes fcBalanca{0%,100%{transform:rotate(-1.6deg)}50%{transform:rotate(1.8deg)}}'+
+  '.fcCoqueiro .folhas{transform-origin:118px 62px;animation:fcFolhas 4.2s ease-in-out infinite}'+
+  '@keyframes fcFolhas{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(3deg)}}'+
+  '.fcMar{position:absolute;left:0;right:0;bottom:0;height:96px;pointer-events:none}'+
+  '.fcOnda{position:absolute;left:0;bottom:0;width:200%;height:100%;animation:fcOnda 16s linear infinite}'+
+  '.fcOnda.b{animation-duration:23s;animation-direction:reverse;bottom:-14px;opacity:.9}'+
+  '@keyframes fcOnda{to{transform:translateX(-50%)}}'+
+  '.fcConteudo{position:relative;z-index:2;display:flex;align-items:center;justify-content:center;gap:64px;flex-wrap:wrap;max-width:1100px;width:100%}'+
+
+  /* calendario de mesa */
+  '.fcCal{position:relative;width:286px;height:372px;flex:0 0 auto}'+
+  '.fcBase{position:absolute;left:-14px;right:-14px;bottom:0;height:46px;border-radius:12px 12px 16px 16px;background:linear-gradient(180deg,#2b2b2b,#141414);box-shadow:0 24px 40px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.08)}'+
+  '.fcBase::after{content:"GWA";position:absolute;left:0;right:0;bottom:12px;text-align:center;font:800 11px/1 Montserrat,Inter,sans-serif;letter-spacing:4px;color:#e07820;opacity:.8}'+
+  '.fcBloco{position:absolute;left:0;right:0;top:22px;bottom:34px;perspective:1100px}'+
+  '.fcBorda{position:absolute;left:0;right:0;top:0;bottom:0;border-radius:6px 6px 10px 10px;background:#ebe3d6;box-shadow:0 1px 0 rgba(0,0,0,.25)}'+
+  '.fcFolha{position:absolute;left:0;right:0;top:0;bottom:0;border-radius:6px 6px 10px 10px;background:linear-gradient(180deg,#fffdf8,#f7f1e6);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(0,0,0,.18)}'+
+  '.fcFolha .faixa{height:64px;background:linear-gradient(135deg,#f0943a,#c4661a);display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:9px;color:#fff;position:relative}'+
+  '.fcFolha .furos{position:absolute;top:9px;left:0;right:0;display:flex;justify-content:center;gap:118px}'+
+  '.fcFolha .furos i{width:12px;height:12px;border-radius:50%;background:#2a1608;box-shadow:inset 0 2px 3px rgba(0,0,0,.6)}'+
+  '.fcFolha .faixa b{font:800 15px/1 Montserrat,Inter,sans-serif;letter-spacing:5px}'+
+  '.fcFolha .faixa span{font-size:10.5px;letter-spacing:2px;opacity:.85;margin-top:3px;text-transform:uppercase}'+
+  '.fcFolha .meio{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#1c1c1c;position:relative}'+
+  '.fcFolha .num{font:900 132px/1 Montserrat,Inter,sans-serif;letter-spacing:-6px;color:#1c1c1c;text-shadow:0 2px 0 rgba(0,0,0,.06)}'+
+  '.fcFolha .num.p3{font-size:104px;letter-spacing:-5px}'+
+  '.fcFolha .rot{font:800 13px/1 Inter,sans-serif;letter-spacing:4px;color:#c4661a;margin-top:2px;text-transform:uppercase}'+
+  '.fcFolha .zero{font-size:92px;line-height:1;filter:drop-shadow(0 4px 6px rgba(0,0,0,.15))}'+
+  '.fcFolha .pe{height:38px;border-top:1px dashed rgba(0,0,0,.14);display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:11.5px;color:#7a6a58;font-weight:600}'+
+  '.fcFolha .pe em{font-style:normal;color:#c4661a}'+
+  '.fcFolha .linhas{position:absolute;inset:0;background:repeating-linear-gradient(180deg,transparent 0 23px,rgba(196,102,26,.045) 23px 24px);pointer-events:none}'+
+  /* argolas */
+  '.fcArgolas{position:absolute;top:6px;left:0;right:0;display:flex;justify-content:center;gap:112px;z-index:6;pointer-events:none}'+
+  '.fcArgolas i{width:18px;height:34px;border-radius:10px;border:4px solid #8a8a8a;border-bottom-color:transparent;background:transparent;box-shadow:inset 0 2px 2px rgba(255,255,255,.35),0 2px 3px rgba(0,0,0,.4);'+
+    'background-image:linear-gradient(90deg,#5a5a5a,#d8d8d8 45%,#6a6a6a);-webkit-background-clip:border-box}'+
+  '.fcArgolas i{border-color:#c9c9c9 #9a9a9a transparent #9a9a9a}'+
+  /* folha voando */
+  '.fcVoa{z-index:5;transform-origin:18% 0%;will-change:transform,opacity;-webkit-clip-path:polygon(0 4px,4% 0,8% 5px,12% 1px,16% 6px,20% 0,24% 4px,28% 1px,32% 6px,36% 0,40% 5px,44% 1px,48% 6px,52% 0,56% 4px,60% 1px,64% 6px,68% 0,72% 5px,76% 1px,80% 6px,84% 0,88% 4px,92% 1px,96% 6px,100% 0,100% 100%,0 100%);clip-path:polygon(0 4px,4% 0,8% 5px,12% 1px,16% 6px,20% 0,24% 4px,28% 1px,32% 6px,36% 0,40% 5px,44% 1px,48% 6px,52% 0,56% 4px,60% 1px,64% 6px,68% 0,72% 5px,76% 1px,80% 6px,84% 0,88% 4px,92% 1px,96% 6px,100% 0,100% 100%,0 100%)}'+
+  '.fcVoa::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,0) 35%,rgba(255,255,255,.55) 50%,rgba(0,0,0,.12) 64%,rgba(0,0,0,0) 80%);opacity:0;pointer-events:none}'+
+  '.fcVoa.vai{animation:fcArranca var(--dur,1150ms) cubic-bezier(.45,.05,.55,.95) forwards}'+
+  '.fcVoa.vai::after{animation:fcBrilho var(--dur,1150ms) ease forwards}'+
+  '@keyframes fcArranca{'+
+    '0%{transform:translate(0,0) rotateX(0) rotateZ(0);opacity:1}'+
+    '14%{transform:translate(2px,-3px) rotateX(-10deg) rotateZ(-2deg)}'+
+    '30%{transform:translate(-6px,6px) rotateX(-28deg) rotateZ(-8deg);opacity:1}'+
+    '55%{transform:translate(-70px,120px) rotateX(-52deg) rotateZ(-24deg) rotateY(14deg);opacity:1}'+
+    '100%{transform:translate(-210px,560px) rotateX(-78deg) rotateZ(-46deg) rotateY(30deg);opacity:0}}'+
+  '@keyframes fcBrilho{0%{opacity:0}25%{opacity:1}70%{opacity:.6}100%{opacity:0}}'+
+  '.fcVoa.some{animation:fcSome .5s ease forwards}@keyframes fcSome{to{opacity:0;transform:translateY(10px)}}'+
+  /* toco que fica preso nas argolas */
+  '.fcToco{position:absolute;left:0;right:0;top:0;height:16px;z-index:4;background:linear-gradient(135deg,#f0943a,#c4661a);border-radius:6px 6px 0 0;opacity:0;'+
+    '-webkit-clip-path:polygon(0 0,100% 0,100% 60%,96% 100%,92% 55%,88% 95%,84% 50%,80% 100%,76% 60%,72% 95%,68% 50%,64% 100%,60% 55%,56% 95%,52% 50%,48% 100%,44% 60%,40% 95%,36% 50%,32% 100%,28% 55%,24% 95%,20% 50%,16% 100%,12% 60%,8% 95%,4% 50%,0 90%);'+
+    'clip-path:polygon(0 0,100% 0,100% 60%,96% 100%,92% 55%,88% 95%,84% 50%,80% 100%,76% 60%,72% 95%,68% 50%,64% 100%,60% 55%,56% 95%,52% 50%,48% 100%,44% 60%,40% 95%,36% 50%,32% 100%,28% 55%,24% 95%,20% 50%,16% 100%,12% 60%,8% 95%,4% 50%,0 90%)}'+
+  '.fcToco.on{animation:fcToco 1.9s ease forwards}@keyframes fcToco{0%{opacity:1}70%{opacity:1}100%{opacity:0}}'+
+  '.fcBloco.treme{animation:fcTreme .32s ease}@keyframes fcTreme{0%,100%{transform:none}30%{transform:translateY(2px) rotate(-.6deg)}60%{transform:translateY(-1px) rotate(.4deg)}}'+
+  '.fcFolha.nova .num,.fcFolha.nova .zero{animation:fcNum .6s cubic-bezier(.2,1.4,.4,1)}@keyframes fcNum{from{transform:scale(.86);opacity:.4}to{transform:none;opacity:1}}'+
+  /* mala */
+  '.fcMala{position:absolute;right:-58px;bottom:2px;width:70px;z-index:3;animation:fcMala 5s ease-in-out infinite;transform-origin:50% 100%}'+
+  '@keyframes fcMala{0%,100%{transform:rotate(0)}50%{transform:rotate(-2.5deg)}}'+
+
+  /* texto ao lado */
+  '.fcTexto{max-width:470px;flex:1 1 320px}'+
+  '.fcEtiq{display:inline-flex;align-items:center;gap:8px;background:rgba(224,120,32,.14);border:1px solid rgba(224,120,32,.4);color:#f0943a;border-radius:999px;padding:6px 13px;font-size:12px;font-weight:700;letter-spacing:.4px}'+
+  '.fcMsg{font:900 38px/1.12 Montserrat,Inter,sans-serif;margin:16px 0 10px;letter-spacing:-.5px}'+
+  '.fcMsg .n{background:linear-gradient(135deg,#ffd27a,#f0943a 45%,#e07820);-webkit-background-clip:text;background-clip:text;color:transparent}'+
+  '.fcCena.festa .fcMsg{background:linear-gradient(90deg,#fff,#ffd27a,#f0943a,#fff);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:fcShine 3s linear infinite}'+
+  '@keyframes fcShine{to{background-position:-300% 0}}'+
+  '.fcSub{color:#c8c8c8;font-size:16px;line-height:1.55;margin:0 0 22px;min-height:24px}'+
+  '.fcProg{position:relative;height:10px;border-radius:999px;background:rgba(255,255,255,.08);margin:26px 0 10px}'+
+  '.fcProg>div{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:linear-gradient(90deg,#c4661a,#f0943a,#ffd27a);transition:width 1.2s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 14px rgba(240,148,58,.5)}'+
+  '.fcProg .aviao{position:absolute;top:50%;transform:translate(-50%,-56%);font-size:22px;transition:left 1.2s cubic-bezier(.2,.8,.2,1);filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}'+
+  '.fcProgTxt{display:flex;justify-content:space-between;font-size:12px;color:#8a8a8a}'+
+  '.fcChips{display:flex;flex-wrap:wrap;gap:9px;margin-top:20px}'+
+  '.fcChip{background:#1c1c1c;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 13px;font-size:12px;color:#8a8a8a;line-height:1.35}'+
+  '.fcChip b{display:block;color:#fff;font-size:13.5px;margin-top:2px}'+
+  '.fcAcoes{display:flex;gap:9px;flex-wrap:wrap;margin-top:22px}'+
+  '.fcBtn{background:#242424;border:1px solid rgba(255,255,255,.1);color:#fff;border-radius:11px;padding:10px 15px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:8px;transition:all .18s}'+
+  '.fcBtn:hover{border-color:#e07820;transform:translateY(-1px)}'+
+  '.fcBtn.pri{background:linear-gradient(135deg,#f0943a,#c4661a);border-color:transparent}'+
+  '.fcBtn.perigo{background:rgba(229,83,60,.12);border-color:rgba(229,83,60,.5);color:#ff8a75}'+
+  '.fcBtn:disabled{opacity:.5;cursor:not-allowed;transform:none}'+
+  '.fcConfete{position:absolute;inset:0;pointer-events:none;z-index:4}'+
+  '.fcVazio{text-align:center;max-width:460px;color:#c8c8c8}.fcVazio .ic{font-size:64px;margin-bottom:12px}'+
+  '.fcVazio h2{font:800 24px/1.2 Montserrat,Inter,sans-serif;color:#fff;margin:0 0 8px}'+
+  '.fcFaixaPrev{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:6;background:rgba(224,120,32,.18);border:1px dashed #e07820;color:#f0943a;border-radius:999px;padding:5px 14px;font-size:11.5px;font-weight:800;letter-spacing:1.2px;white-space:nowrap}'+
+
+  /* administracao */
+  '.fcAdm{max-width:1100px;margin:0 auto;padding:26px 22px 60px;display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:22px;align-items:start}'+
+  '.fcCard{background:#1c1c1c;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:20px}'+
+  '.fcCard h3{margin:0 0 4px;font-size:16px;font-weight:800;display:flex;align-items:center;gap:9px}.fcCard h3 i{color:#e07820}'+
+  '.fcCard .d{color:#8a8a8a;font-size:12.5px;margin:0 0 16px;line-height:1.5}'+
+  '.fcCampo{margin-bottom:14px}.fcCampo label{display:block;font-size:12px;font-weight:700;color:#c8c8c8;margin-bottom:6px}'+
+  '.fcCampo input[type=text],.fcCampo input[type=date]{width:100%;box-sizing:border-box;background:#0d0d0d;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 12px;color:#fff;font-size:14px;font-family:inherit;color-scheme:dark}'+
+  '.fcCampo input:focus{outline:none;border-color:#e07820;box-shadow:0 0 0 3px rgba(224,120,32,.18)}'+
+  '.fcDuas{display:grid;grid-template-columns:1fr 1fr;gap:10px}'+
+  '.fcResumo{background:linear-gradient(135deg,rgba(240,148,58,.14),rgba(196,102,26,.06));border:1px solid rgba(224,120,32,.35);border-radius:12px;padding:12px 14px;font-size:13px;color:#f3d2b3;line-height:1.5;margin:4px 0 14px}'+
+  '.fcResumo.erro{background:rgba(229,83,60,.1);border-color:rgba(229,83,60,.5);color:#ff9d8c}'+
+  '.fcToggle{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#0d0d0d;border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px 14px;cursor:pointer;margin-bottom:14px}'+
+  '.fcToggle .t{font-size:13.5px;font-weight:700}.fcToggle .t small{display:block;font-weight:500;color:#8a8a8a;font-size:11.5px;margin-top:2px}'+
+  '.fcSw{width:44px;height:25px;border-radius:999px;background:#3a3a3a;position:relative;transition:background .2s;flex:0 0 auto}'+
+  '.fcSw::after{content:"";position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;transition:transform .2s}'+
+  '.fcSw.on{background:#3fae5a}.fcSw.on::after{transform:translateX(19px)}'+
+  '.fcStatus{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:#0d0d0d;border:1px solid rgba(255,255,255,.08);margin-bottom:16px;font-size:13px}'+
+  '.fcStatus .bola{width:10px;height:10px;border-radius:50%;flex:0 0 auto}'+
+  '.fcSim{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0 4px}'+
+  '.fcSim input[type=range]{flex:1;min-width:160px;accent-color:#e07820}'+
+  '.fcSim .v{font-weight:800;color:#f0943a;min-width:96px}'+
+  '.fcHist{max-height:180px;overflow:auto;font-size:12px;color:#8a8a8a;line-height:1.6;margin-top:6px}'+
+  '.fcHist b{color:#c8c8c8;font-weight:650}'+
+  '.fcNotifPrev{margin-top:12px;background:#1f2937;border:1px solid rgba(255,128,0,.4);border-left:4px solid #FF8000;border-radius:12px;padding:12px 14px}'+
+  '.fcNotifPrev .a{font-size:13px;font-weight:700}.fcNotifPrev .b{font-size:12.5px;color:#d1d5db;margin-top:4px}'+
+
+  /* destaque na home */
+  '#gwaFerHome{margin:0 0 22px;border-radius:18px;overflow:hidden;position:relative;cursor:pointer;display:flex;align-items:center;gap:18px;padding:16px 22px;'+
+    'background:radial-gradient(ellipse 60% 120% at 100% 100%,rgba(224,120,32,.38),transparent 70%),linear-gradient(135deg,#161616,#0d0d0d);border:1px solid rgba(224,120,32,.35);box-shadow:0 10px 30px rgba(0,0,0,.25);transition:transform .2s,box-shadow .2s;color:#fff}'+
+  '#gwaFerHome:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(224,120,32,.22)}'+
+  '#gwaFerHome .mini{width:64px;height:72px;border-radius:9px;background:#fffdf8;flex:0 0 auto;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 6px 14px rgba(0,0,0,.35)}'+
+  '#gwaFerHome .mini i{height:18px;background:linear-gradient(135deg,#f0943a,#c4661a);display:block}'+
+  '#gwaFerHome .mini b{flex:1;display:flex;align-items:center;justify-content:center;font:900 30px/1 Montserrat,Inter,sans-serif;color:#1c1c1c}'+
+  '#gwaFerHome .tx{flex:1;min-width:0}#gwaFerHome .tx b{display:block;font:800 18px/1.25 Montserrat,Inter,sans-serif}'+
+  '#gwaFerHome .tx span{font-size:13px;color:#c8c8c8}'+
+  '#gwaFerHome .ir{background:linear-gradient(135deg,#f0943a,#c4661a);border-radius:11px;padding:9px 14px;font-weight:700;font-size:13px;white-space:nowrap}'+
+  '#gwaFerHome .sol{position:absolute;right:120px;top:-26px;width:70px;height:70px;border-radius:50%;background:radial-gradient(circle,#ffd27a,#f0943a 60%,transparent 72%);opacity:.35;pointer-events:none}'+
+  '#gwaFerNav .fcPonto{display:inline-block;width:8px;height:8px;border-radius:50%;background:#e5533c;margin-left:6px;vertical-align:middle;box-shadow:0 0 0 0 rgba(229,83,60,.6);animation:fcPulsa 1.8s infinite}'+
+  '@keyframes fcPulsa{70%{box-shadow:0 0 0 7px rgba(229,83,60,0)}100%{box-shadow:0 0 0 0 rgba(229,83,60,0)}}'+
+  '.gwa-notif.fcNotif .gwa-notif__progress-bar{animation-duration:12s}'+
+
+  '@media (prefers-reduced-motion: reduce){.fcSol::before,.fcCoqueiro,.fcCoqueiro .folhas,.fcOnda,.fcMala,.fcEstrela{animation:none !important}}'+
+  '@media (max-width:900px){.fcAdm{grid-template-columns:1fr}}'+
+  '@media (max-width:768px){'+
+    '#gwaFerHead{padding:10px 12px;gap:9px}#gwaFerHead .fcTit small{display:none}'+
+    '.fcTabs{order:3;width:100%;margin-left:0}.fcTab{flex:1;padding:9px 8px}'+
+    '.fcFechar{margin-left:auto;padding:0 12px}'+
+    '.fcCena{padding:22px 14px 110px;align-items:flex-start}'+
+    '.fcConteudo{gap:26px}'+
+    '.fcCal{transform:scale(.84);transform-origin:50% 0;margin-bottom:-58px}'+
+    '.fcMala{right:-40px;width:56px}'+
+    '.fcTexto{text-align:center;flex-basis:100%}'+
+    '.fcMsg{font-size:28px}.fcSub{font-size:14.5px}'+
+    '.fcChips,.fcAcoes{justify-content:center}'+
+    '.fcSol{width:64px;height:64px;top:4%;right:6%}.fcSol::before{inset:-30px}'+
+    '.fcCoqueiro{width:120px;height:190px;left:-18px;bottom:50px;opacity:.55}'+
+    '.fcAdm{padding:16px 12px 50px}.fcDuas{grid-template-columns:1fr}'+
+    '.fcCampo input[type=text],.fcCampo input[type=date]{font-size:16px}'+
+    '#gwaFerHome{padding:13px 14px;gap:12px}#gwaFerHome .ir{display:none}#gwaFerHome .tx b{font-size:15.5px}#gwaFerHome .mini{width:52px;height:60px}#gwaFerHome .mini b{font-size:24px}'+
+  '}';
+  var st=document.createElement('style'); st.id='gwaFeriasCss'; st.textContent=css;
+  (document.head||document.documentElement).appendChild(st);
+
+  /* ---------------- desenhos ---------------- */
+  var SVG_COQUEIRO='<svg class="fcCoqueiro" viewBox="0 0 190 300" aria-hidden="true">'+
+    '<path d="M112 300 C108 240 104 170 118 64" stroke="#3a2412" stroke-width="11" fill="none" stroke-linecap="round"/>'+
+    '<path d="M112 300 C108 240 104 170 118 64" stroke="#5a3a1c" stroke-width="5" fill="none" stroke-dasharray="3 11" stroke-linecap="round"/>'+
+    '<g class="folhas" fill="#1f3a26">'+
+      '<path d="M118 62 C88 40 46 44 14 72 C50 58 84 60 118 70Z"/>'+
+      '<path d="M118 62 C104 30 72 10 40 14 C72 26 96 42 116 70Z"/>'+
+      '<path d="M118 62 C138 28 168 18 188 26 C160 34 138 48 120 70Z"/>'+
+      '<path d="M118 62 C150 54 178 70 186 104 C168 80 146 72 120 70Z"/>'+
+      '<path d="M118 62 C110 84 86 112 70 126 C88 100 100 84 116 66Z"/>'+
+      '<circle cx="114" cy="72" r="6" fill="#4a2c12"/><circle cx="124" cy="74" r="5.5" fill="#3a2410"/>'+
+    '</g></svg>';
+  var SVG_MAR='<div class="fcMar">'+
+    '<svg class="fcOnda" viewBox="0 0 1440 96" preserveAspectRatio="none"><path d="M0 46 C120 26 240 26 360 46 C480 66 600 66 720 46 C840 26 960 26 1080 46 C1200 66 1320 66 1440 46 V96 H0Z" fill="rgba(224,120,32,.16)"/></svg>'+
+    '<svg class="fcOnda b" viewBox="0 0 1440 96" preserveAspectRatio="none"><path d="M0 58 C120 76 240 76 360 58 C480 40 600 40 720 58 C840 76 960 76 1080 58 C1200 40 1320 40 1440 58 V96 H0Z" fill="rgba(13,13,13,.75)"/></svg>'+
+  '</div>';
+  var SVG_MALA='<svg class="fcMala" viewBox="0 0 70 76" aria-hidden="true">'+
+    '<rect x="24" y="2" width="22" height="14" rx="5" fill="none" stroke="#8a8a8a" stroke-width="4"/>'+
+    '<rect x="4" y="13" width="62" height="56" rx="9" fill="#e07820"/>'+
+    '<rect x="4" y="13" width="62" height="56" rx="9" fill="url(#fcMalaG)"/>'+
+    '<defs><linearGradient id="fcMalaG" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity=".18"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".2"/></linearGradient></defs>'+
+    '<rect x="17" y="13" width="5" height="56" fill="#c4661a"/><rect x="48" y="13" width="5" height="56" fill="#c4661a"/>'+
+    '<circle cx="35" cy="38" r="9" fill="#fffdf8"/><text x="35" y="42" text-anchor="middle" font-size="11">🌴</text>'+
+    '<circle cx="15" cy="72" r="4" fill="#2b2b2b"/><circle cx="55" cy="72" r="4" fill="#2b2b2b"/></svg>';
+
+  function estrelas(n){ var h=''; for(var i=0;i<n;i++){ h+='<i class="fcEstrela" style="left:'+((i*37+11)%96+2)+'%;top:'+((i*53+7)%34+2)+'%;animation-delay:'+((i*0.7)%3.4).toFixed(1)+'s"></i>'; } return h; }
+
+  /* uma folha do calendario: n = dias que faltam naquela folha */
+  function folhaHtml(n,cfg){
+    var dia=somaDias(cfg.fim,-n), d=dt(dia);
+    var meio = n<=0
+      ? '<div class="zero">🌴</div><div class="rot">chegou!</div>'
+      : '<div class="num'+(n>99?' p3':'')+'">'+n+'</div><div class="rot">'+(n===1?'dia':'dias')+'</div>';
+    return '<div class="faixa"><div class="furos"><i></i><i></i></div><b>FÉRIAS</b><span>'+(n<=0?'é hoje':(n===1?'falta':'faltam'))+'</span></div>'+
+      '<div class="meio"><div class="linhas"></div>'+meio+'</div>'+
+      '<div class="pe"><span>'+SEMANA[d.getDay()]+' · '+String(d.getDate()).padStart(2,'0')+' '+MESES[d.getMonth()]+'</span><em>'+(n<=0?'🏖️':'☀️')+'</em></div>';
+  }
+
+  /* ---------------- a cena (contagem) ---------------- */
+  /* opts: {previa:bool, dias:numero simulado, total:numero} */
+  function Cena(alvo,cfg,opts){
+    opts=opts||{};
+    var s=situacao(cfg);
+    var total=opts.total!=null?opts.total:s.total;
+    var dias=opts.dias!=null?opts.dias:s.dias;
+    var self={alvo:alvo,cfg:cfg,dias:dias,total:total,ocupado:false};
+
+    function textoHtml(d){
+      var passados=Math.max(0,Math.min(total,total-d)), pct=total?Math.round(passados/total*100):0;
+      var msg=msgPrincipal(d);
+      if(d>1) msg='Faltam <span class="n">'+d+' dias</span> para as férias! 🌴☀️';
+      return '<div class="fcEtiq"><i class="fas fa-umbrella-beach"></i> '+esc(cfg.titulo||TITULO_PADRAO)+'</div>'+
+        '<div class="fcMsg">'+msg+'</div>'+
+        '<p class="fcSub">'+esc(msgClima(d,total))+'</p>'+
+        '<div class="fcProg"><div style="width:'+pct+'%"></div><span class="aviao" style="left:'+Math.max(3,Math.min(97,pct))+'%">✈️</span></div>'+
+        '<div class="fcProgTxt"><span>'+(d<=0?'Contagem concluída':('Dia '+Math.min(total,passados+1)+' de '+total))+'</span><span>'+pct+'% do caminho</span></div>'+
+        '<div class="fcChips">'+
+          '<div class="fcChip">Início da contagem<b>'+br(cfg.inicio)+'</b></div>'+
+          '<div class="fcChip">Chegada das férias<b>'+br(cfg.fim)+'</b></div>'+
+          '<div class="fcChip">Que dia cai<b>'+esc(porExtenso(cfg.fim))+'</b></div>'+
+        '</div>'+
+        '<div class="fcAcoes">'+
+          (d>0?'<button class="fcBtn" data-a="replay"><i class="fas fa-rotate-right"></i> Arrancar a folha de novo</button>'
+              :'<button class="fcBtn pri" data-a="festa"><i class="fas fa-champagne-glasses"></i> Comemorar de novo</button>')+
+        '</div>';
+    }
+
+    alvo.innerHTML=
+      '<div class="fcCena'+(opts.previa?' mini':'')+(dias<=0?' festa':'')+'">'+
+        (opts.previa?'<div class="fcFaixaPrev">PRÉVIA · AINDA NÃO PUBLICADA</div>':'')+
+        estrelas(14)+'<div class="fcSol"></div>'+SVG_COQUEIRO+SVG_MAR+
+        '<canvas class="fcConfete"></canvas>'+
+        '<div class="fcConteudo">'+
+          '<div class="fcCal">'+
+            '<div class="fcBase"></div>'+
+            '<div class="fcBloco">'+
+              '<div class="fcBorda" style="transform:translate(3px,8px)"></div>'+
+              '<div class="fcBorda" style="transform:translate(2px,5px)"></div>'+
+              '<div class="fcBorda" style="transform:translate(1px,2.5px)"></div>'+
+              '<div class="fcFolha fcAtual">'+folhaHtml(dias,cfg)+'</div>'+
+              '<div class="fcToco"></div>'+
+            '</div>'+
+            '<div class="fcArgolas"><i></i><i></i></div>'+
+            SVG_MALA+
+          '</div>'+
+          '<div class="fcTexto">'+textoHtml(dias)+'</div>'+
+        '</div>'+
+      '</div>';
+
+    var elCena=alvo.querySelector('.fcCena'), elCal=alvo.querySelector('.fcCal'), bloco=alvo.querySelector('.fcBloco');
+    var elTexto=alvo.querySelector('.fcTexto'), toco=alvo.querySelector('.fcToco');
+
+    /* espessura do bloco: mais dias, mais folhas por baixo */
+    var bordas=alvo.querySelectorAll('.fcBorda'), grossura=dias<=0?0:(dias<=3?1:(dias<=10?2:3));
+    for(var i=0;i<bordas.length;i++) bordas[i].style.display=(i>=bordas.length-grossura)?'':'none';
+
+    function ligarBotoes(){
+      var b=elTexto.querySelectorAll('[data-a]');
+      for(var i=0;i<b.length;i++) b[i].onclick=function(){
+        var a=this.getAttribute('data-a');
+        if(a==='replay') self.arrancar(self.dias+1,self.dias);
+        if(a==='festa') self.festa();
+      };
+    }
+    function mostrar(d){
+      self.dias=d;
+      var atual=bloco.querySelector('.fcAtual');
+      atual.innerHTML=folhaHtml(d,cfg);
+      atual.classList.remove('nova'); void atual.offsetWidth; atual.classList.add('nova');
+      elTexto.innerHTML=textoHtml(d); ligarBotoes();
+      elCena.classList.toggle('festa',d<=0);
+      var g=d<=0?0:(d<=3?1:(d<=10?2:3));
+      for(var i=0;i<bordas.length;i++) bordas[i].style.display=(i>=bordas.length-g)?'':'none';
+    }
+    ligarBotoes();
+
+    /* arranca folhas de "de" ate "para" (uma de cada vez) */
+    self.arrancar=function(de,para,fim){
+      if(self.ocupado) return;
+      de=Math.max(de,para);
+      if(de===para || semMovimento()){ mostrar(para); if(para<=0) self.festa(); if(fim) fim(); return; }
+      self.ocupado=true;
+      var passos=de-para, pulo=0;
+      if(passos>4){ pulo=passos-3; }   /* muitos dias sem abrir: arranca so as 3 ultimas */
+      var n=de-pulo; if(pulo) mostrar(n);
+      else mostrar(de);
+      function um(){
+        if(n<=para){ self.ocupado=false; if(para<=0) self.festa(); if(fim) fim(); return; }
+        var rapido=(n-para)>1;
+        var dur=rapido?720:1150;
+        var voa=document.createElement('div');
+        voa.className='fcFolha fcVoa'; voa.innerHTML=folhaHtml(n,cfg);
+        voa.style.setProperty('--dur',dur+'ms');
+        bloco.appendChild(voa);
+        n--; mostrar(n);
+        toco.classList.remove('on'); void toco.offsetWidth; toco.classList.add('on');
+        setTimeout(function(){ voa.classList.add('vai'); bloco.classList.remove('treme'); void bloco.offsetWidth; bloco.classList.add('treme'); },40);
+        var foi=false;
+        function acabou(){ if(foi) return; foi=true; try{ voa.remove(); }catch(e){} setTimeout(um,rapido?120:260); }
+        voa.addEventListener('animationend',function(e){ if(e.animationName==='fcArranca') acabou(); });
+        setTimeout(acabou,dur+250);   /* garantia se o animationend nao vier */
+      }
+      setTimeout(um,pulo?500:350);
+    };
+
+    /* confete da chegada */
+    self.festa=function(){
+      var cv=alvo.querySelector('.fcConfete'); if(!cv || semMovimento()) return;
+      var r=cv.getBoundingClientRect(), W=cv.width=Math.max(10,r.width), Hh=cv.height=Math.max(10,r.height);
+      var ctx=cv.getContext('2d'); if(!ctx) return;
+      var cores=['#f0943a','#e07820','#ffd27a','#ffffff','#3fae5a','#4ad0c5'], P=[];
+      for(var i=0;i<170;i++) P.push({x:W/2+(Math.random()-.5)*120,y:Hh*0.42,vx:(Math.random()-.5)*15,vy:-Math.random()*15-4,
+        s:Math.random()*7+4,a:Math.random()*6,va:(Math.random()-.5)*.35,c:cores[i%cores.length],f:Math.random()<.25});
+      var t0=Date.now();
+      (function quadro(){
+        var t=Date.now()-t0; ctx.clearRect(0,0,W,Hh);
+        P.forEach(function(p){ p.vy+=.32; p.vx*=.99; p.x+=p.vx; p.y+=p.vy; p.a+=p.va;
+          ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.a); ctx.globalAlpha=Math.max(0,1-t/5200); ctx.fillStyle=p.c;
+          if(p.f){ ctx.beginPath(); ctx.arc(0,0,p.s/2.2,0,6.29); ctx.fill(); } else ctx.fillRect(-p.s/2,-p.s/4,p.s,p.s/2);
+          ctx.restore(); });
+        if(t<5200 && document.body.contains(cv)) requestAnimationFrame(quadro); else ctx.clearRect(0,0,W,Hh);
+      })();
+    };
+    self.mostrar=mostrar;
+    return self;
+  }
+
+  /* ---------------- painel ---------------- */
+  var _aba='contagem', _cena=null, _diaMostrado=null;
+  function ov(){
+    var o=document.getElementById('gwaFerOv'); if(o) return o;
+    o=document.createElement('div'); o.id='gwaFerOv';
+    o.innerHTML='<div id="gwaFerHead"><div class="fcLogo">🌴</div><div class="fcTit">Férias<small>contagem regressiva da GWA</small></div>'+
+      '<div class="fcTabs" id="gwaFerTabs"></div>'+
+      '<button class="fcFechar" onclick="__gwaFerFechar()"><i class="fas fa-xmark"></i> Fechar</button></div>'+
+      '<div id="gwaFerBody"></div>';
+    document.body.appendChild(o);
+    return o;
+  }
+  function abas(){
+    var t=document.getElementById('gwaFerTabs'); if(!t) return;
+    if(!ehAdm()){ t.innerHTML=''; return; }
+    t.innerHTML=['contagem','admin'].map(function(k){
+      return '<button class="fcTab'+(_aba===k?' on':'')+'" onclick="__gwaFerAba(\''+k+'\')">'+
+        (k==='contagem'?'<i class="fas fa-calendar-day"></i> Contagem':'<i class="fas fa-sliders"></i> Administração')+'</button>';
+    }).join('');
+  }
+  window.__gwaFerAba=function(k){ _aba=(k==='admin'&&ehAdm())?'admin':'contagem'; abas(); render(true); };
+  window.__gwaFerFechar=function(){ var o=document.getElementById('gwaFerOv'); if(o) o.classList.remove('on'); _cena=null; };
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ var o=document.getElementById('gwaFerOv'); if(o&&o.classList.contains('on')) window.__gwaFerFechar(); } });
+
+  window.gwaAbrirFerias=function(aba){
+    _aba=(aba==='admin'&&ehAdm())?'admin':'contagem';
+    ov().classList.add('on'); abas(); render(true);
+    carregar().then(function(){ if(document.getElementById('gwaFerOv').classList.contains('on') && _aba==='contagem') render(false); atualizarTudo(); });
+  };
+
+  /* qual foi a ultima folha que esta pessoa viu */
+  function visto(){ var m=lsGet(LS_VISTO,{}); return m[meu()]||null; }
+  function marcarVisto(d){ var m=lsGet(LS_VISTO,{}); m[meu()]={dia:hoje(),dias:d,v:(_cfg&&_cfg.versao)||0}; lsSet(LS_VISTO,m); atualizarNav(); }
+
+  function chaveCfg(c){ c=c||{}; return [c.titulo,c.inicio,c.fim,c.status,c.versao].join('|'); }
+  function render(primeira){
+    var body=document.getElementById('gwaFerBody'); if(!body) return;
+    if(_aba==='admin'){ renderAdmin(body); return; }
+    var s=situacao(_cfg);
+    if(!visivel(s)){
+      var txt = s.fase==='agendada' ? ['📅','A contagem começa em '+br(_cfg.inicio),'Volte nesse dia para ver a primeira folha do calendário cair.']
+              : s.fase==='encerrada' ? ['🏖️','As férias já começaram','A contagem terminou em '+br(_cfg.fim)+'. Boas férias!']
+              : ['🌴','Nenhuma contagem no momento','Quando a próxima contagem para as férias começar, ela aparece aqui.'];
+      body.innerHTML='<div class="fcCena">'+estrelas(14)+'<div class="fcSol"></div>'+SVG_COQUEIRO+SVG_MAR+
+        '<div class="fcConteudo"><div class="fcVazio"><div class="ic">'+txt[0]+'</div><h2>'+esc(txt[1])+'</h2><p>'+esc(txt[2])+'</p>'+
+        (ehAdm()?'<div class="fcAcoes" style="justify-content:center"><button class="fcBtn pri" onclick="__gwaFerAba(\'admin\')"><i class="fas fa-sliders"></i> Configurar a contagem</button></div>':'')+
+        '</div></div></div>';
+      _cena=null; return;
+    }
+    /* de qual folha comecar: a ultima que a pessoa viu (mesma configuracao) */
+    var v=visto(), de=s.dias+1;
+    if(v && v.v===((_cfg&&_cfg.versao)||0) && v.dias!=null && v.dias>=s.dias) de=(v.dias===s.dias && v.dia===hoje())?s.dias:Math.max(v.dias,s.dias+1);
+    if(!primeira && _cena && (_cena.ocupado || (_cena.dias===s.dias && chaveCfg(_cena.cfg)===chaveCfg(_cfg)))) return;
+    _cena=Cena(body,_cfg,{dias:de});
+    _diaMostrado=hoje();
+    marcarVisto(s.dias);
+    if(de>s.dias) setTimeout(function(){ if(_cena) _cena.arrancar(de,s.dias); },450);
+    else if(s.dias<=0) setTimeout(function(){ if(_cena) _cena.festa(); },400);
+  }
+
+  /* ---------------- administracao ---------------- */
+  var _rasc=null, _prev=null;
+  function rascunho(){
+    if(!_rasc){
+      var c=_cfg||{};
+      var ini=c.inicio||hoje(), fim=c.fim||somaDias(ini,40);
+      _rasc={titulo:c.titulo||TITULO_PADRAO, inicio:ini, fim:fim, notificacoes:c.notificacoes!==false};
+    }
+    return _rasc;
+  }
+  function statusHtml(){
+    var s=situacao(_cfg), mapa={
+      off:[_cfg&&_cfg.status==='cancelada'?'Cancelada (ninguém vê)':'Nenhuma contagem publicada','#8a8a8a'],
+      agendada:['Agendada — começa em '+(_cfg?br(_cfg.inicio):''),'#4a9fd5'],
+      contando:['No ar — faltam '+s.dias+' dia'+(s.dias===1?'':'s'),'#3fae5a'],
+      chegou:['No ar — hoje é o dia das férias','#f0943a'],
+      encerrada:['Encerrada — as férias começaram em '+(_cfg?br(_cfg.fim):''),'#8a8a8a']}[s.fase];
+    var n=_cfg&&_cfg.notificacoes!==false&&visivel(s);
+    return '<div class="fcStatus"><span class="bola" style="background:'+mapa[1]+';box-shadow:0 0 10px '+mapa[1]+'"></span><div style="flex:1"><b>'+esc(mapa[0])+'</b>'+
+      (_cfg&&_cfg.atualizadoEm?'<div style="font-size:11.5px;color:#8a8a8a;margin-top:2px">Última alteração: '+esc(_cfg.atualizadoPorNome||_cfg.atualizadoPor||'')+' · '+new Date(_cfg.atualizadoEm).toLocaleString('pt-BR')+'</div>':'')+
+      '</div>'+(visivel(s)?'<span style="font-size:11.5px;color:'+(n?'#3fae5a':'#8a8a8a')+'"><i class="fas fa-bell'+(n?'':'-slash')+'"></i> '+(n?'notificando':'sem notificação')+'</span>':'')+'</div>';
+  }
+  function resumoRasc(){
+    var r=rascunho(), tot=entre(r.inicio,r.fim), hj=entre(hoje(),r.fim);
+    if(!r.inicio||!r.fim) return {ok:false,html:'Preencha as duas datas.'};
+    if(tot==null||tot<1) return {ok:false,html:'A data das férias precisa ser <b>depois</b> da data de início da contagem.'};
+    var h='Contagem inicial: <b>'+tot+' dia'+(tot===1?'':'s')+'</b>. No dia '+br(r.inicio)+' aparece “Faltam '+tot+' dias para as férias!” e no dia '+br(r.fim)+' ('+esc(porExtenso(r.fim))+') a contagem chega a zero.';
+    if(hj<0) h+='<br><b>Atenção:</b> essa data já passou, a contagem vai aparecer como encerrada.';
+    else if(entre(r.inicio,hoje())>=0) h+='<br>Hoje faltariam <b>'+hj+'</b>.';
+    return {ok:true,html:h,total:tot};
+  }
+  function renderAdmin(body){
+    if(!ehAdm()){ _aba='contagem'; render(true); return; }
+    var r=rascunho(), res=resumoRasc();
+    var hist=((_cfg&&_cfg.hist)||[]).slice(-12).reverse().map(function(h){
+      return '<div><b>'+esc(h.porNome||h.por||'')+'</b> · '+new Date(h.em).toLocaleString('pt-BR')+' — '+esc(h.acao||'')+'</div>'; }).join('')||'<div>Nenhuma alteração ainda.</div>';
+    var cancelada=_cfg&&_cfg.status==='cancelada';
+    body.innerHTML='<div class="fcAdm">'+
+      '<div>'+
+        '<div class="fcCard">'+
+          '<h3><i class="fas fa-umbrella-beach"></i> Configurar a contagem</h3>'+
+          '<p class="d">A contagem se atualiza sozinha todo dia. Se mudar as datas, os dias restantes são recalculados na hora para todo mundo.</p>'+
+          statusHtml()+
+          '<div class="fcCampo"><label>Título da contagem</label><input type="text" id="fcTitulo" maxlength="70" value="'+esc(r.titulo)+'" placeholder="'+esc(TITULO_PADRAO)+'"></div>'+
+          '<div class="fcDuas">'+
+            '<div class="fcCampo"><label>Início da contagem</label><input type="date" id="fcIni" value="'+esc(r.inicio)+'"></div>'+
+            '<div class="fcCampo"><label>Chegada das férias (dia zero)</label><input type="date" id="fcFim" value="'+esc(r.fim)+'"></div>'+
+          '</div>'+
+          '<div class="fcResumo'+(res.ok?'':' erro')+'" id="fcResumo">'+res.html+'</div>'+
+          '<div class="fcToggle" id="fcNotifTg"><div class="t">Notificações automáticas<small>Todo dia, cada pessoa recebe uma notificação na intranet com quantos dias faltam.</small></div><div class="fcSw'+(r.notificacoes?' on':'')+'"></div></div>'+
+          '<div class="fcAcoes" style="margin-top:4px">'+
+            '<button class="fcBtn pri" id="fcSalvar"'+(res.ok?'':' disabled')+'><i class="fas fa-paper-plane"></i> '+(_cfg&&_cfg.status==='ativa'?'Salvar alterações':'Publicar contagem')+'</button>'+
+            '<button class="fcBtn" id="fcVerPrev"'+(res.ok?'':' disabled')+'><i class="fas fa-eye"></i> Prévia</button>'+
+            (_cfg&&_cfg.inicio?(cancelada?'<button class="fcBtn" id="fcReativar"><i class="fas fa-rotate-left"></i> Reativar</button>':'<button class="fcBtn perigo" id="fcCancelar"><i class="fas fa-ban"></i> Cancelar contagem</button>'):'')+
+          '</div>'+
+        '</div>'+
+        '<div class="fcCard" style="margin-top:16px"><h3><i class="fas fa-bell"></i> Notificação de hoje</h3>'+
+          '<p class="d" style="margin-bottom:6px">É assim que ela aparece no painel de notificações da intranet.</p>'+
+          '<div id="fcNotifBox"></div>'+
+          '<div class="fcAcoes" style="margin-top:12px"><button class="fcBtn" id="fcTestaNotif"'+(res.ok?'':' disabled')+'><i class="fas fa-bell"></i> Mostrar na tela agora</button></div></div>'+
+        '<div class="fcCard" style="margin-top:16px"><h3><i class="fas fa-clock-rotate-left"></i> Histórico</h3><div class="fcHist">'+hist+'</div></div>'+
+      '</div>'+
+      '<div class="fcCard" style="padding:16px"><h3><i class="fas fa-wand-magic-sparkles"></i> Prévia da animação</h3>'+
+        '<p class="d" style="margin-bottom:8px">Veja como fica em qualquer dia da contagem antes de publicar. Nada é enviado para a equipe aqui.</p>'+
+        '<div class="fcSim"><span style="font-size:12.5px;color:#c8c8c8">Simular:</span><input type="range" id="fcSimR" min="0" max="1" value="1"><span class="v" id="fcSimV"></span></div>'+
+        '<div class="fcAcoes" style="margin:8px 0 14px">'+
+          '<button class="fcBtn pri" id="fcSimArr"><i class="fas fa-hand"></i> Arrancar uma folha</button>'+
+          '<button class="fcBtn" id="fcSimFesta"><i class="fas fa-champagne-glasses"></i> Ver a chegada (dia zero)</button>'+
+        '</div>'+
+        '<div id="fcPrevBox"></div>'+
+      '</div>'+
+    '</div>';
+
+    var $=function(id){ return document.getElementById(id); };
+    function lerCampos(){ r.titulo=$('fcTitulo').value.trim()||TITULO_PADRAO; r.inicio=$('fcIni').value; r.fim=$('fcFim').value; }
+    function atualizaResumo(){
+      lerCampos(); var x=resumoRasc();
+      $('fcResumo').className='fcResumo'+(x.ok?'':' erro'); $('fcResumo').innerHTML=x.html;
+      ['fcSalvar','fcVerPrev','fcTestaNotif'].forEach(function(id){ if($(id)) $(id).disabled=!x.ok; });
+      notifBox(); if(x.ok) montarPrevia(null);
+    }
+    function notifBox(){
+      var x=resumoRasc(), b=$('fcNotifBox'); if(!b) return;
+      if(!x.ok){ b.innerHTML=''; return; }
+      var d=Math.max(0,Math.min(x.total,entre(hoje(),r.fim)));
+      if(entre(r.inicio,hoje())<0) d=x.total;
+      b.innerHTML='<div class="fcNotifPrev"><div class="a">🌴 '+esc(r.titulo)+'</div><div class="b">'+esc(msgNotif(d))+'</div></div>'+
+        (r.notificacoes?'':'<div style="font-size:11.5px;color:#e5533c;margin-top:8px"><i class="fas fa-bell-slash"></i> Desligadas: ninguém recebe.</div>');
+    }
+    function montarPrevia(dias){
+      var x=resumoRasc(); if(!x.ok){ $('fcPrevBox').innerHTML=''; return; }
+      var R=$('fcSimR'); R.max=x.total;
+      if(dias==null){ var hj=entre(hoje(),r.fim); dias=(hj>=0&&hj<=x.total)?hj:x.total; }
+      R.value=dias; $('fcSimV').textContent=dias<=0?'dia zero':(dias===1?'falta 1 dia':'faltam '+dias+' dias');
+      _prev=Cena($('fcPrevBox'),{titulo:r.titulo,inicio:r.inicio,fim:r.fim},{previa:true,dias:dias,total:x.total});
+    }
+    ['fcTitulo','fcIni','fcFim'].forEach(function(id){ $(id).addEventListener(id==='fcTitulo'?'input':'change',atualizaResumo); });
+    $('fcTitulo').addEventListener('change',atualizaResumo);
+    $('fcNotifTg').onclick=function(){ r.notificacoes=!r.notificacoes; this.querySelector('.fcSw').classList.toggle('on',r.notificacoes); notifBox(); };
+    $('fcSimR').oninput=function(){ montarPrevia(+this.value); };
+    $('fcSimArr').onclick=function(){ var x=resumoRasc(); if(!x.ok) return; var d=+$('fcSimR').value; if(d<=0) d=1;
+      montarPrevia(d); setTimeout(function(){ _prev.arrancar(d,d-1,function(){ $('fcSimR').value=d-1; $('fcSimV').textContent=d-1<=0?'dia zero':(d-1===1?'falta 1 dia':'faltam '+(d-1)+' dias'); }); },250); };
+    $('fcSimFesta').onclick=function(){ montarPrevia(1); setTimeout(function(){ _prev.arrancar(1,0,function(){ $('fcSimR').value=0; $('fcSimV').textContent='dia zero'; }); },250); };
+    $('fcVerPrev').onclick=function(){ lerCampos(); montarPrevia(null); var d=+$('fcSimR').value;
+      $('fcPrevBox').scrollIntoView({behavior:'smooth',block:'center'});
+      if(d<resumoRasc().total) setTimeout(function(){ _prev.arrancar(d+1,d); },500); else setTimeout(function(){ _prev.arrancar(d,d); },300); };
+    $('fcTestaNotif').onclick=function(){ lerCampos(); var x=resumoRasc(); if(!x.ok) return;
+      var d=Math.max(0,Math.min(x.total,entre(hoje(),r.fim))); if(entre(r.inicio,hoje())<0) d=x.total;
+      notificar(d,{titulo:r.titulo},true); };
+    $('fcSalvar').onclick=async function(){
+      lerCampos(); var x=resumoRasc(); if(!x.ok) return;
+      var btn=this; btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Salvando...';
+      var antes=_cfg||{}, novo=antes.status!=='ativa';
+      var mud=[];
+      if(novo) mud.push('publicou: '+br(r.inicio)+' → '+br(r.fim));
+      else{
+        if(antes.inicio!==r.inicio) mud.push('início '+br(antes.inicio)+' → '+br(r.inicio));
+        if(antes.fim!==r.fim) mud.push('férias '+br(antes.fim)+' → '+br(r.fim));
+        if((antes.titulo||'')!==r.titulo) mud.push('título');
+        if((antes.notificacoes!==false)!==r.notificacoes) mud.push('notificações '+(r.notificacoes?'ligadas':'desligadas'));
+      }
+      var obj={id:ID,titulo:r.titulo,inicio:r.inicio,fim:r.fim,status:'ativa',notificacoes:r.notificacoes,
+        versao:(antes.inicio===r.inicio&&antes.fim===r.fim&&antes.status==='ativa'&&antes.versao)?antes.versao:Date.now(),
+        atualizadoEm:Date.now(),atualizadoPor:meu(),atualizadoPorNome:meuNome(),
+        hist:(antes.hist||[]).concat([{em:Date.now(),por:meu(),porNome:meuNome(),acao:mud.join(' · ')||'salvou sem mudanças'}]).slice(-60)};
+      var ok=await gravar(obj);
+      if(ok){ toastOk(novo?'Contagem publicada! 🌴':'Contagem atualizada.'); _rasc=null; atualizarTudo(); renderAdmin(body); }
+      else{ toastOk('Não consegui salvar. Confira a conexão e tente de novo.','error'); btn.disabled=false; btn.innerHTML='<i class="fas fa-paper-plane"></i> Tentar de novo'; }
+    };
+    async function mudarStatus(st,acao,msg){
+      var antes=_cfg||{}; var obj=Object.assign({},antes,{status:st,atualizadoEm:Date.now(),atualizadoPor:meu(),atualizadoPorNome:meuNome(),
+        versao:st==='ativa'?Date.now():antes.versao,
+        hist:(antes.hist||[]).concat([{em:Date.now(),por:meu(),porNome:meuNome(),acao:acao}]).slice(-60)});
+      if(await gravar(obj)){ toastOk(msg); _rasc=null; atualizarTudo(); renderAdmin(body); }
+      else toastOk('Não consegui salvar. Confira a conexão.','error');
+    }
+    if($('fcCancelar')) $('fcCancelar').onclick=function(){
+      if(!confirm('Cancelar a contagem?\n\nEla some da intranet e as notificações param para todo mundo. Dá para reativar depois.')) return;
+      mudarStatus('cancelada','cancelou a contagem','Contagem cancelada.'); };
+    if($('fcReativar')) $('fcReativar').onclick=function(){ mudarStatus('ativa','reativou a contagem','Contagem reativada. 🌴'); };
+    notifBox(); montarPrevia(null);
+  }
+
+  /* ---------------- notificacao diaria ---------------- */
+  function notificar(d,cfg,teste){
+    var box=document.getElementById('gwa-notif-container'); if(!box) return false;
+    try{ if(typeof playNotifSound==='function') playNotifSound(); }catch(e){}
+    var div=document.createElement('div');
+    div.className='gwa-notif fcNotif';
+    div.innerHTML='<button class="gwa-notif__close" type="button">✕</button>'+
+      '<div class="gwa-notif__title"><span style="font-size:16px">🌴</span>'+esc((cfg&&cfg.titulo)||TITULO_PADRAO)+(teste?' <span style="font-size:10px;color:#f0943a;font-weight:800">TESTE</span>':'')+'</div>'+
+      '<div class="gwa-notif__body" style="font-size:14px;color:#fff;font-weight:650">'+esc(msgNotif(d))+'</div>'+
+      '<div class="gwa-notif__actions"><button class="gwa-notif__btn gwa-notif__btn--primary" type="button">Ver contagem</button>'+
+      '<button class="gwa-notif__btn gwa-notif__btn--secondary" type="button">Fechar</button></div>'+
+      '<div class="gwa-notif__progress"><div class="gwa-notif__progress-bar"></div></div>';
+    function some(){ if(!div.parentNode) return; div.style.animation='notifFadeOut .35s ease forwards'; setTimeout(function(){ try{ div.remove(); }catch(e){} },350); }
+    div.querySelector('.gwa-notif__close').onclick=some;
+    div.querySelector('.gwa-notif__btn--secondary').onclick=some;
+    div.querySelector('.gwa-notif__btn--primary').onclick=function(){ some(); if(!teste) window.gwaAbrirFerias('contagem'); };
+    box.appendChild(div);
+    setTimeout(some,12000);
+    return true;
+  }
+  function logado(){
+    if(!meu()) return false;
+    var p=document.getElementById('portalWrapper');
+    if(p){ try{ if(getComputedStyle(p).display==='none') return false; }catch(e){} }
+    return true;
+  }
+  function talvezNotificar(){
+    if(!logado() || !_cfg || _cfg.notificacoes===false) return;
+    var s=situacao(_cfg); if(!visivel(s)) return;
+    var m=lsGet(LS_NOTIF,{}), k=meu(), marca=hoje()+'|'+(_cfg.versao||0);
+    if(m[k]===marca) return;
+    if(notificar(s.dias,_cfg,false)){ m[k]=marca; lsSet(LS_NOTIF,m); }
+  }
+
+  /* ---------------- menu, home e admin ---------------- */
+  function atualizarNav(){
+    var nav=document.getElementById('mainNav')||document.querySelector('.mc-nav');
+    var a=document.getElementById('gwaFerNav'), s=situacao(_cfg);
+    var mostra=logado() && (visivel(s) || ehAdm());
+    if(!mostra){ if(a) a.remove(); return; }
+    if(!a && nav){
+      a=document.createElement('a'); a.id='gwaFerNav'; a.className='mc-nav__item'; a.style.cursor='pointer';
+      a.onclick=function(){ window.gwaAbrirFerias('contagem'); };
+      var ref=document.getElementById('navIAGWA');
+      if(ref && ref.parentNode===nav) nav.insertBefore(a,ref); else nav.appendChild(a);
+    }
+    if(!a) return;
+    var v=visto(), ponto=visivel(s) && !(v && v.dia===hoje() && v.dias===s.dias);
+    var html='<i class="fas fa-umbrella-beach"></i> Férias'+(ponto?'<span class="fcPonto" title="Folha nova no calendário"></span>':'');
+    if(a.innerHTML!==html) a.innerHTML=html;
+  }
+  function atualizarHome(){
+    var tab=document.getElementById('tab-home'); if(!tab) return;
+    var el=document.getElementById('gwaFerHome'), s=situacao(_cfg);
+    if(!logado() || !visivel(s)){ if(el) el.remove(); return; }
+    if(!el){
+      el=document.createElement('div'); el.id='gwaFerHome';
+      el.onclick=function(){ window.gwaAbrirFerias('contagem'); };
+      var ref=tab.querySelector('.gwa-carousel-wrap')||null;
+      if(ref) tab.insertBefore(el,ref); else tab.appendChild(el);
+    }
+    var html='<span class="sol"></span><div class="mini"><i></i><b>'+(s.dias<=0?'🌴':s.dias)+'</b></div>'+
+      '<div class="tx"><b>'+esc(msgPrincipal(s.dias))+'</b><span>'+esc(_cfg.titulo||TITULO_PADRAO)+' · '+esc(msgClima(s.dias,s.total))+'</span></div>'+
+      '<div class="ir">Ver contagem <i class="fas fa-arrow-right"></i></div>';
+    if(el.getAttribute('data-k')!==hoje()+'|'+s.dias+'|'+(_cfg.versao||0)+'|'+(_cfg.titulo||'')){ el.innerHTML=html; el.setAttribute('data-k',hoje()+'|'+s.dias+'|'+(_cfg.versao||0)+'|'+(_cfg.titulo||'')); }
+  }
+  /* item "Ferias" no painel administrativo + acesso ao Comunicado do dia (antes era o megafone flutuante) */
+  function atualizarAdmin(){
+    if(!ehAdm()) return;
+    var side=document.querySelector('#adminPanel .mc-admin-sidebar');
+    if(side && !document.getElementById('gwaFerAdmItem')){
+      var av=side.querySelector('[onclick*="adminNav(\'avisos\'"]');
+      var it=document.createElement('div'); it.id='gwaFerAdmItem'; it.className='mc-admin-menu-item';
+      it.innerHTML='<i class="fas fa-umbrella-beach"></i> Férias';
+      it.onclick=function(){ window.gwaAbrirFerias('admin'); };
+      if(av && av.nextSibling) side.insertBefore(it,av.nextSibling); else side.appendChild(it);
+    }
+    var sec=document.getElementById('adm-avisos');
+    if(sec && !sec.querySelector('.gwaComDiaBtn') && typeof window.gwaComunicadoDiarioAdmin==='function'){
+      var topo=sec.querySelector('div'); if(!topo) return;
+      var b=document.createElement('button'); b.type='button'; b.className='mc-btn mc-btn--sm gwaComDiaBtn';
+      b.style.cssText='background:#111;color:#FF8000;border:1px solid #FF8000;margin-right:8px';
+      b.innerHTML='<i class="fas fa-bullhorn"></i> Comunicado do dia';
+      b.title='Tela de primeiro acesso do dia';
+      b.onclick=function(e){ e.preventDefault(); window.gwaComunicadoDiarioAdmin(); };
+      var prim=topo.querySelector('button');
+      if(prim && prim.parentNode===topo) topo.insertBefore(b,prim); else topo.appendChild(b);
+    }
+  }
+
+  function atualizarTudo(){ try{ atualizarNav(); }catch(e){} try{ atualizarHome(); }catch(e){} try{ atualizarAdmin(); }catch(e){} try{ talvezNotificar(); }catch(e){} }
+
+  /* virada do dia com o painel aberto: arranca a folha na frente da pessoa */
+  function viradaDoDia(){
+    var o=document.getElementById('gwaFerOv');
+    if(!o || !o.classList.contains('on') || _aba!=='contagem' || !_cena) return;
+    var s=situacao(_cfg);
+    if(!visivel(s)){ render(true); return; }
+    if(_cena.dias!==s.dias && !_cena.ocupado){ var de=_cena.dias; marcarVisto(s.dias); _cena.arrancar(Math.max(de,s.dias+1),s.dias); }
+  }
+
+  /* ---------------- ciclo ---------------- */
+  var _ultimoDia=hoje(), _ultimaCarga=0, _iniciou=false;
+  function iniciar(){
+    if(_iniciou) return;
+    if(!meu()){ setTimeout(iniciar,1500); return; }
+    _iniciou=true;
+    atualizarTudo();
+    carregar().then(function(){ _ultimaCarga=Date.now(); atualizarTudo(); });
+    setInterval(function(){
+      var d=hoje();
+      var mudouDia=d!==_ultimoDia; _ultimoDia=d;
+      var precisaCarregar=mudouDia || (!document.hidden && Date.now()-_ultimaCarga>300000);
+      var seguir=function(){ atualizarTudo(); viradaDoDia(); };
+      if(precisaCarregar) carregar().then(function(){ _ultimaCarga=Date.now(); seguir(); }); else seguir();
+    },60000);
+    document.addEventListener('visibilitychange',function(){
+      if(document.hidden) return;
+      if(Date.now()-_ultimaCarga>60000) carregar().then(function(){ _ultimaCarga=Date.now(); atualizarTudo(); viradaDoDia(); });
+      else { atualizarTudo(); viradaDoDia(); }
+    });
+  }
+  var _t=null;
+  function agendar(){ if(_t) clearTimeout(_t); _t=setTimeout(function(){ if(!_iniciou) iniciar(); else { atualizarNav(); atualizarHome(); atualizarAdmin(); } },250); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setTimeout(iniciar,1200); });
+  else setTimeout(iniciar,1200);
+  try{ new MutationObserver(function(ms){
+    for(var i=0;i<ms.length;i++){ var t=ms[i].target; if(t && t.closest && t.closest('#gwaFerOv,#gwaFerHome,#gwaFerNav,#gwa-notif-container')) continue; agendar(); return; }
+  }).observe(document.body,{childList:true,subtree:true}); }catch(e){}
+  var _ep=window.enterPortal; if(typeof _ep==='function'){ window.enterPortal=function(){ var r=_ep.apply(this,arguments); setTimeout(function(){ _iniciou?atualizarTudo():iniciar(); },1500); return r; }; }
+
+  /* para os testes */
+  window.gwaFerias={ situacao:situacao, msgPrincipal:msgPrincipal, msgNotif:msgNotif, msgClima:msgClima, carregar:carregar,
+    atualizar:atualizarTudo, notificar:notificar, virada:viradaDoDia, _cfg:function(){ return _cfg; }, _set:function(c){ _cfg=c; lsSet(LS_CFG,c); }, Cena:Cena };
+})();
+</script>
+
 </body>
 </html>
