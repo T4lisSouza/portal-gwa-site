@@ -10113,8 +10113,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function migraTabNeg(c){ if(!c) return c; if(Number(c.tabelaNegVersao||0)<2){ c.tabelaPremiacaoNeg=tabNegOficial(); c.tabelaNegVersao=2; c.tabelaNegInicio='02/02/2026'; } return c; }
   async function loadCfg(){ try{ var r=await fetch(base()+'/api/vendas_config/atual',{headers:H()}); if(r.ok){ var j=await r.json(); if(j&&j.ok&&j.data){ _cfg=migraTabNeg(Object.assign({},DEF_CFG,j.data)); _cfg.metas=Object.assign({},DEF_CFG.metas,_cfg.metas); return _cfg; } } }catch(e){} _cfg=JSON.parse(JSON.stringify(DEF_CFG)); return _cfg; }
   async function saveCfg(){ try{ await fetch(base()+'/api/vendas_config/atual',{method:'PUT',headers:H(),body:JSON.stringify(Object.assign({id:'atual'},_cfg))}); return true; }catch(e){ return false; } }
-  async function loadVendas(){ try{ var r=await fetch(base()+'/api/vendas',{headers:H()}); if(r.ok){ var j=await r.json(); if(j&&j.ok){ _vendas=j.data||[]; return _vendas; } } }catch(e){} _vendas=_vendas||[]; return _vendas; }
-  async function saveVenda(v){ try{ var r=await fetch(base()+'/api/vendas/'+encodeURIComponent(v.id),{method:'PUT',headers:H(),body:JSON.stringify(v)}); gsUpsert(v); return r.ok; }catch(e){ return false; } }
+  async function loadVendas(){ try{ var r=await fetch(base()+'/api/vendas',{headers:H()}); if(r.ok){ var j=await r.json(); if(j&&j.ok){ var _lst=j.data||[]; try{ if(window.gwaPHAjustarVendas) _lst=await window.gwaPHAjustarVendas(_lst); }catch(e){} _vendas=_lst; return _vendas; } } }catch(e){} _vendas=_vendas||[]; return _vendas; }
+  async function saveVenda(v){ if(v&&v.ph&&window.gwaPHLimpar) v=window.gwaPHLimpar(v); /* grava sempre a venda original */ try{ var r=await fetch(base()+'/api/vendas/'+encodeURIComponent(v.id),{method:'PUT',headers:H(),body:JSON.stringify(v)}); gsUpsert(v); return r.ok; }catch(e){ return false; } }
 
   /* ---- Google Sheets (conta conectada via Google Identity) ---- */
   var _gtoken=null, _gtokenExp=0;
@@ -10132,7 +10132,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   async function gsEnsureHeaderNeg(){ if(!negSep()||!gTokenOk()) return; try{ var r=await gsApi('https://sheets.googleapis.com/v4/spreadsheets/'+_cfg.negSheetId+'/values/A1:A1','GET'); var j=await r.json(); if(!(j.values&&j.values.length)){ await gsApi('https://sheets.googleapis.com/v4/spreadsheets/'+_cfg.negSheetId+'/values/A1:append?valueInputOption=RAW','POST',{values:[GS_HEADER_NEG]}); } }catch(e){} }
   async function gsApi(url,method,body){ return fetch(url,{method:method,headers:{'Authorization':'Bearer '+_gtoken,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}); }
   async function gsCreateSheet(){ var name=(_cfg.sheetName||'Vendas GWA'); var r=await gsApi('https://sheets.googleapis.com/v4/spreadsheets','POST',{properties:{title:name}}); var j=await r.json(); if(!j.spreadsheetId) throw new Error('Não foi possível criar a planilha'); _cfg.sheetId=j.spreadsheetId; await gsApi('https://sheets.googleapis.com/v4/spreadsheets/'+_cfg.sheetId+'/values/A1:append?valueInputOption=RAW','POST',{values:[GS_HEADER]}); await saveCfg(); return _cfg.sheetId; }
-  async function gsFullExport(){ if(!_cfg.sheetId) await gsCreateSheet(); var vend=(_vendas||[]).slice().sort(function(a,b){return (a.ts||0)-(b.ts||0);});
+  async function gsFullExport(){ if(!_cfg.sheetId) await gsCreateSheet(); var vend=(_vendas||[]).map(function(v){ return (v.ph&&window.gwaPHLimpar)?window.gwaPHLimpar(v):v; }).concat(window.gwaPHPendentesRaw?window.gwaPHPendentesRaw():[]).slice().sort(function(a,b){return (a.ts||0)-(b.ts||0);});
     var mainRows=(negSep()?vend.filter(function(v){return v.dept!=='negociacao';}):vend).map(gRow);
     try{ await gsApi('https://sheets.googleapis.com/v4/spreadsheets/'+_cfg.sheetId+'/values/A2:O:clear','POST',{}); }catch(e){} if(mainRows.length) await gsApi('https://sheets.googleapis.com/v4/spreadsheets/'+_cfg.sheetId+'/values/A2?valueInputOption=RAW','PUT',{values:mainRows});
     if(negSep()){ await gsEnsureHeaderNeg(); var negRows=vend.filter(function(v){return v.dept==='negociacao';}).map(gRowNeg); try{ await gsApi('https://sheets.googleapis.com/v4/spreadsheets/'+_cfg.negSheetId+'/values/A2:O:clear','POST',{}); }catch(e){} if(negRows.length) await gsApi('https://sheets.googleapis.com/v4/spreadsheets/'+_cfg.negSheetId+'/values/A2?valueInputOption=RAW','PUT',{values:negRows}); } }
@@ -10243,7 +10243,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   function ensurePanel(){ if(document.getElementById('gwaVendasOverlay')) return; var o=document.createElement('div'); o.id='gwaVendasOverlay'; o.style.cssText='position:fixed;inset:0;z-index:99990;background:linear-gradient(180deg,'+Co.bgA+','+Co.bgB+');display:none;flex-direction:column;overflow:auto;font-family:inherit'; o.innerHTML='<div id="gwaVendasHead" style="position:sticky;top:0;background:'+Co.bgA+';border-bottom:3px solid '+Co.orangeD+';color:#fff;padding:14px max(22px,calc((100% - 1240px) / 2));display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;z-index:3;box-shadow:0 4px 18px rgba(0,0,0,.4)"></div><div id="gwaVendasBody" style="padding:22px;max-width:1240px;margin:0 auto;width:100%;box-sizing:border-box"></div>'; document.body.appendChild(o); }
 
-  function tabsFor(){ var t=[]; if(!isAdmin()){ t=[['lancar','Lançar venda','fa-plus'],['minhas','Minhas vendas','fa-list'],['evolucao','Minha evolução','fa-arrow-trend-up'],['links','Link de pagamento','fa-link']]; } else { t=[['dash','Dashboard','fa-gauge-high'],['ranking','Ranking','fa-ranking-star'],['hoje','Vendeu hoje','fa-bolt'],['hora','Por hora','fa-clock'],['vendas','Vendas','fa-table-list'],['links','Link de pagamento','fa-link'],['metas','Metas','fa-bullseye'],['lancar','Lançar','fa-plus']]; if(isMaster()) t.push(['config','Ajustes','fa-sliders']); } return t; }
+  function tabsFor(){ var t=[]; if(!isAdmin()){ t=[['lancar','Lançar venda','fa-plus'],['minhas','Minhas vendas','fa-list'],['evolucao','Minha evolução','fa-arrow-trend-up'],['links','Link de pagamento','fa-link']]; } else { t=[['dash','Dashboard','fa-gauge-high'],['ranking','Ranking','fa-ranking-star'],['hoje','Vendeu hoje','fa-bolt'],['hora','Por hora','fa-clock'],['vendas','Vendas','fa-table-list'],['links','Link de pagamento','fa-link'],['metas','Metas','fa-bullseye'],['lancar','Lançar','fa-plus']]; if(isMaster()) t.push(['config','Ajustes','fa-sliders']); } try{ if(window.gwaPHPodeVer&&window.gwaPHPodeVer()) t.push(['ph','1ª Habilitação','fa-id-card']); }catch(e){} return t; }
 
   function render(){ ensurePanel(); var head=document.getElementById('gwaVendasHead'), body=document.getElementById('gwaVendasBody'); if(!head||!body) return;
     if(!_view){ _view=isAdmin()?'dash':'lancar'; }
@@ -10253,7 +10253,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(semAcesso){ body.innerHTML='<div style="max-width:540px;margin:50px auto;text-align:center;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:34px;color:'+Co.sub+';box-shadow:0 4px 20px rgba(0,0,0,.35)"><i class="fas fa-lock" style="font-size:36px;color:'+Co.orange+'"></i><h3 style="color:#fff;margin:16px 0 8px">Acesso não liberado</h3><p style="line-height:1.5">Seu usuário ainda não tem permissão para ver nenhum painel de vendas.<br>Peça ao administrador <b style="color:#fff">Master</b> para liberar seu acesso em <b style="color:'+Co.orange+'">Ajustes → Acessos de supervisão</b>.</p></div>'; return; }
     var deptAtivo=(_dept==='consolidado')?null:_dept;
     try{
-      if(_view==='lancar'){ body.innerHTML=viewLancar(); setTimeout(function(){try{__gwaVendasCalc();}catch(e){}},30); }
+      if(_view==='ph'){ if(window.gwaPHRender) window.gwaPHRender(body); }
+      else if(_view==='lancar'){ body.innerHTML=viewLancar(); setTimeout(function(){try{__gwaVendasCalc();}catch(e){}},30); }
       else if(_view==='minhas') body.innerHTML=viewMinhas();
       else if(_view==='evolucao'){ body.innerHTML=viewEvolucao(); setTimeout(function(){initEvolucaoCharts();},60); }
       else if(_view==='vendas') body.innerHTML=viewVendas(deptAtivo);
@@ -10295,14 +10296,14 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function formaOpts(sel){ var fs=[['cartao','Cartão'],['link','Link de pagamento'],['linkmercado','Link-Mercado (Mercado Pago)'],['boleto','Boleto'],['debito','Débito'],['pix','PIX'],['dinheiro','Dinheiro']]; (((_cfg&&_cfg.formasExtras)||[])).forEach(function(f){ fs.push([f.key,f.label]); }); return fs.map(function(f){return '<option value="'+f[0]+'"'+(sel===f[0]?' selected':'')+'>'+esc(f[1])+'</option>';}).join(''); }
   function negOptList(list,selv){ return '<option value="">—</option>'+((list||[]).map(function(x){return '<option value="'+esc(x)+'"'+(selv===x?' selected':'')+'>'+esc(x)+'</option>';}).join('')); }
   window.__gwaVendasAddServ=function(){ var w=document.getElementById('negServWrap'); if(!w) return; var servs=(_cfg&&_cfg.negServicos)||[]; var d=document.createElement('div'); d.style.marginTop='8px'; d.innerHTML='<select class="negServ" '+inp()+'>'+negOptList(servs,'')+'</select>'; w.appendChild(d); };
-  function viewLancar(){ var ed=_editId?(_vendas||[]).find(function(x){return x.id===_editId;}):null; var d; if(ed){ d=ed.dept||'comercial'; } else if(!isAdmin()) d=userDept(curU()); else d=(_dept==='consolidado')?userDept(curU()):_dept;
+  function viewLancar(){ var ed=_editId?((_vendas||[]).find(function(x){return x.id===_editId;})||(window.gwaPHRaw?window.gwaPHRaw(_editId):null)):null; if(ed&&ed.ph&&ed.phRaw) ed=ed.phRaw; var d; if(ed){ d=ed.dept||'comercial'; } else if(!isAdmin()) d=userDept(curU()); else d=(_dept==='consolidado')?userDept(curU()):_dept;
     var g={ dat:(ed?ed.dataVenda:today()), cli:(ed?ed.cliente:''), cpf:(ed?ed.cpf:''), pago:(ed?ed.valorPago:''), forma:(ed?ed.forma:'cartao'), parc:(ed?ed.parcelas:1) };
     var titulo=ed?('<i class="fas fa-pen" style="color:'+Co.orange+'"></i> Editar venda'):('<i class="fas fa-plus" style="color:'+Co.orange+'"></i> Lançar venda');
     var subt=ed?('Editando venda de <b style="color:#fff">'+esc(ed.consultorNome||ed.consultor||'')+'</b>'):'Departamento <b style="color:'+Co.orange+'">'+esc(d)+'</b> · definido pelo cadastro do consultor';
     var btn=ed?btnPri('<i class="fas fa-check"></i> Salvar alterações','__gwaVendasSalvar()')+' <button onclick="__gwaVendasCancelarEdicao()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:12px;padding:12px 18px;font-weight:600;cursor:pointer">Cancelar</button>':btnPri('<i class="fas fa-check"></i> Salvar venda','__gwaVendasSalvar()');
     var selVend=seletorVendedor(ed,d);
     var negBlock=''; if(d==='negociacao'){ var prods=(_cfg&&_cfg.negProdutos)||[]; var servs=(_cfg&&_cfg.negServicos)||[]; var edServ=(ed&&ed.servicos)||[]; var extras=''; for(var si=2;si<edServ.length;si++){ extras+='<div style="margin-top:8px"><select class="negServ" '+inp()+'>'+negOptList(servs,edServ[si])+'</select></div>'; }
-      negBlock=row('Produto inicial','<select id="negProd" '+inp()+'>'+negOptList(prods,(ed&&ed.produtoInicial)||'')+'</select>')+'<div style="margin-bottom:10px"><label style="font-size:12px;color:'+Co.mut+';display:block;margin-bottom:4px">Serviços adicionais</label><div id="negServWrap"><div style="margin-bottom:8px"><select class="negServ" '+inp()+'>'+negOptList(servs,edServ[0]||'')+'</select></div><div><select class="negServ" '+inp()+'>'+negOptList(servs,edServ[1]||'')+'</select></div>'+extras+'</div><button type="button" onclick="__gwaVendasAddServ()" style="margin-top:8px;background:'+Co.card2+';border:1px solid '+Co.line+';color:#fff;border-radius:10px;padding:8px 14px;cursor:pointer"><i class="fas fa-plus"></i> Adicionar serviço</button></div>'; }
+      negBlock=row('Produto inicial <span style=\x22color:#e5533c\x22>*</span>','<select id="negProd" onchange="if(window.__gwaPHProdMudou)__gwaPHProdMudou()" '+inp()+'>'+negOptList((prods.indexOf('PRIMEIRA HABILITAÇÃO')<0?prods.concat(['PRIMEIRA HABILITAÇÃO']):prods),(ed&&ed.produtoInicial)||'')+'</select>')+'<div id="negRepWrap" style="display:'+((ed&&window.gwaPHEhPH&&window.gwaPHEhPH(ed))?'block':'none')+'">'+row('Valor de repasse à autoescola (R$) <span style=\x22color:#e5533c\x22>*</span>','<input id="negRepasse" type="number" step="0.01" min="0" value="'+esc(ed&&ed.repasse!=null?ed.repasse:'')+'" oninput="if(window.__gwaPHRepCalc)__gwaPHRepCalc()" '+inp()+'>')+'<div id="negRepInfo" style="font-size:12px;margin:-4px 0 12px;line-height:1.5;color:'+Co.mut+'">Valor que vai para a autoescola (0 se não houver). O líquido GWA (pago − repasse) entra no faturamento depois da confirmação do Financeiro.</div></div>'+'<div style="margin-bottom:10px"><label style="font-size:12px;color:'+Co.mut+';display:block;margin-bottom:4px">Serviço contratado <span style=\x22color:#e5533c\x22>*</span> <span style=\x22font-weight:400\x22>(pode adicionar mais de um)</span></label><div id="negServWrap"><div style="margin-bottom:8px"><select class="negServ" '+inp()+'>'+negOptList(servs,edServ[0]||'')+'</select></div><div><select class="negServ" '+inp()+'>'+negOptList(servs,edServ[1]||'')+'</select></div>'+extras+'</div><button type="button" onclick="__gwaVendasAddServ()" style="margin-top:8px;background:'+Co.card2+';border:1px solid '+Co.line+';color:#fff;border-radius:10px;padding:8px 14px;cursor:pointer"><i class="fas fa-plus"></i> Adicionar serviço</button></div>'; }
     return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:20px;padding:24px;max-width:660px;margin:0 auto;color:'+Co.sub+';box-shadow:0 6px 26px rgba(0,0,0,.35)">'+
       '<h3 style="margin:0 0 4px;color:#fff;font-size:19px">'+titulo+'</h3><p style="font-size:12px;color:'+Co.mut+';margin:0 0 18px">'+subt+'</p>'+
       row('Data da venda','<input id="vDat" type="date" value="'+esc(g.dat)+'" '+inp()+'>')+row('Nome do cliente','<input id="vCli" value="'+esc(g.cli)+'" '+inp()+'>')+
@@ -10325,8 +10326,20 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var pago=Number((document.getElementById('vPago')||{}).value)||0; var forma=(document.getElementById('vForma')||{}).value; var parc=parseInt((document.getElementById('vParc')||{}).value)||1; var cli=((document.getElementById('vCli')||{}).value||'').trim(); var cpf=(document.getElementById('vCpf')||{}).value||''; var dat=(document.getElementById('vDat')||{}).value||today();
     if(!cli){ alert('Informe o nome do cliente.'); return; } if(pago<=0){ alert('Informe o valor pago.'); return; }
     var produtoInicial=((document.getElementById('negProd')||{}).value)||''; var servicos=[]; Array.prototype.forEach.call(document.querySelectorAll('.negServ'),function(s){ if(s.value) servicos.push(s.value); });
+    var _phVal={ph:false};
+    if(document.getElementById('negProd')){ /* Negociacao: produto inicial e servico obrigatorios */
+      var _faltaNeg=[]; var _elP=document.getElementById('negProd'); var _sv=document.querySelectorAll('.negServ');
+      if(_elP) _elP.style.borderColor=''; Array.prototype.forEach.call(_sv,function(s){ s.style.borderColor=''; });
+      if(!produtoInicial){ _faltaNeg.push('• Produto inicial'); if(_elP) _elP.style.borderColor='#e5533c'; }
+      if(!servicos.length){ _faltaNeg.push('• Serviço contratado'); if(_sv[0]) _sv[0].style.borderColor='#e5533c'; }
+      if(_faltaNeg.length){ alert('Não dá para salvar a venda. Preencha:\n\n'+_faltaNeg.join('\n')); try{ (_elP&&!produtoInicial?_elP:_sv[0]).focus(); }catch(e){} return; }
+      /* Primeira Habilitacao: exige o repasse da autoescola */
+      if(window.gwaPHValidarLancamento){ _phVal=window.gwaPHValidarLancamento(produtoInicial,pago); if(_phVal.erro){ alert('Não dá para salvar a venda.\n\n'+_phVal.erro); return; } }
+      if(!_phVal.ph && !_editId && servicos.some(function(s){ return String(s).toUpperCase().trim()==='PRIMEIRA HABILITAÇÃO'; })){
+        if(!confirm('Você marcou o serviço Primeira Habilitação, mas o Produto inicial não é "PRIMEIRA HABILITAÇÃO".\n\nSó vendas com Produto inicial = Primeira Habilitação entram no painel de 1ª Habilitação, passam pelo Financeiro e geram cashback.\n\nOK = salvar como venda normal\nCancelar = voltar e corrigir o produto')) return; }
+    }
     var c=calc(pago,forma,parc);
-    if(_editId){ var v=(_vendas||[]).find(function(x){return x.id===_editId;}); if(!v){ alert('Venda não encontrada.'); return; } var L=loginU(u); if(!isAdmin() && loginU({login:v.consultor})!==L){ alert('Sem permissão.'); return; }
+    if(_editId){ var v=(_vendas||[]).find(function(x){return x.id===_editId;}); if(!v&&window.gwaPHRaw) v=window.gwaPHRaw(_editId); if(!v){ alert('Venda não encontrada.'); return; } if(window.gwaPHBloqueioEditar){ var _bq=window.gwaPHBloqueioEditar(v.id); if(_bq){ alert(_bq); return; } } if(v.ph&&v.phRaw) v=v.phRaw; v=Object.assign({},v); v.hist=(v.hist||[]).slice(); var L=loginU(u); if(!isAdmin() && loginU({login:v.consultor})!==L){ alert('Sem permissão.'); return; }
       v.hist=v.hist||[]; var campos=[['cliente',cli],['cpf',cpf],['dataVenda',dat],['valorPago',pago],['forma',forma],['parcelas',parc]];
       campos.forEach(function(cp){ if(String(v[cp[0]])!==String(cp[1])){ v.hist.push({por:L,ts:Date.now(),acao:'edicao',campo:cp[0],de:v[cp[0]],para:cp[1]}); v[cp[0]]=cp[1]; } });
       if(vendSel && loginU({login:v.consultor})!==String(vendSel).toUpperCase()){
@@ -10337,17 +10350,17 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         v.consultorNome=uv?(uv.nome||uv.name||uv.login):vendSel;
         if(uv) v.dept=userDept(uv)||v.dept;
         log0('Venda transferida de '+antes+' para '+v.consultorNome); }
-      if(document.getElementById('negProd')){ v.produtoInicial=produtoInicial; v.servicos=servicos; }
+      if(document.getElementById('negProd')){ v.produtoInicial=produtoInicial; v.servicos=servicos; if(_phVal.ph){ if(Number(v.repasse)!==_phVal.repasse||v.repasse==null) v.hist.push({por:L,ts:Date.now(),acao:'edicao',campo:'repasse',de:(v.repasse==null?'':v.repasse),para:_phVal.repasse}); v.repasse=_phVal.repasse; } }
       v.taxaPct=c.pct; v.desconto=c.desconto; v.liquido=c.liquido; v.atualizadoEm=Date.now();
-      var ok2=await saveVenda(v); if(ok2){ _editId=null; alert('Venda atualizada. Histórico registrado.'); _view=isAdmin()?'vendas':'minhas'; render(); } else alert('Falha ao salvar.'); return; }
+      var ok2=await saveVenda(v); if(ok2){ var _v2=v; try{ if(window.gwaPHAposSalvar) _v2=await window.gwaPHAposSalvar(v); }catch(e){} _vendas=(_vendas||[]).filter(function(x){ return x.id!==v.id; }); if(_v2) _vendas.push(_v2); _editId=null; alert('Venda atualizada. Histórico registrado.'); _view=isAdmin()?'vendas':'minhas'; render(); } else alert('Falha ao salvar.'); return; }
     var dono=u, donoSel=null;
     if(vendSel){ donoSel=usuarioPorLoginV(vendSel); if(donoSel) dono=donoSel; }
     var d=(!isAdmin())?userDept(u):((_dept==='consolidado')?userDept(dono):_dept);
     if(donoSel) d=userDept(donoSel)||d;
     var now=Date.now(); var tsReg=clampExpedienteTs(now);
     var nv={ id:'vnd_'+now.toString(36)+Math.random().toString(36).slice(2,6), dept:d, consultor:dono.login, consultorNome:dono.nome||dono.name||dono.login,
-      lancadoPor:(donoSel?loginU(u):''), lancadoPorNome:(donoSel?(u.nome||u.name||u.login):''), dataVenda:dat, cliente:cli, cpf:cpf, produtoInicial:produtoInicial, servicos:servicos, valorProduto:0, valorPago:pago, forma:forma, parcelas:parc, taxaPct:c.pct, desconto:c.desconto, liquido:c.liquido, ts:tsReg, horaReg:new Date(tsReg).toLocaleTimeString('pt-BR'), atualizadoEm:now, hist:[{por:u.login,ts:now,acao:'criacao'}] };
-    var ok=await saveVenda(nv); if(ok){ _vendas=_vendas||[]; _vendas.push(nv); _vendasKnown[nv.id]=1; gwaCelebrar(c.liquido); _view=isAdmin()?'dash':'minhas'; render(); } else alert('Falha ao salvar. Verifique a conexão.');
+      lancadoPor:(donoSel?loginU(u):''), lancadoPorNome:(donoSel?(u.nome||u.name||u.login):''), dataVenda:dat, cliente:cli, cpf:cpf, produtoInicial:produtoInicial, servicos:servicos, repasse:(_phVal.ph?_phVal.repasse:undefined), valorProduto:0, valorPago:pago, forma:forma, parcelas:parc, taxaPct:c.pct, desconto:c.desconto, liquido:c.liquido, ts:tsReg, horaReg:new Date(tsReg).toLocaleTimeString('pt-BR'), atualizadoEm:now, hist:[{por:u.login,ts:now,acao:'criacao'}] };
+    var ok=await saveVenda(nv); if(ok){ _vendas=_vendas||[]; _vendasKnown[nv.id]=1; if(_phVal.ph){ try{ if(window.gwaPHAposSalvar) await window.gwaPHAposSalvar(nv); }catch(e){} alert('Venda de Primeira Habilitação registrada!\n\nEla já aparece no painel 1ª Habilitação e foi para a confirmação do Financeiro. O líquido ('+money(pago-_phVal.repasse)+') entra no faturamento depois da confirmação.'); _view=(window.gwaPHPodeVer&&window.gwaPHPodeVer())?'ph':(isAdmin()?'dash':'minhas'); render(); } else { _vendas.push(nv); gwaCelebrar(c.liquido); _view=isAdmin()?'dash':'minhas'; render(); } } else alert('Falha ao salvar. Verifique a conexão.');
   }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
 
   /* ---- animação de parabéns ---- */
@@ -10365,7 +10378,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   /* ---- TABELA ---- */
   function tabelaVendas(arr,podeEditar){ arr=arr.slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);});
     var head=['Data','Cliente','Forma','Parc','Pago','Taxa','Líquido','Consultor',''].map(function(h){return '<th style="padding:11px 10px;font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.5px">'+h+'</th>';}).join('');
-    var rows=arr.map(function(v){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:11px 10px">'+esc(v.dataVenda||'')+'<div style="font-size:10px;color:'+Co.mut+'">'+esc(v.horaReg||'')+'</div></td><td style="padding:11px 10px;color:#fff">'+esc(v.cliente||'')+'</td><td style="padding:11px 10px;text-transform:capitalize">'+esc(v.forma||'')+'</td><td style="padding:11px 10px">'+(v.parcelas||'-')+'</td><td style="padding:11px 10px">'+money(v.valorPago)+'</td><td style="padding:11px 10px;color:'+Co.orange+'">'+pct(v.taxaPct)+'</td><td style="padding:11px 10px;color:'+Co.green+';font-weight:700">'+money(v.liquido)+'</td><td style="padding:11px 10px">'+esc(v.consultorNome||v.consultor||'')+'</td><td style="padding:11px 10px;white-space:nowrap">'+(podeEditar?'<button onclick="__gwaVendasEditar(&#39;'+v.id+'&#39;)" title="Editar" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:4px"><i class="fas fa-pen"></i></button>':'')+(isAdmin()?'<button onclick="__gwaVendasExcluir(&#39;'+v.id+'&#39;)" title="Excluir" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-trash"></i></button>':'')+'</td></tr>'; }).join('')||'<tr><td colspan="9" style="padding:26px;text-align:center;color:'+Co.mut+'"><i class="fas fa-inbox" style="font-size:22px;display:block;margin-bottom:8px;opacity:.5"></i>Nenhuma venda no período.</td></tr>';
+    var rows=arr.map(function(v){ return '<tr style="border-bottom:1px solid '+Co.line+'"><td style="padding:11px 10px">'+esc(v.dataVenda||'')+'<div style="font-size:10px;color:'+Co.mut+'">'+esc(v.horaReg||'')+'</div></td><td style="padding:11px 10px;color:#fff">'+esc(v.cliente||'')+'</td><td style="padding:11px 10px;text-transform:capitalize">'+esc(v.forma||'')+'</td><td style="padding:11px 10px">'+(v.parcelas||'-')+'</td><td style="padding:11px 10px">'+money(v.valorPago)+'</td><td style="padding:11px 10px;color:'+Co.orange+'">'+pct(v.taxaPct)+'</td><td style="padding:11px 10px;color:'+Co.green+';font-weight:700">'+money(v.liquido)+'</td><td style="padding:11px 10px">'+esc(v.consultorNome||v.consultor||'')+'</td><td style="padding:11px 10px;white-space:nowrap">'+((v.ph&&window.gwaPHSelo)?window.gwaPHSelo(v):'')+(v.ph?'':(podeEditar?'<button onclick="__gwaVendasEditar(&#39;'+v.id+'&#39;)" title="Editar" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:8px;padding:6px 9px;cursor:pointer;margin-right:4px"><i class="fas fa-pen"></i></button>':''))+(isAdmin()?'<button onclick="__gwaVendasExcluir(&#39;'+v.id+'&#39;)" title="Excluir" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.red+';border-radius:8px;padding:6px 9px;cursor:pointer"><i class="fas fa-trash"></i></button>':'')+'</td></tr>'; }).join('')||'<tr><td colspan="9" style="padding:26px;text-align:center;color:'+Co.mut+'"><i class="fas fa-inbox" style="font-size:22px;display:block;margin-bottom:8px;opacity:.5"></i>Nenhuma venda no período.</td></tr>';
     return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden;box-shadow:0 3px 14px rgba(0,0,0,.28)"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'">'+head+'</tr></thead><tbody>'+rows+'</tbody></table></div></div>'; }
   function meuQuartilCard(){ try{ var L=loginU(curU()); var meuDept=userDept(curU()); var info=quartilInfo([meuDept]); var me=null; info.rows.forEach(function(r){ if(r.login===L) me=r; }); if(!me) return '';
     var q=me.quartil; checarSubiuQuartil(L,q);
@@ -10397,7 +10410,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var p=Number(fx.pct)||0;
     return {valor:(Number(liquido)||0)*p/100, pct:p, minimo:Number(fx.valor)||0, faixa:fx, realizado:Number(base)||0}; }
   function premiacaoCard(){ try{ var L=loginU(curU()); var now=new Date();
-    var _minhas=(_vendas||[]).filter(function(v){ if(loginU({login:v.consultor})!==L) return false; var dt=vDate(v); return dt.getMonth()===now.getMonth()&&dt.getFullYear()===now.getFullYear(); });
+    var _minhas=(_vendas||[]).filter(function(v){ if(v.ph) return false; if(loginU({login:v.consultor})!==L) return false; var dt=vDate(v); return dt.getMonth()===now.getMonth()&&dt.getFullYear()===now.getFullYear(); });
     var fat=_minhas.reduce(function(s,v){return s+(Number(v.liquido)||0);},0);
     var realizado=_minhas.reduce(function(s,v){return s+(Number(v.valorPago)||0);},0);
     var tab=tabelaPrem(userDept(curU())).slice().sort(function(a,b){return a.min-b.min;}); if(!tab.length) return '';
@@ -10410,7 +10423,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     else if(atual){ htmlProx='<div style="margin-top:8px;color:'+Co.green+';font-weight:600">Você está na faixa máxima de premiação! 🏆</div>'; }
     return '<div style="background:linear-gradient(160deg,'+Co.card+','+Co.bgA+');border:1px solid '+Co.line+';border-left:6px solid '+Co.orange+';border-radius:16px;padding:18px;margin-bottom:18px;box-shadow:0 4px 18px rgba(0,0,0,.32)"><div style="display:flex;align-items:center;gap:14px"><div style="font-size:30px;color:'+Co.orange+'"><i class="fas fa-gift"></i></div><div><div style="color:#fff;font-weight:800;font-size:15px">Projeção de premiação — mês atual</div><div style="color:'+Co.sub+';font-size:13px;margin-top:4px">Realizado no mês: <b style="color:'+Co.orangeL+'">'+money(realizado)+'</b> <span style="color:'+Co.mut+'">(define a faixa)</span> &middot; Líquido: <b>'+money(fat)+'</b> <span style="color:'+Co.mut+'">(base do cálculo)</span></div><div style="font-size:13px;margin-top:4px">'+htmlAtual+'</div>'+htmlProx+'</div></div></div>'; }catch(e){ return ''; } }
   /* ---- MINHA EVOLUÇÃO (vendedor) ---- */
-  function serieVendedor(L,ano){ var fat=[],contr=[],tick=[]; for(var m=0;m<12;m++){ fat.push(0); contr.push(0); } (_vendas||[]).forEach(function(v){ if(loginU({login:v.consultor})!==L) return; var dt=vDate(v); if(dt.getFullYear()!==ano) return; var mi=dt.getMonth(); fat[mi]+=Number(v.liquido)||0; contr[mi]+=1; }); for(var m2=0;m2<12;m2++){ tick.push(contr[m2]?fat[m2]/contr[m2]:0); } return {fat:fat,contr:contr,tick:tick}; }
+  function serieVendedor(L,ano,semPh){ var fat=[],contr=[],tick=[]; for(var m=0;m<12;m++){ fat.push(0); contr.push(0); } (_vendas||[]).forEach(function(v){ if(semPh&&v.ph) return; if(loginU({login:v.consultor})!==L) return; var dt=vDate(v); if(dt.getFullYear()!==ano) return; var mi=dt.getMonth(); fat[mi]+=Number(v.liquido)||0; contr[mi]+=1; }); for(var m2=0;m2<12;m2++){ tick.push(contr[m2]?fat[m2]/contr[m2]:0); } return {fat:fat,contr:contr,tick:tick}; }
   function metaVendedor(L){ var mv=(_cfg&&_cfg.metasVendedor)||{}; return Number(mv[L])||0; }
   var _evAno=null,_evModo='diaria',_evMes=null;
   var MESES_ABREV=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -10427,8 +10440,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var cards='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+stat('Faturamento ('+esc(labelP)+')',money(fatRef),null,Co.green)+stat('Contratos',contrRef)+stat('Ticket médio',money(tickRef))+extra+'</div>';
     var g1=sec(g1t,'fa-chart-column','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px"><div style="height:260px"><canvas id="evFat"></canvas></div></div>');
     var g2=sec(g2t,'fa-chart-line','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px"><div style="height:240px"><canvas id="evContr"></canvas></div></div>');
-    var deptEv=userDept(curU()); var sAtual=serieVendedor(L,now.getFullYear()); var fatMesAtual=sAtual.fat[now.getMonth()]; var duEv=diasUteisMes(); var mediaDU=duEv.trabalhados?fatMesAtual/duEv.trabalhados:0; var projMes=mediaDU*duEv.total; var pctProj=meta?projMes/meta*100:0; var premAtual=premiacaoDe(fatMesAtual,deptEv).valor; var premProj=premiacaoDe(projMes,deptEv).valor;
-    var destaqueProj='<div style="background:linear-gradient(135deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:14px;padding:16px 20px;margin-bottom:14px;display:flex;gap:22px;flex-wrap:wrap;align-items:center"><div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px">Faturamento atual</div><div style="font-size:22px;font-weight:900;color:'+Co.green+'">'+money(fatMesAtual)+'</div></div><div style="font-size:22px;color:'+Co.mut+'">→</div><div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px">Projeção para o fechamento do mês</div><div style="font-size:22px;font-weight:900;color:'+Co.orangeL+'">'+money(projMes)+'</div></div></div>';
+    var deptEv=userDept(curU()); var sAtual=serieVendedor(L,now.getFullYear(),true); var fatMesAtual=sAtual.fat[now.getMonth()]; var duEv=diasUteisMes(); var mediaDU=duEv.trabalhados?fatMesAtual/duEv.trabalhados:0; var projMes=mediaDU*duEv.total; var pctProj=meta?projMes/meta*100:0; var premAtual=premiacaoDe(fatMesAtual,deptEv).valor; var premProj=premiacaoDe(projMes,deptEv).valor;
+    var destaqueProj='<div style="background:linear-gradient(135deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:14px;padding:16px 20px;margin-bottom:14px;display:flex;gap:22px;flex-wrap:wrap;align-items:center"><div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px">Faturamento que conta para a meta</div><div style="font-size:22px;font-weight:900;color:'+Co.green+'">'+money(fatMesAtual)+'</div></div><div style="font-size:22px;color:'+Co.mut+'">→</div><div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px">Projeção para o fechamento do mês</div><div style="font-size:22px;font-weight:900;color:'+Co.orangeL+'">'+money(projMes)+'</div></div></div>';
     var projSec=sec('Projeção do mês','fa-chart-line','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px">'+destaqueProj+'<div style="display:flex;gap:14px;flex-wrap:wrap">'+stat('Faturamento projetado (mês)',money(projMes),'ritmo de '+duEv.trabalhados+'/'+duEv.total+' dias úteis',Co.orangeL)+stat('% da meta projetada',meta?pct(pctProj):'—',meta?(pctProj>=100?'no ritmo de bater ✔':'abaixo do necessário'):'sem meta definida',pctProj>=100?Co.green:Co.orangeL)+stat('Premiação atual (mês)',premAtual?money(premAtual):'—',null,premAtual?Co.orangeL:Co.mut)+stat('Premiação projetada',premProj?money(premProj):'—','se mantiver o ritmo',premProj?Co.green:Co.mut)+'</div><div style="font-size:12px;color:'+Co.mut+';margin-top:8px">Projeção baseada na sua média por dia útil trabalhado × dias úteis do mês. A premiação usa a tabela do seu departamento.</div></div>');
     return head+metaBox+projSec+cards+g1+g2; }
   window.__gwaVendasEvAno=function(a){ _evAno=Number(a); render(); };
@@ -10444,7 +10457,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   }catch(e){} }
 
   /* ---- ANÁLISE PARA BATER A META (admin dashboard) ---- */
-  function analiseMetaMes(deptList){ try{ var metaMes=deptList.reduce(function(s,d){return s+(metaDe(d).mes||0);},0); var arrMes=aplicaFiltroMes(deptList); var real=arrMes.reduce(function(s,v){return s+(Number(v.liquido)||0);},0); var falta=Math.max(0,metaMes-real); var du=diasUteisMes(); var restantes=du.restantes||0; var precisaDia=restantes?falta/restantes:falta; var pctM=metaMes?real/metaMes*100:0;
+  function analiseMetaMes(deptList){ try{ var metaMes=deptList.reduce(function(s,d){return s+(metaDe(d).mes||0);},0); var arrMes=semPH(aplicaFiltroMes(deptList)); var real=arrMes.reduce(function(s,v){return s+(Number(v.liquido)||0);},0); var falta=Math.max(0,metaMes-real); var du=diasUteisMes(); var restantes=du.restantes||0; var precisaDia=restantes?falta/restantes:falta; var pctM=metaMes?real/metaMes*100:0;
     var media=du.trabalhados?real/du.trabalhados:0; var projFim=media*du.total; var noRitmo=projFim>=metaMes;
     var by={}; arrMes.forEach(function(v){ var k=loginU({login:v.consultor}); if(!by[k])by[k]={nome:v.consultorNome||v.consultor,liq:0,n:0}; by[k].liq+=Number(v.liquido)||0; by[k].n++; });
     var todos=deptList.reduce(function(a,d){return a.concat(vendedoresDept(d));},[]); var linhas=todos.map(function(u){ var k=loginU(u); var r=by[k]||{nome:u.nome||u.login,liq:0,n:0}; var mv=metaVendedor(k); return {nome:r.nome,liq:r.liq,n:r.n,meta:mv,pct:mv?r.liq/mv*100:null}; });
@@ -10636,10 +10649,12 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return '<div style="max-width:640px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span style="width:5px;height:20px;border-radius:3px;background:'+Co.gradO+'"></span><h3 style="margin:0;color:#fff;font-size:15px"><i class="fas fa-bullseye" style="color:'+Co.orange+'"></i> Meta mensal por vendedor</h3></div><p style="font-size:12px;color:'+Co.mut+';margin:0 0 12px">Defina a meta de faturamento mensal de cada vendedor do seu departamento. Ela alimenta a "Minha evolução" do consultor e a análise da meta.</p><div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px"><thead><tr style="text-align:left;color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'"><th style="padding:10px">Vendedor</th><th style="padding:10px">Meta mensal (R$)</th></tr></thead><tbody>'+rows+'</tbody></table></div><div style="margin-top:14px">'+btnPri('<i class="fas fa-save"></i> Salvar metas','__gwaVendasSalvarMetasAdmin()')+'</div></div>'; }
   window.__gwaVendasSalvarMetasAdmin=async function(){ try{ _cfg.metasVendedor=_cfg.metasVendedor||{}; (typeof getUsers==='function'?getUsers():(window._usersCache||[])).forEach(function(u){ var L=loginU(u); var el=document.getElementById('mv2_'+L); if(el){ var v=Number(el.value)||0; if(v>0) _cfg.metasVendedor[L]=v; else delete _cfg.metasVendedor[L]; } }); var ok=await saveCfg(); alert(ok?'Metas salvas!':'Falha ao salvar.'); render(); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
 
-  window.__gwaVendasEditar=function(id){ var v=(_vendas||[]).find(function(x){return x.id===id;}); if(!v) return; var L=loginU(curU()); if(!isAdmin() && loginU({login:v.consultor})!==L){ alert('Sem permissão.'); return; } _editId=id; _view='lancar'; render(); };
-  window.__gwaVendasExcluir=async function(id){ if(!isAdmin()){ alert('Apenas administradores podem excluir vendas.'); return; } var v=(_vendas||[]).find(function(x){return x.id===id;}); if(!v) return; if(!confirm('Excluir a venda de '+(v.cliente||'')+' — '+money(v.liquido)+'? Esta ação não pode ser desfeita.')) return; try{ var r=await fetch(base()+'/api/vendas/'+encodeURIComponent(id),{method:'DELETE',headers:H()}); if(r.ok){ _vendas=(_vendas||[]).filter(function(x){return x.id!==id;}); gsDelete(v); alert('Venda excluída.'); render(); } else alert('Falha ao excluir.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
+  window.__gwaVendasEditar=function(id){ var v=(_vendas||[]).find(function(x){return x.id===id;})||(window.gwaPHRaw?window.gwaPHRaw(id):null); if(!v) return; if(window.gwaPHBloqueioEditar){ var _bq=window.gwaPHBloqueioEditar(id); if(_bq){ alert(_bq); return; } } var L=loginU(curU()); if(!isAdmin() && loginU({login:v.consultor})!==L){ alert('Sem permissão.'); return; } _editId=id; _view='lancar'; render(); };
+  window.__gwaVendasExcluir=async function(id){ if(!isAdmin()){ alert('Apenas administradores podem excluir vendas.'); return; } var v=(_vendas||[]).find(function(x){return x.id===id;})||(window.gwaPHRaw?window.gwaPHRaw(id):null); if(!v) return; if(window.gwaPHBloqueioExcluir){ var _bq=window.gwaPHBloqueioExcluir(id); if(_bq){ alert(_bq); return; } } if(window.gwaPHEhPH&&window.gwaPHEhPH(v.phRaw||v)&&!confirm('Esta é uma venda de Primeira Habilitação. Excluindo, ela sai de todos os lugares: faturamento, painel 1ª Habilitação, Confirmar vendas e cashback.\n\nContinuar?')) return; if(!confirm('Excluir a venda de '+(v.cliente||'')+' — '+money(v.liquido)+'? Esta ação não pode ser desfeita.')) return; try{ var r=await fetch(base()+'/api/vendas/'+encodeURIComponent(id),{method:'DELETE',headers:H()}); if(r.ok){ _vendas=(_vendas||[]).filter(function(x){return x.id!==id;}); try{ if(window.gwaPHRemovida) window.gwaPHRemovida(id); }catch(e){} gsDelete(v); alert('Venda excluída.'); render(); } else alert('Falha ao excluir.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
 
   /* ---- DASHBOARD ---- */
+  window.gwaVendasCalc=function(p,f,n){ return calc(p,f,n); };
+  function semPH(arr){ return (arr||[]).filter(function(v){ return !v.ph; }); } /* 1a Habilitacao fica fora de metas e premiacoes */
   function agg(arr){ var liq=0,bru=0; arr.forEach(function(v){ liq+=Number(v.liquido)||0; bru+=Number(v.valorPago)||0; }); return {liq:liq,bru:bru,n:arr.length,tm:arr.length?liq/arr.length:0}; }
   function metaDe(dept){ return (_cfg&&_cfg.metas&&_cfg.metas[dept])||{dia:0,mes:0}; }
   function aplicaFiltroMes(deptList){ var now=new Date(); return (_vendas||[]).filter(function(v){ if(deptList.indexOf(v.dept||'comercial')<0) return false; var dt=vDate(v); return dt.getMonth()===now.getMonth()&&dt.getFullYear()===now.getFullYear(); }); }
@@ -10655,13 +10670,13 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return metaDia; }
   function viewDash(dept){ var deptList=dept?[dept]:['comercial','negociacao'];
     var metaDia=deptList.reduce(function(s,d){return s+(metaDe(d).dia||0);},0), metaMes=deptList.reduce(function(s,d){return s+(metaDe(d).mes||0);},0);
-    var lbl=periodoLabel(); var aPer=agg(vendasPeriodo(deptList)); var metaPer=metaPeriodo(deptList); var pctPer=metaPer?(aPer.liq/metaPer*100):0;
-    var aMes=agg(aplicaFiltroMes(deptList)); var pctMes=metaMes?(aMes.liq/metaMes*100):0;
+    var lbl=periodoLabel(); var aPer=agg(vendasPeriodo(deptList)); var metaPer=metaPeriodo(deptList); var _aPerM=agg(semPH(vendasPeriodo(deptList))); var pctPer=metaPer?(_aPerM.liq/metaPer*100):0;
+    var aMes=agg(aplicaFiltroMes(deptList)); var _aMesM=agg(semPH(aplicaFiltroMes(deptList))); var pctMes=metaMes?(_aMesM.liq/metaMes*100):0;
     var du=diasUteisMes(); var mediaDia=du.trabalhados?aMes.liq/du.trabalhados:0; var projMes=mediaDia*du.total;
     var ehHoje=(_filtro.periodo==='hoje');
-    var exp=(_cfg&&_cfg.expediente)||{ini:9,fim:18}; var now=new Date(); var horasTot=Math.max(1,exp.fim-exp.ini); var hAgora=now.getHours()+now.getMinutes()/60; var horasTransc=Math.min(horasTot,Math.max(0,hAgora-exp.ini)); var ritmo=horasTransc>0?aPer.liq/horasTransc:0; var projDia=ritmo*horasTot;
-    var heroRow=sec('Visão geral','fa-bullseye','<div style="display:flex;gap:16px;flex-wrap:wrap">'+hero('Faturamento — '+lbl,money(aPer.liq),metaPer,pctPer)+hero('Faturamento do mês',money(aMes.liq),metaMes,pctMes)+'</div>');
-    var gaugeCol='<div style="flex:1;min-width:280px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,.35)"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px"><i class="fas fa-gauge-high" style="color:'+Co.orange+'"></i> Velocímetro — meta ('+lbl+')</div><div style="position:relative;height:170px"><canvas id="gwaGauge"></canvas><div style="position:absolute;left:0;right:0;bottom:14px;text-align:center"><div style="font-size:30px;font-weight:800;color:#fff">'+pct(pctPer)+'</div><div style="font-size:11px;color:'+Co.mut+'">da meta</div></div></div><div style="text-align:center;color:'+Co.sub+';margin-top:8px;font-size:13px">Realizado <b style="color:'+Co.green+'">'+money(aPer.liq)+'</b> · falta <b>'+money(Math.max(0,metaPer-aPer.liq))+'</b></div></div>';
+    var exp=(_cfg&&_cfg.expediente)||{ini:9,fim:18}; var now=new Date(); var horasTot=Math.max(1,exp.fim-exp.ini); var hAgora=now.getHours()+now.getMinutes()/60; var horasTransc=Math.min(horasTot,Math.max(0,hAgora-exp.ini)); var ritmo=horasTransc>0?_aPerM.liq/horasTransc:0; var projDia=ritmo*horasTot;
+    var heroRow=sec('Visão geral','fa-bullseye','<div style="display:flex;gap:16px;flex-wrap:wrap">'+hero('Faturamento — '+lbl,money(aPer.liq),metaPer,pctPer)+hero('Faturamento do mês',money(aMes.liq),metaMes,pctMes)+'</div>'+((aPer.liq-_aPerM.liq>0.004||aMes.liq-_aMesM.liq>0.004)?'<div style="margin-top:10px;font-size:12px;color:'+Co.mut+';background:rgba(224,120,32,.08);border:1px solid rgba(224,120,32,.3);border-radius:12px;padding:9px 13px"><i class="fas fa-id-card" style="color:'+Co.orangeL+'"></i> O faturamento inclui <b style="color:#fff">'+money(aPer.liq-_aPerM.liq)+'</b> (período) e <b style="color:#fff">'+money(aMes.liq-_aMesM.liq)+'</b> (mês) de Primeira Habilitação — líquido confirmado pelo Financeiro. Esse valor <b>não conta</b> no % da meta.</div>':''));
+    var gaugeCol='<div style="flex:1;min-width:280px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,.35)"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px"><i class="fas fa-gauge-high" style="color:'+Co.orange+'"></i> Velocímetro — meta ('+lbl+')</div><div style="position:relative;height:170px"><canvas id="gwaGauge"></canvas><div style="position:absolute;left:0;right:0;bottom:14px;text-align:center"><div style="font-size:30px;font-weight:800;color:#fff">'+pct(pctPer)+'</div><div style="font-size:11px;color:'+Co.mut+'">da meta</div></div></div><div style="text-align:center;color:'+Co.sub+';margin-top:8px;font-size:13px">Realizado <b style="color:'+Co.green+'">'+money(_aPerM.liq)+'</b>'+(aPer.liq-_aPerM.liq>0.004?' <span style=\x22font-size:11px;color:'+Co.mut+'\x22>(sem 1ª Hab.)</span>':'')+' · falta <b>'+money(Math.max(0,metaPer-_aPerM.liq))+'</b></div></div>';
     var extra=ehHoje?(mini('Projeção do dia',money(projDia),Co.orangeL)+mini('Ritmo',projDia>=metaDia?'✔':'▲',projDia>=metaDia?Co.green:Co.burnt)):(mini('% da meta',pct(pctPer),pctPer>=100?Co.green:Co.orangeL)+mini('Meta do período',money(metaPer)));
     var resumo='<div style="flex:1;min-width:280px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:8px 6px;box-shadow:0 4px 20px rgba(0,0,0,.35);display:flex;flex-direction:column;justify-content:center"><div style="display:flex;flex-wrap:wrap">'+mini('Contratos',aPer.n)+mini('Ticket médio',money(aPer.tm))+'</div><div style="height:1px;background:'+Co.line+';margin:4px 12px"></div><div style="display:flex;flex-wrap:wrap">'+extra+'</div></div>';
     var perSec=sec(lbl,'fa-bolt','<div style="display:flex;gap:16px;flex-wrap:wrap">'+gaugeCol+resumo+'</div>');
@@ -10671,7 +10686,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return filtroBar()+heroRow+perSec+analiseMetaMes(deptList)+chartSec+mesSec+duSec;
   }
   var _gaugeChart=null, _lineChart=null;
-  function initGauge(dept){ try{ if(!window.Chart) return; var deptList=dept?[dept]:['comercial','negociacao']; var aPer=agg(vendasPeriodo(deptList)); var metaPer=metaPeriodo(deptList); var p=metaPer?Math.min(100,aPer.liq/metaPer*100):0; var el=document.getElementById('gwaGauge'); if(!el) return; if(_gaugeChart){try{_gaugeChart.destroy();}catch(e){}} var col=p>=100?Co.green:(p>=70?Co.orangeL:Co.burnt); _gaugeChart=new Chart(el,{type:'doughnut',data:{datasets:[{data:[p,100-p],backgroundColor:[col,Co.card2],borderWidth:0,circumference:180,rotation:270}]},options:{cutout:'75%',plugins:{legend:{display:false},tooltip:{enabled:false}}}}); }catch(e){} }
+  function initGauge(dept){ try{ if(!window.Chart) return; var deptList=dept?[dept]:['comercial','negociacao']; var aPer=agg(vendasPeriodo(deptList)); var metaPer=metaPeriodo(deptList); var p=metaPer?Math.min(100,agg(semPH(vendasPeriodo(deptList))).liq/metaPer*100):0; var el=document.getElementById('gwaGauge'); if(!el) return; if(_gaugeChart){try{_gaugeChart.destroy();}catch(e){}} var col=p>=100?Co.green:(p>=70?Co.orangeL:Co.burnt); _gaugeChart=new Chart(el,{type:'doughnut',data:{datasets:[{data:[p,100-p],backgroundColor:[col,Co.card2],borderWidth:0,circumference:180,rotation:270}]},options:{cutout:'75%',plugins:{legend:{display:false},tooltip:{enabled:false}}}}); }catch(e){} }
   function initLineChart(dept){ try{ if(!window.Chart) return; var deptList=dept?[dept]:['comercial','negociacao']; var metaDia=deptList.reduce(function(s,d){return s+(metaDe(d).dia||0);},0); var now=new Date(); var y=now.getFullYear(),m=now.getMonth(); var last=new Date(y,m+1,0).getDate(); var byDay={}; (_vendas||[]).forEach(function(v){ if(deptList.indexOf(v.dept||'comercial')<0) return; var dt=vDate(v); if(dt.getMonth()===m&&dt.getFullYear()===y){ var d=dt.getDate(); byDay[d]=(byDay[d]||0)+(Number(v.liquido)||0); } }); var days=Object.keys(byDay).map(Number).filter(function(d){return byDay[d]>0;}).sort(function(a,b){return a-b;}); var labels=[],fat=[],meta=[]; days.forEach(function(i){ labels.push('Dia '+i); fat.push(byDay[i]); var dd=new Date(y,m,i); meta.push(isUtil(dd)?metaDia:0); }); var el=document.getElementById('gwaLineChart'); if(!el) return; if(_lineChart){try{_lineChart.destroy();}catch(e){}} _lineChart=new Chart(el,{type:'line',data:{labels:labels,datasets:[{label:'Faturamento',data:fat,borderColor:Co.orange,backgroundColor:'rgba(224,120,32,.15)',fill:true,tension:.3,pointRadius:2,pointBackgroundColor:Co.orange},{label:'Meta diária',data:meta,borderColor:Co.green,borderDash:[6,4],fill:false,tension:0,pointRadius:0}]},options:{maintainAspectRatio:false,plugins:{legend:{labels:{color:Co.sub}}},scales:{x:{title:{display:true,text:'Dia do mês',color:Co.mut},ticks:{color:Co.mut},grid:{color:'rgba(255,255,255,.05)'}},y:{ticks:{color:Co.mut,callback:function(v){return 'R$ '+(Math.round(v/1000))+'k';}},grid:{color:'rgba(255,255,255,.05)'}}}}}); }catch(e){} }
 
   /* ---- QUARTIS (40/30/20/10 do faturamento do departamento) ---- */
@@ -10679,7 +10694,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function qColor(q){ return q===1?Co.green:(q===2?Co.orangeL:(q===3?Co.orangeD:Co.red)); }
   function qBadge(q){ return '<span style="display:inline-block;background:'+qColor(q)+';color:#111;font-weight:800;font-size:11px;border-radius:8px;padding:3px 9px">Q'+q+'</span>'; }
   function quartilInfo(deptList){ var arr=aplicaFiltroMes(deptList);
-    var by={}; arr.forEach(function(v){ var k=loginU({login:v.consultor}); if(!by[k])by[k]={login:k,nome:v.consultorNome||v.consultor,dept:(v.dept||'comercial'),n:0,bru:0,liq:0}; by[k].n++; by[k].bru+=Number(v.valorPago)||0; by[k].liq+=Number(v.liquido)||0; });
+    var by={}; arr.forEach(function(v){ var k=loginU({login:v.consultor}); if(!by[k])by[k]={login:k,nome:v.consultorNome||v.consultor,dept:(v.dept||'comercial'),n:0,bru:0,liq:0,bruM:0,liqM:0}; by[k].n++; by[k].bru+=Number(v.valorPago)||0; by[k].liq+=Number(v.liquido)||0; if(!v.ph){ by[k].bruM+=Number(v.valorPago)||0; by[k].liqM+=Number(v.liquido)||0; } });
     var rows=Object.keys(by).map(function(k){return by[k];}).sort(function(a,b){return b.liq-a.liq;});
     var total=rows.reduce(function(s,r){return s+r.liq;},0); var cum=0;
     rows.forEach(function(r){ var pb=total?cum/total*100:0; r.quartil=pb<40?1:(pb<70?2:(pb<90?3:4)); r.part=total?r.liq/total*100:0; cum+=r.liq; });
@@ -10690,7 +10705,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   function viewRanking(dept){ var deptList=dept?[dept]:['comercial','negociacao']; var info=quartilInfo(deptList); var rows=info.rows; var max=rows.length?rows[0].liq:0; var duRk=diasUteisMes();
     var legenda='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12px">'+QBANDS.map(function(b){return '<span style="display:inline-flex;align-items:center;gap:6px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:10px;padding:6px 10px">'+qBadge(b.q)+' <span style="color:'+Co.sub+'">'+b.share+'% do faturamento</span></span>';}).join('')+'</div>';
-    var totalPrem=0; rows.forEach(function(r){ var _p=premiacaoDe(r.liq,r.dept,r.bru); r.premiacao=_p.valor; r.premPct=_p.pct; totalPrem+=r.premiacao; });
+    var totalPrem=0; rows.forEach(function(r){ var _p=premiacaoDe(r.liqM,r.dept,r.bruM); /* premiacao sem 1a Habilitacao */ r.premiacao=_p.valor; r.premPct=_p.pct; totalPrem+=r.premiacao; });
     var lastQ=0; var body='';
     if(!rows.length){ body='<tr><td colspan="9" style="padding:26px;text-align:center;color:'+Co.mut+'">Sem vendas no período.</td></tr>'; }
     rows.forEach(function(r,i){ if(r.quartil!==lastQ){ lastQ=r.quartil; var b=QBANDS[r.quartil-1]; body+='<tr><td colspan="9" style="padding:9px 10px;background:'+Co.bgA+';border-top:2px solid '+qColor(r.quartil)+';color:'+qColor(r.quartil)+';font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.8px">Quartil Q'+r.quartil+' — '+b.share+'% do faturamento</td></tr>'; }
@@ -10717,7 +10732,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function clampExpedienteTs(ts){ var exp=(_cfg&&_cfg.expediente)||{ini:9,fim:18}; var ini=Number(exp.ini)||9, fim=Number(exp.fim)||18; var dt=new Date(ts); var h=dt.getHours()+dt.getMinutes()/60; if(h<ini){ dt.setHours(ini,0,0,0); } else if(h>fim){ dt.setHours(fim,0,0,0); } else { return ts; } return dt.getTime(); }
   function tsDaVenda(v){ if(v&&v.ts) return Number(v.ts); var d=vDate(v); return d.getTime(); }
   window.__gwaVendasCorrigirHorarios=async function(){ if(!isMaster()){ alert('Apenas o Master.'); return; } var exp=(_cfg&&_cfg.expediente)||{ini:9,fim:18}; var ini=Number(exp.ini)||9, fim=Number(exp.fim)||18;
-    var fora=(_vendas||[]).filter(function(v){ var dt=new Date(tsDaVenda(v)); var h=dt.getHours()+dt.getMinutes()/60; return h<ini||h>fim; });
+    var fora=(_vendas||[]).filter(function(v){ if(v.ph) return false; var dt=new Date(tsDaVenda(v)); var h=dt.getHours()+dt.getMinutes()/60; return h<ini||h>fim; });
     if(!fora.length){ alert('Nenhuma venda fora do horário '+ini+'h–'+fim+'h. Tudo certo!'); return; }
     if(!confirm('Corrigir '+fora.length+' venda(s) lançada(s) fora do horário para ficarem entre '+ini+'h e '+fim+'h?\n\n(Antes das '+ini+'h viram '+ini+':00; depois das '+fim+'h viram '+fim+':00. A data não muda.)')) return;
     var okN=0,failN=0; for(var i=0;i<fora.length;i++){ var v=fora[i]; var novoTs=clampExpedienteTs(tsDaVenda(v)); v.ts=novoTs; v.horaReg=new Date(novoTs).toLocaleTimeString('pt-BR'); v.atualizadoEm=Date.now(); try{ var ok=await saveVenda(v); if(ok) okN++; else failN++; }catch(e){ failN++; } }
@@ -11189,7 +11204,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function tabNegOficial(){ return JSON.parse(JSON.stringify([{min:35000,max:44999.99,pct:5,valor:1750},{min:45000,max:54999.99,pct:7,valor:3150},{min:55000,max:64999.99,pct:8,valor:4400},{min:65000,max:74999.99,pct:11,valor:7150},{min:75000,max:84999.99,pct:13,valor:9750},{min:85000,max:94999.99,pct:15,valor:12750},{min:95000,max:104999.99,pct:17,valor:16150},{min:105000,max:114999.99,pct:19,valor:19950},{min:115000,max:999999999,pct:20,valor:23000}])); }
   async function loadAll(){ try{ var r=await fetch(base()+'/api/vendas_config/atual',{headers:H()}); if(r.ok){ var j=await r.json(); _cfg=(j&&j.data)||{};
       if(Number(_cfg.tabelaNegVersao||0)<2){ _cfg.tabelaPremiacaoNeg=tabNegOficial(); _cfg.tabelaNegVersao=2; _cfg.tabelaNegInicio='02/02/2026'; } } }catch(e){ _cfg=_cfg||{}; }
-    try{ var rv=await fetch(base()+'/api/vendas',{headers:H()}); if(rv.ok){ var jv=await rv.json(); _vendas=(jv&&jv.data)||[]; } }catch(e){ _vendas=_vendas||[]; }
+    try{ var rv=await fetch(base()+'/api/vendas',{headers:H()}); if(rv.ok){ var jv=await rv.json(); _vendas=((jv&&jv.data)||[]).filter(function(v){ return !(window.gwaPHEhPH&&window.gwaPHEhPH(v)); }); } }catch(e){ _vendas=_vendas||[]; }
     try{ var rp=await fetch(base()+'/api/premiacoes',{headers:H()}); if(rp.ok){ var jp=await rp.json(); _prem=(jp&&jp.data)||[]; } }catch(e){ _prem=_prem||[]; } }
   async function savePrem(p){ try{ var r=await fetch(base()+'/api/premiacoes/'+encodeURIComponent(p.id),{method:'PUT',headers:H(),body:JSON.stringify(p)}); return r.ok; }catch(e){ return false; } }
   function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -11250,13 +11265,15 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function close(){ var o=document.getElementById('gwaPremOv'); if(o)o.style.display='none'; }
   window.gwaAbrirPremiacoes=open;
   function ensure(){ if(document.getElementById('gwaPremOv')) return; var o=document.createElement('div'); o.id='gwaPremOv'; o.style.cssText='position:fixed;inset:0;z-index:99992;background:linear-gradient(180deg,'+Co.bgA+','+Co.bgB+');display:none;flex-direction:column;overflow:auto'; o.innerHTML='<div id="gwaPremHead" style="position:sticky;top:0;background:'+Co.bgA+';border-bottom:3px solid '+Co.orangeD+';color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;z-index:3"></div><div id="gwaPremBody" style="padding:22px;max-width:1120px;margin:0 auto;width:100%;box-sizing:border-box"></div>'; document.body.appendChild(o); }
-  function tabs(){ if(isAdmin()) return [['ctrl','Controle de premiações','fa-people-group'],['fin','Financeiro','fa-file-invoice-dollar']]; return [['me','Minhas premiações','fa-trophy']]; }
+  function tabs(){ var t=isAdmin()?[['ctrl','Controle de premiações','fa-people-group'],['fin','Financeiro','fa-file-invoice-dollar']]:[['me','Minhas premiações','fa-trophy']]; try{ if(window.gwaPHPodeConfirmar&&window.gwaPHPodeConfirmar()){ var _np=window.gwaPHPendentes?window.gwaPHPendentes():0; t.push(['phconf','Confirmar vendas'+(_np?(' ('+_np+')'):''),'fa-file-circle-check']); } if(window.gwaPHPodeCashback&&window.gwaPHPodeCashback()) t.push(['cashback','Cashback 1ª Hab.','fa-hand-holding-dollar']); }catch(e){} return t; }
   function usuarios(){ try{ if(typeof getUsers==='function'){ var g=getUsers(); if(g&&g.length) return g; } }catch(e){} return window._usersCache||[]; }
   function isAdminUser(u){ var r=String((u&&u.role)||'').toLowerCase(); return loginU(u)==='TALIS'||r==='master'||r==='admin'||r==='gestor'||r==='supervisor'; }
   function allowedDepts(){ if(isMaster()) return ['comercial','negociacao']; var pd=(_cfg&&_cfg.permissoesDept&&_cfg.permissoesDept[loginU(curU())])||{}; var a=[]; if(pd.admComercial)a.push('comercial'); if(pd.admNegociacao)a.push('negociacao'); if(!a.length)a.push(userDept(curU())); return a; }
   function render(){ ensure(); var head=document.getElementById('gwaPremHead'),body=document.getElementById('gwaPremBody'); if(!head||!body) return;
     head.innerHTML='<div style="display:flex;align-items:center;gap:12px"><img src="https://drive.google.com/thumbnail?id=1zLVXzu-yEsS8dwlD1UzRYAEWrEyzPgrZ&sz=w240" style="height:40px;width:auto;max-width:120px;object-fit:contain;background:#fff;padding:4px 6px;border-radius:8px"><div><div style="font-size:17px;font-weight:800">Premiações GWA</div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:1px">Metas diárias e semanais</div></div></div>'+
       '<div class="gwaTabs" style="display:flex;gap:7px;flex-wrap:wrap">'+tabs().map(function(t){var on=_view===t[0]; return '<button onclick="__gwaPremView(&#39;'+t[0]+'&#39;)" style="padding:8px 14px;border-radius:10px;border:1px solid '+(on?'transparent':Co.line)+';background:'+(on?Co.gradO:Co.card2)+';color:#fff;font-size:13px;font-weight:600;cursor:pointer"><i class="fas '+t[2]+'"></i> '+t[1]+'</button>';}).join('')+'<button onclick="__gwaPremClose()" style="width:38px;height:38px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:'+Co.sub+';cursor:pointer"><i class="fas fa-times"></i></button></div>';
+    if(_view==='phconf'){ if(window.gwaPHRenderConfirmar&&window.gwaPHPodeConfirmar&&window.gwaPHPodeConfirmar()){ window.gwaPHRenderConfirmar(body); return; } _view=isAdmin()?'ctrl':'me'; }
+    if(_view==='cashback'){ if(window.gwaPHRenderCashback&&window.gwaPHPodeCashback&&window.gwaPHPodeCashback()){ window.gwaPHRenderCashback(body); return; } _view=isAdmin()?'ctrl':'me'; }
     try{ body.innerHTML=(_view==='fin'&&isAdmin())?viewFin():((_view==='ctrl'&&isAdmin())?viewCtrl():viewMe()); }catch(e){ body.innerHTML='<div style="color:'+Co.red+';padding:20px">Erro: '+esc(e&&e.message||e)+'</div>'; } }
   window.__gwaPremView=function(v){ _view=v; render(); };
   window.__gwaPremClose=close;
@@ -16056,7 +16073,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   async function carregar(){
     _carregando=true;
     try{ var r=await fetch(base()+'/api/vendas',{headers:H()});
-      if(r.ok){ var j=await r.json(); _vendas=(j&&j.data)||[]; } }catch(e){ _vendas=_vendas||[]; }
+      if(r.ok){ var j=await r.json(); var _lst=(j&&j.data)||[]; try{ if(window.gwaPHAjustarVendas) _lst=await window.gwaPHAjustarVendas(_lst); }catch(e){} _vendas=_lst; } }catch(e){ _vendas=_vendas||[]; }
     try{ var r2=await fetch(base()+'/api/agenda',{headers:H()});
       if(r2.ok){ var j2=await r2.json(); _agenda=((j2&&j2.data)||[]).filter(function(x){return x&&x.removido!==true;}); } }catch(e){ _agenda=_agenda||[]; }
     try{ var r3=await fetch(base()+'/api/'+COL_FB,{headers:H()});
@@ -16235,7 +16252,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       var ini=(String(nome).trim().split(/\s+/).slice(0,2).map(function(x){return x[0];}).join('')||'?').toUpperCase();
       var vs=vendasDe(L,iniA,fimA);
       var liq=soma(vs,'liquido'), meta=metaDe(L);
-      var pct=meta?Math.min(100,Math.round(liq/meta*100)):0;
+      var pct=meta?Math.min(100,Math.round(soma(vs.filter(function(v){ return !v.ph; }),'liquido')/meta*100)):0;
       var c=comparativo(L);
       var dept=rotuloArea(L);
       return '<div onclick="__gwaPcAbrir(&#39;'+esc(L)+'&#39;)" style="cursor:pointer;flex:1 1 300px;min-width:280px;background:linear-gradient(160deg,#262626,#181818);'+
@@ -16268,6 +16285,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var c=comparativo(_login);
     var vs=vendasDe(_login,c.iniA,c.fimA);
     var liq=soma(vs,'liquido'), bruto=soma(vs,'valorPago');
+    var liqMeta=soma(vs.filter(function(v){ return !v.ph; }),'liquido'); /* 1a Habilitacao nao conta para meta */
     var ticket=vs.length?liq/vs.length:0;
     var meta=metaDe(_login);
 
@@ -16277,11 +16295,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var duTotal=diasUteis(new Date(h.getFullYear(),h.getMonth(),1), new Date(h.getFullYear(),h.getMonth(),ultDia));
     var duFeitos=diasUteis(new Date(h.getFullYear(),h.getMonth(),1), h);
     var duRestam=Math.max(0,duTotal-duFeitos);
-    var mediaDia=duFeitos?liq/duFeitos:0;
+    var mediaDia=duFeitos?liqMeta/duFeitos:0;
     var projecao=mediaDia*duTotal;
-    var falta=Math.max(0,meta-liq);
+    var falta=Math.max(0,meta-liqMeta);
     var porDiaNec=duRestam?falta/duRestam:falta;
-    var pctMeta=meta?Math.min(100,(liq/meta*100)):0;
+    var pctMeta=meta?Math.min(100,(liqMeta/meta*100)):0;
     var pctProj=meta?(projecao/meta*100):0;
 
     var voltar=ehGestor()
@@ -16332,7 +16350,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         '<h4 style="margin:0 0 14px;color:#fff;font-size:15px"><i class="fas fa-bullseye" style="color:'+Co.orange+'"></i> Meta do mes e projecao</h4>'+
         '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'+
           kpi('Meta',money(meta),null,'#fff')+
-          kpi('Realizado',money(liq),pctMeta.toFixed(1)+'% da meta',Co.green)+
+          kpi('Realizado (sem 1ª Hab.)',money(liqMeta),pctMeta.toFixed(1)+'% da meta',Co.green)+
           kpi('Projecao no ritmo',money(projecao),pctProj.toFixed(0)+'% da meta',pctProj>=100?Co.green:Co.orangeL)+
           kpi('Falta',money(falta),duRestam+' dia(s) util(eis)',falta?Co.red:Co.green)+
         '</div>'+
@@ -22743,6 +22761,851 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 </script>
 
 
+
+<script>
+/* ===== INTRANET GWA :: PRIMEIRA HABILITACAO (painel), CONFIRMACAO FINANCEIRA E CASHBACK MENSAL =====
+   Fonte unica: as vendas da Negociacao (colecao `vendas`) com Produto inicial = PRIMEIRA HABILITACAO.
+   O lancamento e o normal (Vendas > Lancar), que pede o "Valor de repasse a autoescola" quando o produto
+   e 1a Habilitacao (campo `repasse` na propria venda). Nao existe segundo lancamento.
+   Fluxo: lancada -> "Aguardando confirmacao financeira" (fora do faturamento) -> Financeiro em
+     Premiacoes > Confirmar vendas: Confirmar recebimento / Rejeitar (consultor corrige) / Manter pendente
+     -> Confirmada: o LIQUIDO (total - repasse) entra no faturamento do consultor e do departamento e o
+     cashback (R$ 15) fica acumulado no MES DA VENDA. -> Estorno (Financeiro) tira de novo.
+   Metas e premiacoes (dia, semana, mes, faixa, ranking) NAO contam a 1a Habilitacao.
+   Cashback: consultor so visualiza. ADM da Negociacao ou Master solicita, por mes de referencia, so a
+   partir do dia 1 do mes seguinte. Financeiro marca como pago (ou rejeita).
+   Colecoes:
+     ph_fin      {id = id da venda, status: aguardando|confirmada|rejeitada|estornada, pendencia{}, repasse
+                  (so quando o Financeiro informa um repasse que faltava), cashbackValor (fixado na confirmacao),
+                  confirmadaEm/Por/PorNome, rejeitadaEm/Por/PorNome/motivoRejeicao, estornadaEm/Por/PorNome/motivoEstorno, hist[]}
+     ph_cashback {id, mesRef 'AAAA-MM', consultor, consultorNome, vendaIds[], debitoIds[], qtd, bruto, desconto, valor,
+                  status: solicitada|paga|rejeitada, solicitadoEm/Por/PorNome, pagoEm/Por/PorNome, obsPagamento,
+                  rejeitadoEm/Por/PorNome, justificativa, hist[]}
+     ph_config   'atual' {valorPorVenda:15, inicio:'2026-11-10', minimoResgate:0, financeiro:[logins], campos futuros} */
+(function(){
+  if(window.__gwaPH) return; window.__gwaPH=true;
+
+  var PROD='PRIMEIRA HABILITAÇÃO';
+  var CFG_PADRAO={ id:'atual', valorPorVenda:15, inicio:'2026-11-10', minimoResgate:0, financeiro:[],
+    valorPorServico:{}, faixas:[], metas:{}, campanhas:[], regras:{ confirmacaoFinanceira:true, solicitacaoMensal:true } };
+  var Co={ bgA:'#0d0d0d', card:'#1c1c1c', card2:'#242424', line:'rgba(255,255,255,.07)', orange:'#e07820', orangeD:'#c4661a', orangeL:'#f0943a',
+    sub:'#c8c8c8', mut:'#8a8a8a', green:'#3fae5a', red:'#e5533c', amarelo:'#e3b341', blue:'#4a9fd5', roxo:'#b07cd8', gradO:'linear-gradient(135deg,#f0943a,#c4661a)' };
+  var FORMAS={cartao:'Cartão',pix:'PIX',boleto:'Boleto',link:'Link de pagamento',debito:'Débito',dinheiro:'Dinheiro'};
+  var MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  var ST={
+    aguardando:['Aguardando confirmação financeira',Co.amarelo,'fa-hourglass-half'],
+    confirmada:['Confirmada pelo Financeiro',Co.green,'fa-circle-check'],
+    rejeitada:['Rejeitada pelo Financeiro',Co.red,'fa-circle-xmark'],
+    estornada:['Estornada',Co.roxo,'fa-rotate-left'] };
+
+  /* ---------------- util ---------------- */
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function q(s){ return '&#39;'+esc(s)+'&#39;'; }
+  function base(){ return (typeof API_URL!=='undefined')?API_URL:''; }
+  function H(){ return {'Content-Type':'application/json','X-MC-Token':(typeof API_TOKEN!=='undefined'?API_TOKEN:'')}; }
+  function cur(){ return window.currentUser||(typeof getSession==='function'?getSession():null)||{}; }
+  function loginU(u){ return String((u&&(u.login||u.user||u.email||u.nome))||'').toUpperCase(); }
+  function meu(){ return loginU(cur()); }
+  function meuNome(){ var u=cur(); return u.nome||u.name||u.login||meu(); }
+  function role(){ return String((cur()||{}).role||'').toLowerCase(); }
+  function ehMaster(){ return meu()==='TALIS'||role()==='master'; }
+  function ehAdminPapel(){ return ehMaster()||['admin','gestor','supervisor'].indexOf(role())>=0; }
+  function usuarios(){ try{ if(typeof getUsers==='function'){ var g=getUsers(); if(g&&g.length) return g; } }catch(e){} return window._usersCache||[]; }
+  function usuario(L){ L=String(L||'').toUpperCase(); return usuarios().filter(function(u){ return loginU(u)===L; })[0]||null; }
+  function nomeDe(L){ var u=usuario(L); return (u&&(u.nome||u.name))||L||''; }
+  function r2(n){ return Math.round((Number(n)||0)*100)/100; }
+  function money(n){ n=Number(n)||0; try{ return n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }catch(e){ return 'R$ '+n.toFixed(2); } }
+  function hoje(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function mesAtual(){ return hoje().slice(0,7); }
+  function br(s){ var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m?(m[3]+'/'+m[2]+'/'+m[1]):String(s||''); }
+  function quando(ts){ if(!ts) return ''; try{ return new Date(ts).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
+  function soData(ts){ if(!ts) return '—'; try{ return new Date(ts).toLocaleDateString('pt-BR'); }catch(e){ return '—'; } }
+  function cpfFmt(c){ var d=String(c||'').replace(/\D/g,''); return d.length===11?(d.slice(0,3)+'.'+d.slice(3,6)+'.'+d.slice(6,9)+'-'+d.slice(9)):String(c||''); }
+  function num(s){ s=String(s==null?'':s).trim(); if(!s) return NaN; if(s.indexOf(',')>=0) s=s.replace(/\./g,'').replace(',','.'); return Number(s); }
+  function mesNome(m){ return MESES[+String(m).slice(5,7)-1]+' de '+String(m).slice(0,4); }
+  function mesSeguinte(m){ var a=+m.slice(0,4), b=+m.slice(5,7); b++; if(b>12){ b=1; a++; } return a+'-'+String(b).padStart(2,'0'); }
+  function liberaEm(m){ return mesSeguinte(m)+'-01'; }
+  function mesFechado(m){ return hoje()>=liberaEm(m); }
+  function toastOk(t){ try{ if(typeof toast==='function') toast(t,'success'); }catch(e){} }
+  function semAcento(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().trim(); }
+  function ehPH(v){ return !!v && semAcento(v.produtoInicial)==='PRIMEIRA HABILITACAO'; }
+
+  /* ---------------- dados ---------------- */
+  var _vc=null, _cfg=null, _raw=[], _fin={}, _pedidos=[], _carregando=null;
+  async function get(col,id){
+    try{ var r=await fetch(base()+'/api/'+col+(id?'/'+encodeURIComponent(id):''),{headers:H()}); if(!r.ok) return null; var j=await r.json(); return (j&&j.data)||null; }catch(e){ return null; }
+  }
+  async function put(col,obj){
+    try{ var r=await fetch(base()+'/api/'+col+'/'+encodeURIComponent(obj.id),{method:'PUT',headers:H(),body:JSON.stringify(obj)});
+      if(!r.ok) r=await fetch(base()+'/api/'+col,{method:'POST',headers:H(),body:JSON.stringify(obj)}); return r.ok; }catch(e){ return false; }
+  }
+  function usaCfg(c){ _cfg=Object.assign({},CFG_PADRAO,c||{}); if(!Array.isArray(_cfg.financeiro)) _cfg.financeiro=[]; }
+  function usaFin(lista){ if(!Array.isArray(lista)) return; var m={}; lista.forEach(function(f){ if(f&&f.id) m[f.id]=f; }); _fin=m; }
+  function carregar(forcar){
+    if(_carregando && !forcar) return _carregando;
+    _carregando=(async function(){
+      var r=await Promise.all([get('vendas_config','atual'),get('ph_config','atual'),get('vendas'),get('ph_fin'),get('ph_cashback')]);
+      _vc=r[0]||_vc||{}; usaCfg(r[1]||_cfg);
+      if(Array.isArray(r[2])) _raw=r[2].filter(ehPH);
+      usaFin(r[3]); if(Array.isArray(r[4])) _pedidos=r[4];
+    })();
+    return _carregando;
+  }
+  function troca(lista,o){ var achou=false; var n=lista.map(function(x){ if(x.id===o.id){ achou=true; return o; } return x; }); if(!achou) n.push(o); return n; }
+  function hist(o,acao){ var now=Date.now(); o.hist=(o.hist||[]).concat([{em:now,por:meu(),porNome:meuNome(),acao:acao}]); o.atualizadoEm=now; return now; }
+
+  /* ---------------- a venda vista pela 1a Habilitacao ---------------- */
+  function statusDe(v){ var f=_fin[v.id]; return (f&&ST[f.status])?f.status:'aguardando'; }
+  function repasseDe(v){ if(v.repasse!=null && v.repasse!=='' && !isNaN(Number(v.repasse))) return r2(v.repasse); var f=_fin[v.id]; if(f&&f.repasse!=null&&!isNaN(Number(f.repasse))) return r2(f.repasse); return null; }
+  function totalDe(v){ return r2(v.valorPago); }
+  function taxaDe(v){ var l=Number(v.liquido); return (v.liquido!=null&&!isNaN(l))?r2(totalDe(v)-l):0; }      /* taxa da forma de pagamento */
+  function liquidoDe(v){ var rp=repasseDe(v); return r2(totalDe(v)-taxaDe(v)-(rp||0)); }                  /* pago - taxa - repasse */
+  function noPeriodo(v){ return String(v.dataVenda||'')>=String((_cfg||CFG_PADRAO).inicio||''); }
+  function mesRef(v){ return String(v.dataVenda||'').slice(0,7); }
+  function valorRegra(v){
+    var c=_cfg||CFG_PADRAO, val=Number(c.valorPorVenda); if(!(val>=0)) val=15;
+    var ps=c.valorPorServico&&c.valorPorServico[PROD]; if(ps!=null && ps!=='' && !isNaN(Number(ps))) val=Number(ps);
+    (c.campanhas||[]).forEach(function(k){ if(k&&k.ativo&&k.de&&k.ate&&v.dataVenda>=k.de&&v.dataVenda<=k.ate&&!isNaN(Number(k.valor))) val=Number(k.valor); });
+    return r2(val);
+  }
+  function valorCashback(v){ var f=_fin[v.id]; if(f&&f.cashbackValor!=null&&!isNaN(Number(f.cashbackValor))) return Number(f.cashbackValor); return noPeriodo(v)?valorRegra(v):0; }
+  function elegivel(v){ return statusDe(v)==='confirmada' && noPeriodo(v) && valorCashback(v)>0; }
+  function pedidoDaVenda(id){ return _pedidos.filter(function(p){ return p.status!=='rejeitada' && (p.vendaIds||[]).indexOf(id)>=0; })[0]||null; }
+  function pedidoDoDebito(id){ return _pedidos.filter(function(p){ return p.status!=='rejeitada' && (p.debitoIds||[]).indexOf(id)>=0; })[0]||null; }
+  function ehDebito(v){ if(statusDe(v)!=='estornada' || !(valorCashback(v)>0)) return false; var p=pedidoDaVenda(v.id); return !!(p && p.status==='paga'); }
+  function situacaoCashback(v){
+    var s=statusDe(v);
+    if(s==='rejeitada') return ['não gera',Co.mut];
+    if(!noPeriodo(v)) return ['fora do período',Co.mut];
+    if(s==='aguardando') return [money(valorRegra(v))+' após confirmação',Co.amarelo];
+    if(s==='estornada'){ if(ehDebito(v)) return [(pedidoDoDebito(v.id)?'descontado':'a descontar')+' '+money(valorCashback(v)),Co.roxo]; return ['cancelado (estorno)',Co.mut]; }
+    var p=pedidoDaVenda(v.id);
+    if(!p) return [money(valorCashback(v))+(mesFechado(mesRef(v))?' a solicitar':' acumulando'),Co.green];
+    return p.status==='paga'?['pago',Co.green]:['solicitado',Co.amarelo];
+  }
+
+  /* ---------------- acesso ---------------- */
+  function deptsU(u){ var d=(u&&(u.depts||u.departamentos||u.departments))||[]; if(typeof d==='string') d=[d]; return d.map(function(x){ return String(x).toLowerCase(); }); }
+  function deptDe(L){
+    L=String(L||'').toUpperCase();
+    var u=usuario(L)||(L===meu()?cur():null);
+    if(u&&u.gwa&&u.dept) return u.dept;
+    if(L==='GWA-NEGOCIACAO') return 'negociacao';
+    if(L==='GWA-COMERCIAL') return 'comercial';
+    var ov=_vc&&_vc.deptVendas&&_vc.deptVendas[L];
+    if(ov==='comercial'||ov==='negociacao'||ov==='documentacao') return ov;
+    var d=deptsU(u);
+    if(d.indexOf('negociacao')>=0||d.indexOf('negociação')>=0) return 'negociacao';
+    if(d.indexOf('comercial')>=0) return 'comercial';
+    return '';
+  }
+  function gestorNeg(){ if(ehMaster()) return true; if(!ehAdminPapel()) return false;
+    var pd=(_vc&&_vc.permissoesDept&&_vc.permissoesDept[meu()])||{}; return !!pd.admNegociacao; }
+  function consultorNeg(){ return !ehAdminPapel() && deptDe(meu())==='negociacao'; }
+  function ehFinanceiro(){ if(ehMaster()) return true; var L=meu(); if(!L) return false;
+    if(((_cfg&&_cfg.financeiro)||[]).map(function(x){ return String(x).toUpperCase(); }).indexOf(L)>=0) return true;
+    return deptsU(cur()).indexOf('financeiro')>=0; }
+  function podeVer(){ return gestorNeg()||consultorNeg(); }
+  function podeCashback(){ return gestorNeg()||consultorNeg()||ehFinanceiro(); }
+  function verTudo(){ return gestorNeg()||ehFinanceiro(); }
+  function visiveis(){ return verTudo()?_raw:_raw.filter(function(v){ return String(v.consultor||'').toUpperCase()===meu(); }); }
+  function consultoresNeg(){
+    return usuarios().filter(function(u){ var r=String(u.role||'').toLowerCase(); return deptDe(loginU(u))==='negociacao' && ['master','admin','gestor','supervisor'].indexOf(r)<0 && u.ativo!==false; })
+      .sort(function(a,b){ return String(a.nome||a.login).localeCompare(String(b.nome||b.login)); });
+  }
+  window.gwaPHPodeVer=function(){ return !!_vc && podeVer(); };
+  window.gwaPHPodeCashback=function(){ return !!_vc && podeCashback(); };
+  window.gwaPHPodeConfirmar=function(){ return !!_vc && ehFinanceiro(); };
+  window.gwaPHPendentes=function(){ return _raw.filter(function(v){ return statusDe(v)==='aguardando'; }).length; };
+
+  /* ================= PONTE COM O MODULO DE VENDAS E O PERFIL =================
+     Faturamento: so entra a venda de 1a Hab. CONFIRMADA, e pelo liquido (total - repasse).
+     A copia "efetiva" leva ph:true (metas/premiacoes a ignoram) e phRaw (a venda original, que e a
+     unica gravada na API). Vendas aguardando/rejeitadas/estornadas ficam fora do faturamento. */
+  function derivar(raw){
+    var liq=liquidoDe(raw);
+    return Object.assign({},raw,{ ph:true, phStatus:'confirmada', phRaw:raw, phTotal:totalDe(raw), phRepasse:repasseDe(raw)||0,
+      valorPago:r2(totalDe(raw)-(repasseDe(raw)||0)), liquido:liq });
+  }
+  window.gwaPHEhPH=ehPH;
+  window.gwaPHAjustarVendas=async function(lista){
+    lista=lista||[];
+    var r=await Promise.all([get('ph_fin'),_cfg?null:get('ph_config','atual'),_vc?null:get('vendas_config','atual')]);
+    usaFin(r[0]); if(!_cfg) usaCfg(r[1]); if(!_vc) _vc=r[2]||{};
+    _raw=lista.filter(ehPH);
+    var out=[];
+    lista.forEach(function(v){ if(!ehPH(v)){ out.push(v); return; } if(statusDe(v)==='confirmada') out.push(derivar(v)); });
+    return out;
+  };
+  window.gwaPHLimpar=function(v){
+    if(!v||!v.ph) return v;
+    var raw=v.phRaw||{}, o=Object.assign({},raw,v);
+    ['valorPago','liquido','taxaPct','desconto'].forEach(function(k){ if(k in raw) o[k]=raw[k]; else delete o[k]; });
+    ['ph','phStatus','phRaw','phTotal','phRepasse'].forEach(function(k){ delete o[k]; });
+    return o;
+  };
+  window.gwaPHRaw=function(id){ return _raw.filter(function(v){ return v.id===id; })[0]||null; };
+  /* venda excluida em Vendas: some de todos os lugares (painel, Confirmar vendas, cashback) */
+  window.gwaPHRemovida=async function(id){
+    var v=window.gwaPHRaw(id), cb=v?valorCashback(v):0;
+    _raw=_raw.filter(function(x){ return x.id!==id; });
+    try{
+      if(_fin[id]){ await fetch(base()+'/api/ph_fin/'+encodeURIComponent(id),{method:'DELETE',headers:H()}); delete _fin[id]; }
+      var ps=_pedidos.filter(function(p){ return p.status==='solicitada' && ((p.vendaIds||[]).indexOf(id)>=0||(p.debitoIds||[]).indexOf(id)>=0); });
+      for(var i=0;i<ps.length;i++){
+        var o=Object.assign({},ps[i]), eraVenda=(o.vendaIds||[]).indexOf(id)>=0;
+        o.vendaIds=(o.vendaIds||[]).filter(function(x){ return x!==id; }); o.debitoIds=(o.debitoIds||[]).filter(function(x){ return x!==id; });
+        if(eraVenda){ o.qtd=o.vendaIds.length; o.bruto=r2((o.bruto||0)-cb); } else o.desconto=r2((o.desconto||0)-cb);
+        o.valor=r2((o.bruto||0)-(o.desconto||0));
+        if(!o.vendaIds.length || !(o.valor>0)){ var now=hist(o,'venda '+(v?v.cliente:'')+' excluída: solicitação cancelada'); o.status='rejeitada'; o.rejeitadoEm=now; o.rejeitadoPor=meu(); o.rejeitadoPorNome=meuNome(); o.justificativa='venda excluída'; }
+        else hist(o,'venda '+(v?v.cliente:'')+' excluída: solicitação ajustada para '+money(o.valor));
+        if(await put('ph_cashback',o)) _pedidos=troca(_pedidos,o);
+      }
+    }catch(e){}
+    redesenhaTudo();
+  };
+  window.gwaPHPendentesRaw=function(){ return _raw.filter(function(v){ return statusDe(v)!=='confirmada'; }); };
+  window.gwaPHBloqueioEditar=function(id){
+    var v=window.gwaPHRaw(id); if(!v) return '';
+    var s=statusDe(v);
+    if(s==='confirmada') return 'Esta venda de Primeira Habilitação já foi confirmada pelo Financeiro e não pode ser alterada.\n\nSe houver erro, o Financeiro faz o estorno em Premiações › Confirmar vendas.';
+    if(s==='estornada') return 'Esta venda de Primeira Habilitação foi estornada pelo Financeiro e não pode mais ser alterada.';
+    return '';
+  };
+  window.gwaPHBloqueioExcluir=function(id){
+    var v=window.gwaPHRaw(id); if(!v) return '';
+    var p=pedidoDaVenda(v.id);
+    if(p && p.status==='paga') return 'O cashback desta venda já foi PAGO ao consultor ('+mesNome(p.mesRef)+'), então ela não pode ser apagada.\n\nPara tirar do faturamento, o Financeiro faz o ESTORNO em Premiações › Confirmar vendas (o cashback pago é descontado na próxima solicitação).';
+    return '';
+  };
+  /* depois de salvar uma venda no modulo de Vendas */
+  window.gwaPHAposSalvar=async function(raw){
+    _raw=_raw.filter(function(v){ return v.id!==raw.id; });
+    if(!ehPH(raw)) return raw;
+    _raw.push(raw);
+    var f=_fin[raw.id];
+    if(f && f.status==='rejeitada'){
+      var o=Object.assign({},f,{status:'aguardando',pendencia:null});
+      hist(o,'consultor corrigiu a venda e ela voltou para o Financeiro');
+      if(await put('ph_fin',o)) _fin[o.id]=o;
+    }
+    return statusDe(raw)==='confirmada'?derivar(raw):null;
+  };
+  /* selo nas listas de vendas (so aparece em vendas confirmadas, que sao as que estao no faturamento) */
+  window.gwaPHSelo=function(v){
+    return '<span title="1ª Habilitação confirmada pelo Financeiro: total '+money(v.phTotal)+' − repasse '+money(v.phRepasse)+' = líquido GWA '+money(v.liquido)+(v.taxaPct?' (já descontada a taxa da forma de pagamento)':'')+'. Não conta para metas nem premiações." style="display:inline-block;font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;background:rgba(224,120,32,.14);color:'+Co.orangeL+';border:1px solid rgba(224,120,32,.45);cursor:help;margin-right:6px">1ª Hab.</span>';
+  };
+  /* campo de repasse no lancamento normal */
+  window.__gwaPHProdMudou=function(){
+    var p=document.getElementById('negProd'), w=document.getElementById('negRepWrap'); if(!p||!w) return;
+    var sim=semAcento(p.value)==='PRIMEIRA HABILITACAO';
+    w.style.display=sim?'block':'none';
+    if(sim){
+      var sv=document.querySelectorAll('.negServ'), tem=Array.prototype.some.call(sv,function(s){ return !!s.value; });
+      if(!tem && sv[0]){ var op=Array.prototype.filter.call(sv[0].options,function(o){ return semAcento(o.value)==='PRIMEIRA HABILITACAO'; })[0]; if(op) sv[0].value=op.value; }
+    }
+    window.__gwaPHRepCalc();
+  };
+  window.__gwaPHRepCalc=function(){
+    var info=document.getElementById('negRepInfo'); if(!info) return;
+    var t=num((document.getElementById('vPago')||{}).value), rp=num((document.getElementById('negRepasse')||{}).value);
+    if(isNaN(t)) t=0;
+    var fo=(document.getElementById('vForma')||{}).value, pa=parseInt((document.getElementById('vParc')||{}).value)||1, liqC=t;
+    try{ if(window.gwaVendasCalc) liqC=Number(window.gwaVendasCalc(t,fo,pa).liquido); }catch(e){} if(isNaN(liqC)) liqC=t;
+    if(isNaN(rp)){ info.innerHTML='Informe o repasse (0 se não houver autoescola).'; info.style.color=Co.mut; return; }
+    if(rp<0||rp>t){ info.innerHTML='<b>Repasse inválido:</b> não pode ser negativo nem maior que o valor pago.'; info.style.color='#ff9d8c'; return; }
+    info.innerHTML='Líquido GWA: <b style="color:#7fd694">'+money(liqC-rp)+'</b>'+(t-liqC>0.004?' <span style="color:'+Co.mut+'">(pago '+money(t)+' − taxa '+money(t-liqC)+' − repasse '+money(rp)+')</span>':'')+' · entra no faturamento depois da confirmação do Financeiro · gera '+money(valorRegra({dataVenda:hoje()}))+' de cashback';
+    info.style.color=Co.sub;
+  };
+  ['input','change'].forEach(function(ev){ document.addEventListener(ev,function(e){ var id=e&&e.target&&e.target.id; if(id==='vPago'||id==='vForma'||id==='vParc') window.__gwaPHRepCalc(); }); });
+  /* validacao chamada pelo __gwaVendasSalvar: devolve {erro} ou {repasse} */
+  window.gwaPHValidarLancamento=function(produto,pago){
+    if(semAcento(produto)!=='PRIMEIRA HABILITACAO') return {ph:false};
+    var el=document.getElementById('negRepasse'), rp=num(el?el.value:'');
+    if(el) el.style.borderColor='';
+    var erro='';
+    if(isNaN(rp)) erro='Informe o valor de repasse à autoescola (use 0 se não houver).';
+    else if(rp<0) erro='O valor de repasse não pode ser negativo.';
+    else if(rp>pago) erro='O valor de repasse não pode ser maior que o valor pago pelo cliente.';
+    if(erro){ if(el){ el.style.borderColor='#e5533c'; try{ el.focus(); }catch(e){} } return {ph:true,erro:erro}; }
+    return {ph:true,repasse:r2(rp)};
+  };
+
+  /* ---------------- indicadores ---------------- */
+  function indicadores(lista){
+    function s(arr,f){ return r2(arr.reduce(function(a,v){ return a+(Number(f(v))||0); },0)); }
+    var conf=lista.filter(function(v){ return statusDe(v)==='confirmada'; }), agu=lista.filter(function(v){ return statusDe(v)==='aguardando'; });
+    var rej=lista.filter(function(v){ return statusDe(v)==='rejeitada'; }), est=lista.filter(function(v){ return statusDe(v)==='estornada'; });
+    var eleg=lista.filter(elegivel), cbSol=0, cbPago=0;
+    eleg.forEach(function(v){ var p=pedidoDaVenda(v.id); if(!p) return; if(p.status==='paga') cbPago+=valorCashback(v); else cbSol+=valorCashback(v); });
+    return { conf:conf, agu:agu, rej:rej, est:est,
+      bruto:s(conf,totalDe), repasse:s(conf,function(v){ return repasseDe(v)||0; }), liquido:s(conf,liquidoDe),
+      brutoAgu:s(agu,totalDe), liqAgu:s(agu,liquidoDe),
+      cbGerado:s(eleg,valorCashback), cbSolicitado:r2(cbSol), cbPago:r2(cbPago) };
+  }
+  function filtrar(lista,f){
+    return lista.filter(function(v){
+      var d=String(v.dataVenda||'');
+      if(f.de && d<f.de) return false; if(f.ate && d>f.ate) return false;
+      if(f.cons && String(v.consultor||'').toUpperCase()!==f.cons) return false;
+      if(f.st && statusDe(v)!==f.st) return false; return true; });
+  }
+
+  /* ---------------- pecas visuais ---------------- */
+  function card(t,v,s,cor,ic){
+    return '<div class="gwaPhCard" style="flex:1 1 170px;min-width:150px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px 18px;position:relative;overflow:hidden">'+
+      '<i class="fas '+(ic||'fa-circle')+'" style="position:absolute;right:14px;top:14px;font-size:18px;color:'+(cor||Co.orangeL)+';opacity:.35"></i>'+
+      '<div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.7px;font-weight:700;padding-right:22px">'+t+'</div>'+
+      '<div style="font-size:24px;font-weight:900;color:'+(cor||'#fff')+';margin-top:6px;line-height:1.1">'+v+'</div>'+
+      (s?'<div style="font-size:11.5px;color:'+Co.mut+';margin-top:5px">'+s+'</div>':'')+'</div>';
+  }
+  function cards(arr){ return '<div class="gwaPhCards" style="display:flex;gap:12px;flex-wrap:wrap">'+arr.join('')+'</div>'; }
+  function chip(t,cor,ic){ return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;padding:4px 10px;border-radius:999px;background:'+cor+'22;color:'+cor+';border:1px solid '+cor+'55;white-space:nowrap">'+(ic?'<i class="fas '+ic+'"></i> ':'')+t+'</span>'; }
+  function chipVenda(v){ var s=ST[statusDe(v)]; return chip(s[0],s[1],s[2]); }
+  function chipPedido(p){ return {solicitada:chip('Solicitado · aguardando pagamento',Co.amarelo,'fa-hourglass-half'),rejeitada:chip('Rejeitado',Co.red,'fa-xmark'),paga:chip('Pago',Co.green,'fa-circle-check')}[p.status]||''; }
+  function btn(t,on,tipo,tit,off){
+    var st=tipo==='ghost'?('background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub):
+      (tipo==='ok'?('background:rgba(63,174,90,.14);border:1px solid rgba(63,174,90,.5);color:#7fd694'):
+      (tipo==='perigo'?('background:rgba(229,83,60,.12);border:1px solid rgba(229,83,60,.5);color:#ff8a75'):
+      (tipo==='aviso'?('background:rgba(227,179,65,.12);border:1px solid rgba(227,179,65,.5);color:#f0cf7a'):
+      ('background:'+Co.gradO+';border:1px solid transparent;color:#fff'))));
+    if(off) st='background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.mut+';cursor:not-allowed;opacity:.75';
+    return '<button type="button"'+(off?' disabled':' onclick="'+on+'"')+(tit?' title="'+esc(tit)+'"':'')+' style="'+st+';border-radius:10px;padding:8px 12px;font-size:12.5px;font-weight:700;'+(off?'':'cursor:pointer;')+'display:inline-flex;align-items:center;gap:6px;white-space:nowrap;margin:2px 0">'+t+'</button>';
+  }
+  function sec(t,ic,corpo,extra){
+    return '<div style="margin:22px 0 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="width:4px;height:18px;border-radius:3px;background:'+Co.gradO+'"></span>'+
+      '<h3 style="margin:0;font-size:15px;color:#fff;font-weight:800;letter-spacing:.3px"><i class="fas '+ic+'" style="color:'+Co.orangeL+';margin-right:7px"></i>'+t+'</h3>'+(extra?'<div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">'+extra+'</div>':'')+'</div>'+corpo;
+  }
+  function td(h,extra){ return '<td style="padding:10px;'+(extra||'')+'">'+h+'</td>'; }
+  function tabela(cab,linhas,minW){
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;color:'+Co.sub+';min-width:'+(minW||700)+'px">'+
+      '<thead><tr style="background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'">'+cab.map(function(h){ return '<th style="padding:11px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:'+Co.mut+';white-space:nowrap">'+h+'</th>'; }).join('')+'</tr></thead>'+
+      '<tbody>'+linhas+'</tbody></table></div></div>';
+  }
+  function tr(cels){ return '<tr style="border-top:1px solid '+Co.line+';vertical-align:top">'+cels.join('')+'</tr>'; }
+  function vazio(t){ return '<div style="background:'+Co.card+';border:1px dashed '+Co.line+';border-radius:16px;padding:30px;text-align:center;color:'+Co.mut+'">'+t+'</div>'; }
+  function nota(t,cor){ cor=cor||Co.orangeL; return '<div style="background:'+cor+'14;border:1px solid '+cor+'55;border-radius:12px;padding:11px 14px;font-size:12.5px;color:'+Co.sub+';line-height:1.55;margin:12px 0">'+t+'</div>'; }
+  function ativo(alvo,k){ return !!(alvo && document.body.contains(alvo) && alvo.querySelector('[data-phv="'+k+'"]')); }
+  function carregandoHtml(k){ return '<div data-phv="'+(k||'')+'" style="padding:50px;text-align:center;color:'+Co.mut+'"><i class="fas fa-spinner fa-spin" style="font-size:26px;color:'+Co.orange+'"></i><div style="margin-top:12px">Carregando…</div></div>'; }
+  function semAcesso(t){ return '<div style="max-width:540px;margin:50px auto;text-align:center;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:30px;color:'+Co.sub+'"><i class="fas fa-lock" style="font-size:34px;color:'+Co.orange+'"></i><h3 style="color:#fff;margin:14px 0 8px">Acesso restrito</h3><p style="line-height:1.5;margin:0">'+t+'</p></div>'; }
+  function cabecalho(ic,eyebrow,t,s,extra){
+    return '<div style="position:relative;overflow:hidden;border-radius:20px;padding:20px 22px;margin-bottom:16px;background:radial-gradient(ellipse 60% 120% at 100% 0%,rgba(224,120,32,.32),transparent 70%),linear-gradient(135deg,#1c1c1c,#0d0d0d);border:1px solid rgba(224,120,32,.35)">'+
+      '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">'+
+      '<div style="width:50px;height:50px;border-radius:15px;background:'+Co.gradO+';display:flex;align-items:center;justify-content:center;color:#fff;font-size:21px;flex:0 0 auto;box-shadow:0 8px 22px rgba(224,120,32,.4)"><i class="fas '+ic+'"></i></div>'+
+      '<div style="flex:1;min-width:220px"><div style="font-size:11px;color:'+Co.orangeL+';font-weight:800;letter-spacing:2px;text-transform:uppercase">'+eyebrow+'</div>'+
+      '<div style="font-size:21px;font-weight:900;color:#fff;margin-top:2px">'+t+'</div>'+(s?'<div style="font-size:12.5px;color:'+Co.mut+';margin-top:3px;line-height:1.5">'+s+'</div>':'')+'</div>'+
+      (extra?'<div style="display:flex;gap:6px;flex-wrap:wrap">'+extra+'</div>':'')+'</div></div>';
+  }
+  function janela(titulo,html){
+    var o=document.getElementById('gwaPhJan'); if(o) o.remove();
+    o=document.createElement('div'); o.id='gwaPhJan';
+    o.style.cssText='position:fixed;inset:0;z-index:100009;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
+    o.innerHTML='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;max-width:640px;width:100%;max-height:86vh;overflow:auto;padding:22px;color:'+Co.sub+';box-shadow:0 20px 60px rgba(0,0,0,.6)">'+
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><h3 style="margin:0;color:#fff;font-size:17px;flex:1">'+titulo+'</h3><button type="button" onclick="document.getElementById(&#39;gwaPhJan&#39;).remove()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:#fff;border-radius:10px;padding:7px 12px;cursor:pointer">Fechar</button></div>'+html+'</div>';
+    o.addEventListener('click',function(e){ if(e.target===o) o.remove(); });
+    document.body.appendChild(o);
+  }
+  function histHtml(h){ return (h||[]).slice().reverse().map(function(x){ return '<div style="display:flex;gap:10px;padding:9px 0;border-top:1px solid '+Co.line+';font-size:13px"><div style="min-width:120px;color:'+Co.mut+'">'+quando(x.em||x.ts)+'</div><div><b style="color:#fff">'+esc(x.porNome||x.por)+'</b> · '+esc(x.acao+(x.campo?(' '+x.campo):''))+'</div></div>'; }).join('')||'<div style="color:'+Co.mut+'">Sem registros.</div>'; }
+  window.__gwaPHHist=function(id){
+    var v=window.gwaPHRaw(id); if(!v) return; var f=_fin[id]||{}, rp=repasseDe(v);
+    var lin=function(a,b){ return '<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;font-size:13px"><span style="color:'+Co.mut+'">'+a+'</span><b style="color:#fff;text-align:right">'+b+'</b></div>'; };
+    var h=[{em:v.ts,por:v.lancadoPor||v.consultor,porNome:v.lancadoPorNome||v.consultorNome,acao:'lançou a venda em Vendas › Lançar'}].concat((v.hist||[]).map(function(x){ return {em:x.ts,por:x.por,porNome:nomeDe(x.por),acao:x.acao==='edicao'?('editou '+x.campo):(x.acao||'')}; })).concat(f.hist||[]).sort(function(a,b){ return (a.em||0)-(b.em||0); });
+    janela('Venda de '+esc(v.cliente),
+      '<div style="margin-bottom:10px">'+chipVenda(v)+'</div>'+
+      lin('Consultor',esc(v.consultorNome||nomeDe(v.consultor)))+lin('Data da venda',br(v.dataVenda))+lin('CPF',esc(cpfFmt(v.cpf)))+
+      lin('Serviço(s)',esc((v.servicos||[]).join(', ')||'—'))+lin('Forma de pagamento',esc(FORMAS[v.forma]||v.forma||'—'))+
+      lin('Valor total da venda',money(totalDe(v)))+(taxaDe(v)>0?lin('Taxa da forma de pagamento','− '+money(taxaDe(v))):'')+lin('Repasse à autoescola',rp==null?'<span style="color:'+Co.amarelo+'">não informado</span>':money(rp))+lin('Valor líquido GWA','<span style="color:'+Co.green+'">'+money(liquidoDe(v))+'</span>')+
+      lin('Mês de referência do cashback',mesNome(mesRef(v)))+lin('Cashback',situacaoCashback(v)[0])+
+      (f.pendencia?nota('<b>Mantida pendente</b> por '+esc(f.pendencia.porNome)+' em '+quando(f.pendencia.em)+(f.pendencia.obs?': '+esc(f.pendencia.obs):''),Co.amarelo):'')+
+      (f.status==='rejeitada'&&f.motivoRejeicao?nota('<b>Motivo da rejeição:</b> '+esc(f.motivoRejeicao),Co.red):'')+
+      (f.motivoEstorno?nota('<b>Motivo do estorno:</b> '+esc(f.motivoEstorno),Co.roxo):'')+
+      '<h4 style="color:#fff;margin:16px 0 4px">Histórico</h4>'+histHtml(h));
+  };
+  function barraFiltros(f,fn,comCons){
+    var sS='padding:9px 11px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;font-size:13px';
+    return '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">'+
+      '<div><div style="font-size:11px;color:'+Co.mut+';margin-bottom:3px">De</div><input type="date" value="'+esc(f.de)+'" onchange="'+fn+'(&#39;de&#39;,this.value)" style="'+sS+'"></div>'+
+      '<div><div style="font-size:11px;color:'+Co.mut+';margin-bottom:3px">Até</div><input type="date" value="'+esc(f.ate)+'" onchange="'+fn+'(&#39;ate&#39;,this.value)" style="'+sS+'"></div>'+
+      (comCons?'<div><div style="font-size:11px;color:'+Co.mut+';margin-bottom:3px">Consultor</div><select onchange="'+fn+'(&#39;cons&#39;,this.value)" style="'+sS+'"><option value="">Todos</option>'+consultoresNeg().map(function(u){ var L=loginU(u); return '<option value="'+esc(L)+'"'+(f.cons===L?' selected':'')+'>'+esc(u.nome||u.login)+'</option>'; }).join('')+'</select></div>':'')+
+      '<div><div style="font-size:11px;color:'+Co.mut+';margin-bottom:3px">Situação financeira</div><select onchange="'+fn+'(&#39;st&#39;,this.value)" style="'+sS+'"><option value="">Todas</option>'+Object.keys(ST).map(function(k){ return '<option value="'+k+'"'+(f.st===k?' selected':'')+'>'+ST[k][0]+'</option>'; }).join('')+'</select></div>'+
+      btn('Este mês',fn+'(&#39;mes&#39;,&#39;&#39;)','ghost')+btn('Limpar',fn+'(&#39;limpar&#39;,&#39;&#39;)','ghost')+'</div>';
+  }
+  function aplicaF(f,k,v){ if(k==='limpar'){ f.de='';f.ate='';f.cons='';f.st=''; } else if(k==='mes'){ f.de=mesAtual()+'-01'; f.ate=''; } else f[k]=v; }
+  function cardsIndicadores(I){
+    return cards([
+      card('Faturamento líquido GWA',money(I.liquido),I.conf.length+' venda(s) confirmada(s)',Co.green,'fa-sack-dollar'),
+      card('Total bruto vendido',money(I.bruto),'confirmadas · '+money(I.brutoAgu)+' aguardando','#fff','fa-cash-register'),
+      card('Repasse às autoescolas',money(I.repasse),'não entra no faturamento',Co.blue,'fa-car'),
+      card('Aguardando Financeiro',I.agu.length,money(I.liqAgu)+' de líquido a confirmar',Co.amarelo,'fa-hourglass-half'),
+      card('Rejeitadas / estornadas',I.rej.length+' / '+I.est.length,'não geram faturamento nem cashback',Co.red,'fa-circle-xmark'),
+      card('Cashback gerado',money(I.cbGerado),'vendas confirmadas',Co.orangeL,'fa-coins'),
+      card('Cashback solicitado',money(I.cbSolicitado),'aguardando pagamento',Co.amarelo,'fa-paper-plane'),
+      card('Cashback pago',money(I.cbPago),'já recebido',Co.green,'fa-circle-check')]);
+  }
+  function tabelaPorConsultor(lista){
+    var g={};
+    consultoresNeg().forEach(function(u){ g[loginU(u)]=[]; });
+    lista.forEach(function(v){ var L=String(v.consultor||'').toUpperCase(); (g[L]=g[L]||[]).push(v); });
+    var arr=Object.keys(g).map(function(L){ return {L:L,I:indicadores(g[L])}; }).sort(function(a,b){ return b.I.liquido-a.I.liquido||b.I.conf.length-a.I.conf.length||nomeDe(a.L).localeCompare(nomeDe(b.L)); });
+    var tot=indicadores(lista);
+    var linhas=arr.map(function(x,i){ var I=x.I; return tr([td((i+1)+'º','font-weight:900;color:'+(i<3&&I.conf.length?Co.orangeL:Co.mut)),td('<b style="color:#fff">'+esc(nomeDe(x.L))+'</b>','white-space:nowrap'),
+      td(I.conf.length,'text-align:center;color:'+Co.green+';font-weight:800'),td(money(I.bruto),'white-space:nowrap'),td(money(I.repasse),'white-space:nowrap;color:'+Co.blue),td('<b>'+money(I.liquido)+'</b>','white-space:nowrap;color:'+Co.green),
+      td(I.agu.length,'text-align:center;color:'+Co.amarelo),td(I.rej.length+I.est.length,'text-align:center;color:'+Co.red),td(money(I.cbGerado),'white-space:nowrap;color:'+Co.orangeL)]); }).join('')+
+      '<tr style="border-top:2px solid '+Co.orangeD+';background:'+Co.bgA+'">'+td('')+td('<b style="color:#fff">Total</b>')+td('<b>'+tot.conf.length+'</b>','text-align:center')+td('<b>'+money(tot.bruto)+'</b>','white-space:nowrap')+td('<b>'+money(tot.repasse)+'</b>','white-space:nowrap')+td('<b style="color:'+Co.green+'">'+money(tot.liquido)+'</b>','white-space:nowrap')+td('<b>'+tot.agu.length+'</b>','text-align:center')+td('<b>'+(tot.rej.length+tot.est.length)+'</b>','text-align:center')+td('<b>'+money(tot.cbGerado)+'</b>','white-space:nowrap')+'</tr>';
+    return tabela(['#','Consultor','Confirmadas','Bruto','Repasse','Faturamento líquido','Aguardando','Rejeit./estorn.','Cashback gerado'],linhas,960);
+  }
+  function exportarCsv(lista){
+    var cab=['Data da venda','Cliente','CPF','Consultor','Serviços','Valor total','Taxa','Repasse','Líquido GWA','Forma','Situação financeira','Validado em','Validado por','Motivo','Mês do cashback','Cashback','Situação do cashback'];
+    function n(x){ return x==null?'':String(r2(x)).replace('.',','); }
+    var rows=lista.map(function(v){ var f=_fin[v.id]||{}, val=f.estornadaEm||f.confirmadaEm||f.rejeitadaEm||'', por=f.estornadaPorNome||f.confirmadaPorNome||f.rejeitadaPorNome||'';
+      return [br(v.dataVenda),v.cliente,cpfFmt(v.cpf),v.consultorNome||nomeDe(v.consultor),(v.servicos||[]).join(' + '),n(totalDe(v)),n(taxaDe(v)),n(repasseDe(v)),n(liquidoDe(v)),FORMAS[v.forma]||v.forma,ST[statusDe(v)][0],
+        val?quando(val):'',por,f.motivoEstorno||f.motivoRejeicao||'',mesNome(mesRef(v)),elegivel(v)?n(valorCashback(v)):'',situacaoCashback(v)[0]]; });
+    var txt=[cab].concat(rows).map(function(r){ return r.map(function(c){ return '"'+String(c==null?'':c).replace(/"/g,'""')+'"'; }).join(';'); }).join('\n');
+    var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob(['﻿'+txt],{type:'text/csv;charset=utf-8;'})); a.download='primeira-habilitacao-'+hoje()+'.csv';
+    document.body.appendChild(a); a.click(); setTimeout(function(){ a.remove(); },400);
+  }
+
+  /* ================= PAINEL 1a HABILITACAO (aba no painel de Vendas) ================= */
+  var _alvo=null, _sub='painel', _fPh={de:'',ate:'',cons:'',st:''}, _timer=null;
+  function autoAtualiza(){
+    if(_timer) clearInterval(_timer);
+    _timer=setInterval(function(){
+      var vivo=ativo(_alvo,'painel')||ativo(_cfAlvo,'conf')||ativo(_cbAlvo,'cb');
+      if(!vivo){ clearInterval(_timer); _timer=null; return; }
+      if(document.hidden || document.getElementById('gwaPhJan')) return;
+      var at=document.activeElement; if(at && /INPUT|SELECT|TEXTAREA/.test(at.tagName)) return;
+      carregar(true).then(redesenhaTudo);
+    },30000);
+  }
+  function redesenhaTudo(){ desenhar(); desenharConf(); desenharCb(); }
+  window.gwaPHRender=function(body){
+    _alvo=body; body.innerHTML=carregandoHtml('painel');
+    carregar(true).then(function(){ if(_alvo===body) desenhar(); autoAtualiza(); });
+  };
+  window.__gwaPHSub=function(s){ _sub=s; desenhar(); };
+  window.__gwaPHF=function(k,v){ aplicaF(_fPh,k,v); desenhar(); };
+  window.__gwaPHIrPrem=function(v){
+    if(typeof window.gwaAbrirPremiacoes!=='function') return;
+    window.gwaAbrirPremiacoes();
+    var n=0; (function tenta(){ n++; if(window.__gwaPremView && document.getElementById('gwaPremBody')){ window.__gwaPremView(v); } else if(n<20) setTimeout(tenta,150); })();
+  };
+  window.__gwaPHIrLancar=function(){
+    try{ if(gestorNeg() && window.__gwaVendasSetDept) window.__gwaVendasSetDept('negociacao'); if(window.__gwaVendasView) window.__gwaVendasView('lancar'); }catch(e){}
+    setTimeout(function(){ var p=document.getElementById('negProd'); if(!p) return;
+      var op=Array.prototype.filter.call(p.options,function(o){ return semAcento(o.value)==='PRIMEIRA HABILITACAO'; })[0];
+      if(op){ p.value=op.value; window.__gwaPHProdMudou(); } },80);
+  };
+  function desenhar(){
+    if(!ativo(_alvo,'painel')){ _alvo=null; return; }
+    if(!podeVer()){ _alvo.innerHTML=semAcesso('A Primeira Habilitação é do departamento de Negociação. Administradores recebem acesso em <b style="color:'+Co.orange+'">Vendas › Ajustes › Acessos de supervisão</b>.'); return; }
+    var subs=gestorNeg()?[['painel','Painel','fa-gauge-high'],['vendas','Vendas','fa-table-list'],['consultores','Por consultor','fa-ranking-star']]:[['painel','Meu painel','fa-gauge-high'],['vendas','Minhas vendas','fa-list']];
+    if(!subs.some(function(s){ return s[0]===_sub; })) _sub='painel';
+    var h='';
+    try{ h=_sub==='vendas'?viewVendas():(_sub==='consultores'?viewConsultores():viewPainel()); }catch(e){ h='<div style="color:'+Co.red+';padding:20px">Erro: '+esc(e&&e.message||e)+'</div>'; }
+    _alvo.innerHTML='<div data-phv="painel" style="max-width:1240px;margin:0 auto">'+
+      cabecalho('fa-id-card','Negociação · painel automático','Primeira Habilitação',
+        'As vendas lançadas em <b style="color:#fff">Vendas › Lançar</b> com Produto inicial <b style="color:'+Co.orangeL+'">Primeira Habilitação</b> aparecem aqui sozinhas. O <b style="color:'+Co.green+'">líquido</b> (total − taxa do pagamento − repasse) entra no faturamento depois da confirmação do Financeiro e gera <b style="color:'+Co.orangeL+'">'+money(valorRegra({dataVenda:hoje()}))+'</b> de cashback. Não conta para metas.',
+        btn('<i class="fas fa-plus"></i> Lançar venda','__gwaPHIrLancar()')+(ehFinanceiro()?btn('<i class="fas fa-file-circle-check"></i> Confirmar vendas','__gwaPHIrPrem(&#39;phconf&#39;)','aviso'):'')+btn('<i class="fas fa-hand-holding-dollar"></i> Cashback','__gwaPHIrPrem(&#39;cashback&#39;)','ghost'))+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 16px">'+subs.map(function(s){ var on=_sub===s[0];
+        return '<button type="button" onclick="__gwaPHSub('+q(s[0])+')" style="padding:8px 14px;border-radius:999px;border:1px solid '+(on?'transparent':Co.line)+';background:'+(on?Co.gradO:'rgba(255,255,255,.04)')+';color:#fff;font-size:12.5px;font-weight:700;cursor:pointer"><i class="fas '+s[2]+'"></i> '+s[1]+'</button>'; }).join('')+'</div>'+h+'</div>';
+  }
+  function rankingHtml(lista){
+    var g={}; lista.forEach(function(v){ if(statusDe(v)!=='confirmada') return; var L=String(v.consultor||'').toUpperCase(); g[L]=g[L]||{L:L,n:0,liq:0}; g[L].n++; g[L].liq+=liquidoDe(v); });
+    var arr=Object.keys(g).map(function(k){ return g[k]; }).sort(function(a,b){ return b.n-a.n||b.liq-a.liq; });
+    if(!arr.length) return vazio('Nenhuma venda confirmada no período.');
+    var mx=arr[0].n||1, med=['🥇','🥈','🥉'];
+    return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:8px 16px">'+arr.map(function(x,i){
+      return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;flex-wrap:wrap;'+(i?'border-top:1px solid '+Co.line:'')+'">'+
+        '<div style="width:30px;text-align:center;font-size:'+(i<3?'20px':'13px')+';font-weight:900;color:'+Co.mut+'">'+(i<3?med[i]:(i+1)+'º')+'</div>'+
+        '<div style="flex:0 1 180px;min-width:110px;color:#fff;font-weight:700;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(nomeDe(x.L))+'</div>'+
+        '<div style="flex:1;height:10px;border-radius:9px;background:rgba(255,255,255,.06);overflow:hidden;min-width:60px"><div style="height:100%;width:'+Math.round(x.n/mx*100)+'%;background:'+Co.gradO+';border-radius:9px"></div></div>'+
+        '<div style="min-width:150px;text-align:right;font-size:12.5px;color:'+Co.sub+'"><b style="color:#fff;font-size:15px">'+x.n+'</b> confirmada'+(x.n===1?'':'s')+' · <span style="color:'+Co.green+'">'+money(x.liq)+'</span></div></div>'; }).join('')+'</div>';
+  }
+  function viewPainel(){
+    var m=mesAtual(), doMes=visiveis().filter(function(v){ return mesRef(v)===m; }), I=indicadores(doMes);
+    var rej=visiveis().filter(function(v){ return statusDe(v)==='rejeitada'; });
+    var avisoRej=rej.length?sec('Rejeitadas pelo Financeiro — corrigir','fa-circle-xmark',tabela(['Data','Cliente'].concat(verTudo()?['Consultor']:[]).concat(['Motivo','']),rej.map(function(v){ var f=_fin[v.id]||{};
+      return tr([td(br(v.dataVenda)),td('<b style="color:#fff">'+esc(v.cliente)+'</b>')].concat(verTudo()?[td(esc(v.consultorNome||nomeDe(v.consultor)))]:[]).concat([td(esc(f.motivoRejeicao||''),'color:#ff9d8c'),td(btn('<i class="fas fa-pen"></i> Corrigir a venda','__gwaVendasEditar('+q(v.id)+')','aviso'),'white-space:nowrap')])); }).join(''),620)):'';
+    if(gestorNeg()){
+      return '<div style="font-size:12.5px;color:'+Co.mut+';margin-bottom:10px">Indicadores de <b style="color:#fff">'+mesNome(m)+'</b>. Filtros completos na aba Vendas.</div>'+
+        cardsIndicadores(I)+avisoRej+sec('Ranking do mês (vendas confirmadas)','fa-ranking-star',rankingHtml(doMes));
+    }
+    var meusCb=visiveis().filter(elegivel), acum=r2(meusCb.reduce(function(a,v){ return a+valorCashback(v); },0));
+    var doMesCb=r2(doMes.filter(elegivel).reduce(function(a,v){ return a+valorCashback(v); },0));
+    return cards([
+        card('Minhas vendas no mês',doMes.length,mesNome(m),'#fff','fa-id-card'),
+        card('Aguardando Financeiro',I.agu.length,'ainda fora do faturamento',Co.amarelo,'fa-hourglass-half'),
+        card('Confirmadas no mês',I.conf.length,'já no meu faturamento',Co.green,'fa-circle-check'),
+        card('Meu faturamento líquido',money(I.liquido),'1ª Hab. confirmada no mês · fora da meta',Co.green,'fa-sack-dollar'),
+        card('Cashback de '+MESES[+m.slice(5)-1],money(doMesCb),'acumulando · solicitação a partir de '+br(liberaEm(m)),Co.orangeL,'fa-coins')])+
+      (rej.length?nota('<b style="color:#ff9d8c"><i class="fas fa-circle-exclamation"></i> '+rej.length+' venda(s) rejeitada(s) pelo Financeiro.</b> Veja o motivo abaixo e corrija a venda.',Co.red):'')+avisoRej+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin-top:16px">'+
+        '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:20px">'+
+          '<div style="font-size:12px;color:'+Co.mut+';font-weight:800;letter-spacing:1px;text-transform:uppercase">Como funciona</div>'+
+          '<ol style="margin:10px 0 0;padding-left:18px;color:'+Co.sub+';font-size:13px;line-height:1.8">'+
+            '<li>Lance em <b>Vendas › Lançar</b> com Produto inicial <b>Primeira Habilitação</b> e informe o <b>repasse da autoescola</b>.</li>'+
+            '<li>A venda aparece aqui e vai para o <b>Financeiro</b>.</li>'+
+            '<li>Confirmada: o líquido entra no seu faturamento (fora da meta) e gera '+money(valorRegra({dataVenda:hoje()}))+' de cashback no mês da venda.</li>'+
+            '<li>No fechamento do mês, a <b>administração</b> solicita o pagamento do cashback. Você acompanha em Premiações › Cashback 1ª Hab.</li></ol></div>'+
+        '<div style="background:linear-gradient(135deg,rgba(63,174,90,.16),rgba(63,174,90,.04));border:1px solid rgba(63,174,90,.4);border-radius:18px;padding:20px">'+
+          '<div style="font-size:12px;color:#9fe0ae;font-weight:800;letter-spacing:1px;text-transform:uppercase">Meu cashback acumulado</div>'+
+          '<div style="font-size:32px;font-weight:900;color:#fff;margin:6px 0 4px">'+money(acum)+'</div>'+
+          '<div style="font-size:12.5px;color:'+Co.sub+'">'+meusCb.length+' venda(s) confirmada(s) desde '+br((_cfg||CFG_PADRAO).inicio)+'.</div>'+
+          '<div style="margin-top:14px">'+btn('<i class="fas fa-hand-holding-dollar"></i> Ver meu cashback por mês','__gwaPHIrPrem(&#39;cashback&#39;)')+'</div></div></div>';
+  }
+  function acoesVenda(v){
+    var dono=String(v.consultor).toUpperCase()===meu(), s=statusDe(v), a='';
+    if((s==='aguardando'||s==='rejeitada') && (gestorNeg()||dono)) a+=btn('<i class="fas fa-pen"></i> '+(s==='rejeitada'?'Corrigir':'Editar'),'__gwaVendasEditar('+q(v.id)+')',s==='rejeitada'?'aviso':'ghost');
+    if(ehAdminPapel() && gestorNeg()) a+=' '+btn('<i class="fas fa-trash"></i>','__gwaPHExcluir('+q(v.id)+')','perigo','Excluir a venda');
+    return a+' '+btn('<i class="fas fa-clock-rotate-left"></i>','__gwaPHHist('+q(v.id)+')','ghost','Detalhes e histórico');
+  }
+  window.__gwaPHExcluir=function(id){ if(typeof window.__gwaVendasExcluir==='function') window.__gwaVendasExcluir(id); };
+  function linhaVenda(v,comCons,comAcoes){
+    var sc=situacaoCashback(v), f=_fin[v.id]||{}, rp=repasseDe(v), s=statusDe(v);
+    return tr([td(br(v.dataVenda),'white-space:nowrap'),
+      td('<b style="color:#fff">'+esc(v.cliente)+'</b><div style="font-size:11px;color:'+Co.mut+'">'+esc(cpfFmt(v.cpf))+'</div>'+(s==='rejeitada'&&f.motivoRejeicao?'<div style="font-size:11px;color:#ff9d8c;margin-top:3px">'+esc(f.motivoRejeicao)+'</div>':'')+(s==='aguardando'&&f.pendencia&&f.pendencia.obs?'<div style="font-size:11px;color:'+Co.amarelo+';margin-top:3px">Financeiro: '+esc(f.pendencia.obs)+'</div>':''),'white-space:nowrap')]
+      .concat(comCons?[td('<b style="color:#fff">'+esc(v.consultorNome||nomeDe(v.consultor))+'</b>','white-space:nowrap')]:[])
+      .concat([td(money(totalDe(v)),'white-space:nowrap'),td(rp==null?'<span style="color:'+Co.amarelo+'">não informado</span>':money(rp),'white-space:nowrap;color:'+Co.blue),
+        td('<b>'+money(liquidoDe(v))+'</b>','white-space:nowrap;color:'+(s==='confirmada'?Co.green:Co.mut)),td(chipVenda(v)),td(sc[0],'white-space:nowrap;font-weight:700;color:'+sc[1])])
+      .concat(comAcoes?[td(acoesVenda(v),'white-space:nowrap')]:[]));
+  }
+  function viewVendas(){
+    var vs=filtrar(visiveis(),_fPh).sort(function(a,b){ return String(b.dataVenda).localeCompare(String(a.dataVenda))||(b.ts||0)-(a.ts||0); });
+    var I=indicadores(vs), g=verTudo();
+    var topo=barraFiltros(_fPh,'__gwaPHF',g)+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;font-size:12.5px;color:'+Co.mut+'"><span><b style="color:#fff">'+vs.length+'</b> venda(s)</span><span>·</span><span>confirmadas: <b style="color:'+Co.green+'">'+money(I.liquido)+'</b> líquido de '+money(I.bruto)+' bruto</span>'+
+      (g?'<span style="margin-left:auto">'+btn('<i class="fas fa-file-csv"></i> Exportar CSV','__gwaPHCsv(&#39;ph&#39;)','ghost')+'</span>':'')+'</div>';
+    if(!vs.length) return topo+vazio('Nenhuma venda de Primeira Habilitação com esses filtros.<br><span style="font-size:12px">Para lançar, use Vendas › Lançar com Produto inicial "Primeira Habilitação".</span>');
+    return topo+tabela(['Data','Cliente'].concat(g?['Consultor']:[]).concat(['Total','Repasse','Líquido GWA','Situação','Cashback','']),vs.map(function(v){ return linhaVenda(v,g,true); }).join(''),g?1120:960)+
+      '<div style="font-size:11.5px;color:'+Co.mut+';margin-top:8px">O líquido só entra no faturamento depois da confirmação do Financeiro (verde). O repasse nunca entra.</div>';
+  }
+  function viewConsultores(){
+    var vs=filtrar(_raw,_fPh);
+    return barraFiltros(_fPh,'__gwaPHF',true)+cardsIndicadores(indicadores(vs))+sec('Faturamento líquido por consultor','fa-ranking-star',tabelaPorConsultor(vs));
+  }
+  window.__gwaPHCsv=function(origem){ exportarCsv(filtrar(visiveis(),origem==='conf'?_fConf:_fPh)); };
+
+  /* ================= CONFIRMAR VENDAS (aba em Premiacoes — Financeiro) ================= */
+  var _cfAlvo=null, _fConf={de:'',ate:'',cons:'',st:'aguardando'}, _travas={};
+  window.gwaPHRenderConfirmar=function(body){
+    _cfAlvo=body; body.innerHTML=carregandoHtml('conf');
+    carregar(true).then(function(){ if(_cfAlvo===body) desenharConf(); autoAtualiza(); });
+  };
+  window.__gwaPHFC=function(k,v){ aplicaF(_fConf,k,v); desenharConf(); };
+  function desenharConf(){
+    if(!ativo(_cfAlvo,'conf')){ _cfAlvo=null; return; }
+    if(!ehFinanceiro()){ _cfAlvo.innerHTML=semAcesso('A confirmação das vendas é feita pelo Financeiro. O Master libera quem confirma aqui mesmo, em <b style="color:'+Co.orange+'">Quem confirma as vendas</b>.'); return; }
+    var h; try{ h=viewConf(); }catch(e){ h='<div style="color:'+Co.red+';padding:20px">Erro: '+esc(e&&e.message||e)+'</div>'; }
+    _cfAlvo.innerHTML='<div data-phv="conf" style="max-width:1280px;margin:0 auto">'+cabecalho('fa-file-circle-check','Premiações · Primeira Habilitação','Confirmar vendas','Confira se o pagamento entrou na conta da GWA. Só depois da confirmação o líquido entra no faturamento e o cashback é gerado.')+h+'</div>';
+  }
+  function viewConf(){
+    var vs=filtrar(_raw,_fConf).sort(function(a,b){ var o={aguardando:0,rejeitada:1,confirmada:2,estornada:3}; return (o[statusDe(a)]-o[statusDe(b)])||String(a.dataVenda).localeCompare(String(b.dataVenda))||(a.ts||0)-(b.ts||0); });
+    var nAgu=_raw.filter(function(v){ return statusDe(v)==='aguardando'; }).length, semSt=Object.assign({},_fConf,{st:''});
+    var linhas=vs.map(function(v){
+      var f=_fin[v.id]||{}, s=statusDe(v), val='', rp=repasseDe(v);
+      if(s==='confirmada') val='Confirmada por <b>'+esc(f.confirmadaPorNome||f.confirmadaPor)+'</b><br>'+quando(f.confirmadaEm);
+      else if(s==='rejeitada') val='Rejeitada por <b>'+esc(f.rejeitadaPorNome||f.rejeitadaPor)+'</b><br>'+quando(f.rejeitadaEm)+'<div style="color:#ff9d8c">'+esc(f.motivoRejeicao||'')+'</div>';
+      else if(s==='estornada') val='Estornada por <b>'+esc(f.estornadaPorNome||f.estornadaPor)+'</b><br>'+quando(f.estornadaEm)+'<div style="color:'+Co.roxo+'">'+esc(f.motivoEstorno||'')+'</div>';
+      else val=f.pendencia?('Mantida pendente por <b>'+esc(f.pendencia.porNome)+'</b><br>'+quando(f.pendencia.em)+(f.pendencia.obs?'<div style="color:'+Co.amarelo+'">'+esc(f.pendencia.obs)+'</div>':'')):(f.hist&&f.hist.length?'<span style="color:'+Co.amarelo+'">corrigida pelo consultor · reanalisar</span>':'<span style="color:'+Co.mut+'">ainda não analisada</span>');
+      var ac='';
+      if(s==='aguardando') ac=btn('<i class="fas fa-check"></i> Confirmar recebimento','__gwaPHFinConfirmar('+q(v.id)+')','ok')+' '+btn('<i class="fas fa-xmark"></i> Rejeitar','__gwaPHFinRejeitar('+q(v.id)+')','perigo')+' '+btn('<i class="fas fa-hourglass-half"></i> Manter pendente','__gwaPHFinPendente('+q(v.id)+')','aviso');
+      else if(s==='confirmada') ac=btn('<i class="fas fa-rotate-left"></i> Estornar','__gwaPHFinEstornar('+q(v.id)+')','perigo','Cancela uma venda já confirmada');
+      if(ehAdminPapel()) ac+=' '+btn('<i class="fas fa-trash"></i> Excluir','__gwaPHExcluir('+q(v.id)+')','perigo','Excluir a venda (sai de todos os lugares)');
+      ac+=' '+btn('<i class="fas fa-clock-rotate-left"></i>','__gwaPHHist('+q(v.id)+')','ghost','Detalhes e histórico');
+      return tr([td('<b style="color:#fff">'+esc(v.consultorNome||nomeDe(v.consultor))+'</b>','white-space:nowrap'),
+        td(esc(v.cliente)+'<div style="font-size:11px;color:'+Co.mut+'">'+esc(cpfFmt(v.cpf))+'</div>','white-space:nowrap'),
+        td(br(v.dataVenda)+'<div style="font-size:11px;color:'+Co.mut+'">'+esc(FORMAS[v.forma]||v.forma||'')+'</div>','white-space:nowrap'),
+        td(money(totalDe(v)),'white-space:nowrap'),td(rp==null?'<span style="color:'+Co.amarelo+'">não informado</span>':money(rp),'white-space:nowrap;color:'+Co.blue),td('<b>'+money(liquidoDe(v))+'</b>','white-space:nowrap;color:'+Co.green),
+        td(noPeriodo(v)&&s!=='rejeitada'?money(s==='aguardando'?valorRegra(v):valorCashback(v)):'—','white-space:nowrap;color:'+Co.orangeL),
+        td(chipVenda(v)),td(val,'font-size:12px;line-height:1.5;min-width:170px'),td('<div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px">'+ac+'</div>','min-width:200px')]); }).join('');
+    return (nAgu?nota('<b style="color:'+Co.amarelo+'"><i class="fas fa-bell"></i> '+nAgu+' venda(s) aguardando confirmação financeira.</b>',Co.amarelo):'')+
+      barraFiltros(_fConf,'__gwaPHFC',true)+
+      '<div style="font-size:12px;color:'+Co.mut+';margin:-4px 0 10px">Indicadores do período e consultor escolhidos (todas as situações). A lista abaixo segue também o filtro de situação.</div>'+
+      cardsIndicadores(indicadores(filtrar(_raw,semSt)))+
+      sec('Vendas'+(_fConf.st?(' — '+ST[_fConf.st][0].toLowerCase()):''),'fa-list-check',vs.length?tabela(['Consultor','Cliente','Data da venda','Valor total','Repasse','Líquido GWA','Cashback','Situação','Validação','Ações'],linhas,1320):vazio('Nenhuma venda com esses filtros.'),btn('<i class="fas fa-file-csv"></i> Exportar CSV','__gwaPHCsv(&#39;conf&#39;)','ghost'))+
+      sec('Faturamento líquido por consultor','fa-ranking-star',tabelaPorConsultor(filtrar(_raw,semSt)))+
+      (ehMaster()?acessoFinHtml():'');
+  }
+  function acessoFinHtml(){
+    var lista=((_cfg&&_cfg.financeiro)||[]).map(function(x){ return String(x).toUpperCase(); });
+    var us=usuarios().filter(function(u){ var r=String(u.role||'').toLowerCase(); return u.ativo!==false && loginU(u)!=='TALIS' && ['admin','gestor','supervisor','master'].indexOf(r)>=0; }).sort(function(a,b){ return String(a.nome||a.login).localeCompare(String(b.nome||b.login)); });
+    return sec('Quem confirma as vendas (Financeiro)','fa-user-shield','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px">'+
+      '<div style="font-size:12.5px;color:'+Co.mut+';margin-bottom:12px">Marque, entre os administradores, quem pode confirmar, rejeitar e estornar vendas e marcar o cashback como pago. O Master sempre pode. Quem tem o departamento <b>Financeiro</b> no cadastro também entra automaticamente.</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px;max-height:260px;overflow:auto">'+us.map(function(u){ var L=loginU(u);
+        return '<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:10px;background:'+Co.card2+';border:1px solid '+Co.line+';font-size:13px;color:#fff;cursor:pointer"><input type="checkbox" class="phFinChk" value="'+esc(L)+'"'+(lista.indexOf(L)>=0?' checked':'')+'> '+esc(u.nome||u.login)+'</label>'; }).join('')+'</div>'+
+      '<div style="margin-top:12px">'+btn('<i class="fas fa-floppy-disk"></i> Salvar acessos do Financeiro','__gwaPHFinAcessos()')+'</div></div>');
+  }
+  window.__gwaPHFinAcessos=async function(){
+    if(!ehMaster()) return;
+    var sel=Array.prototype.map.call(document.querySelectorAll('.phFinChk:checked'),function(c){ return c.value; });
+    var o=Object.assign({},CFG_PADRAO,_cfg||{},{financeiro:sel,atualizadoPor:meu()});
+    hist(o,'Financeiro: '+(sel.map(nomeDe).join(', ')||'ninguém')); o.hist=o.hist.slice(-50);
+    if(await put('ph_config',o)){ usaCfg(o); desenharConf(); toastOk('Acessos salvos.'); } else alert('Não consegui salvar.');
+  };
+  async function acaoFin(id,f){
+    if(!ehFinanceiro()){ alert('Só o Financeiro (ou o Master) confirma as vendas.'); return; }
+    if(_travas[id]) return; _travas[id]=1;
+    try{
+      await carregar(true);                                   /* le de novo: evita confirmar duas vezes */
+      var v=window.gwaPHRaw(id); if(!v){ alert('Venda não encontrada (pode ter sido excluída ou mudado de produto).'); return; }
+      var atual=await get('ph_fin',id); if(atual) _fin[id]=atual;
+      var base=Object.assign({id:id,venda:id,consultor:v.consultor,mesRef:mesRef(v),status:'aguardando',hist:[]},_fin[id]||{});
+      var o=f(base,v); if(!o) return;
+      if(await put('ph_fin',o)){ _fin[id]=o; } else alert('Não consegui salvar.');
+    } finally { delete _travas[id]; redesenhaTudo(); }
+  }
+  window.__gwaPHFinConfirmar=function(id){ return acaoFin(id,function(f,v){
+    if(f.status!=='aguardando'){ alert('Esta venda já foi analisada ('+ST[f.status][0].toLowerCase()+'). Nada foi alterado.'); return null; }
+    var rp=repasseDe(v);
+    if(rp==null){
+      var x=prompt('O consultor não informou o repasse desta venda.\nValor total: '+money(totalDe(v))+'\n\nInforme o valor de repasse à autoescola (0 se não houver):','');
+      if(x==null) return null; x=num(x);
+      if(isNaN(x)||x<0||x>totalDe(v)){ alert('Repasse inválido: não pode ser negativo nem maior que o valor total.'); return null; }
+      f.repasse=r2(x); hist(f,'Financeiro informou o repasse: '+money(x)); rp=f.repasse;
+    }
+    var liq=r2(totalDe(v)-taxaDe(v)-rp), cb=noPeriodo(v)?valorRegra(v):0;
+    if(!confirm('Confirmar o recebimento da venda de '+v.cliente+'?\n\nTotal '+money(totalDe(v))+(taxaDe(v)>0?(' · taxa '+money(taxaDe(v))):'')+' · repasse '+money(rp)+' · líquido GWA '+money(liq)+'\n\nO líquido entra no faturamento de '+(v.consultorNome||nomeDe(v.consultor))+(cb?(' e gera '+money(cb)+' de cashback ('+mesNome(mesRef(v))+').'):'. Venda anterior a '+br(_cfg.inicio)+': não gera cashback.'))) return null;
+    var now=hist(f,'Financeiro confirmou o recebimento (líquido '+money(liq)+(cb?', cashback '+money(cb):'')+')');
+    f.status='confirmada'; f.confirmadaEm=now; f.confirmadaPor=meu(); f.confirmadaPorNome=meuNome(); f.cashbackValor=cb; f.liquidoConfirmado=liq; f.pendencia=null; f.mesRef=mesRef(v);
+    return f; }); };
+  window.__gwaPHFinRejeitar=function(id){ return acaoFin(id,function(f){
+    if(f.status!=='aguardando'){ alert('Esta venda já foi analisada. Nada foi alterado.'); return null; }
+    var m=prompt('Motivo da rejeição (o consultor vai ver e poderá corrigir a venda):'); if(m==null) return null; m=String(m).trim();
+    if(!m){ alert('O motivo é obrigatório para rejeitar.'); return null; }
+    var now=hist(f,'Financeiro rejeitou: '+m);
+    f.status='rejeitada'; f.rejeitadaEm=now; f.rejeitadaPor=meu(); f.rejeitadaPorNome=meuNome(); f.motivoRejeicao=m; f.pendencia=null; return f; }); };
+  window.__gwaPHFinPendente=function(id){ return acaoFin(id,function(f){
+    if(f.status!=='aguardando'){ alert('Esta venda já foi analisada. Nada foi alterado.'); return null; }
+    var m=prompt('Observação (opcional), ex.: aguardando compensação do boleto:',''); if(m==null) return null; m=String(m).trim();
+    var now=hist(f,'Financeiro manteve pendente'+(m?(': '+m):''));
+    f.pendencia={em:now,por:meu(),porNome:meuNome(),obs:m}; return f; }); };
+  window.__gwaPHFinEstornar=function(id){ return acaoFin(id,function(f,v){
+    if(f.status!=='confirmada'){ alert('Só vendas confirmadas podem ser estornadas.'); return null; }
+    var p=pedidoDaVenda(id);
+    if(p && p.status==='solicitada'){ alert('O cashback desta venda está numa solicitação aguardando pagamento ('+mesNome(p.mesRef)+'). Rejeite essa solicitação em "Cashback 1ª Hab." antes de estornar a venda.'); return null; }
+    var m=prompt('Motivo do estorno de '+v.cliente+' (o líquido sai do faturamento'+(p&&p.status==='paga'?'; o cashback já pago vira desconto na próxima solicitação do consultor':'; o cashback é cancelado')+'):'); if(m==null) return null; m=String(m).trim();
+    if(!m){ alert('O motivo é obrigatório para estornar.'); return null; }
+    var now=hist(f,'Financeiro estornou: '+m+(p&&p.status==='paga'?(' (cashback '+money(valorCashback(v))+' a descontar)'):''));
+    f.status='estornada'; f.estornadaEm=now; f.estornadaPor=meu(); f.estornadaPorNome=meuNome(); f.motivoEstorno=m; return f; }); };
+
+  /* ================= CASHBACK (aba em Premiacoes) — fechamento mensal ================= */
+  var _cbAlvo=null, _cbMes='';
+  window.gwaPHRenderCashback=function(body){
+    _cbAlvo=body; body.innerHTML=carregandoHtml('cb');
+    carregar(true).then(function(){ if(_cbAlvo===body) desenharCb(); autoAtualiza(); });
+  };
+  window.__gwaPHCbMes=function(m){ _cbMes=m; desenharCb(); };
+  function desenharCb(){
+    if(!ativo(_cbAlvo,'cb')){ _cbAlvo=null; return; }
+    if(!podeCashback()){ _cbAlvo.innerHTML=semAcesso('O cashback da Primeira Habilitação é do departamento de Negociação.'); return; }
+    var h; try{ h=verTudo()?viewCbAdmin():viewCbConsultor(); }catch(e){ h='<div style="color:'+Co.red+';padding:20px">Erro: '+esc(e&&e.message||e)+'</div>'; }
+    _cbAlvo.innerHTML='<div data-phv="cb" style="max-width:1240px;margin:0 auto">'+cabecalho('fa-hand-holding-dollar','Premiações · Primeira Habilitação','Cashback — fechamento mensal',
+      money(valorRegra({dataVenda:hoje()}))+' por venda confirmada pelo Financeiro (a partir de '+br((_cfg||CFG_PADRAO).inicio)+'). O valor fica no <b style="color:#fff">mês da venda</b> e só pode ser solicitado pela administração a partir do dia 1 do mês seguinte.')+h+'</div>';
+  }
+  function mesesComVenda(){ var m={}; _raw.forEach(function(v){ var x=mesRef(v); if(x) m[x]=1; }); _pedidos.forEach(function(p){ if(p.mesRef) m[p.mesRef]=1; }); m[mesAtual()]=1; return Object.keys(m).sort().reverse(); }
+  /* situacao de um consultor num mes */
+  function fechamento(L,m){
+    L=String(L||'').toUpperCase();
+    var vs=_raw.filter(function(v){ return String(v.consultor||'').toUpperCase()===L && mesRef(v)===m; });
+    var eleg=vs.filter(elegivel), disp=eleg.filter(function(v){ return !pedidoDaVenda(v.id); });
+    var ps=_pedidos.filter(function(p){ return p.mesRef===m && String(p.consultor||'').toUpperCase()===L; });
+    var ativos=ps.filter(function(p){ return p.status!=='rejeitada'; });
+    function soma(a,f){ return r2(a.reduce(function(x,y){ return x+(Number(f(y))||0); },0)); }
+    var debitos=_raw.filter(function(v){ return String(v.consultor||'').toUpperCase()===L && ehDebito(v) && !pedidoDoDebito(v.id); });
+    var bruto=soma(disp,valorCashback), desc=soma(debitos,valorCashback);
+    var st;
+    if(!mesFechado(m)) st=['Acumulando · libera em '+br(liberaEm(m)),Co.mut];
+    else if(disp.length && !(r2(bruto-desc)>0)) st=['Coberto pelo desconto de estorno',Co.roxo];
+    else if(disp.length && !ativos.length) st=['Pronto para solicitar',Co.green];
+    else if(disp.length) st=['Complemento a solicitar',Co.green];
+    else if(ativos.some(function(p){ return p.status==='solicitada'; })) st=['Solicitado · aguardando pagamento',Co.amarelo];
+    else if(ativos.length) st=['Pago',Co.blue];
+    else st=[eleg.length?'—':'Sem cashback',Co.mut];
+    var ult=ps.slice().sort(function(a,b){ return (b.solicitadoEm||0)-(a.solicitadoEm||0); });
+    return { L:L, vendas:vs, conf:vs.filter(function(v){ return statusDe(v)==='confirmada'; }).length, agu:vs.filter(function(v){ return statusDe(v)==='aguardando'; }).length,
+      eleg:eleg, acumulado:soma(eleg,valorCashback), disp:disp, debitos:debitos, bruto:bruto, desconto:desc, aSolicitar:r2(bruto-desc),
+      solicitado:soma(ativos.filter(function(p){ return p.status==='solicitada'; }),function(p){ return p.valor; }),
+      pago:soma(ativos.filter(function(p){ return p.status==='paga'; }),function(p){ return p.valor; }),
+      dataSol:ult[0]?ult[0].solicitadoEm:0, dataPag:(ult.filter(function(p){ return p.pagoEm; })[0]||{}).pagoEm||0, pedidos:ps, status:st };
+  }
+  function seletorMes(){
+    var ms=mesesComVenda(); if(!_cbMes||ms.indexOf(_cbMes)<0) _cbMes=ms.filter(function(m){ return mesFechado(m); })[0]||ms[0];
+    return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px"><label style="font-size:12px;color:'+Co.mut+'">Mês de referência</label>'+
+      '<select onchange="__gwaPHCbMes(this.value)" style="padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;font-size:13.5px;font-weight:700">'+ms.map(function(m){ return '<option value="'+m+'"'+(m===_cbMes?' selected':'')+'>'+mesNome(m)+(mesFechado(m)?'':' (em andamento)')+'</option>'; }).join('')+'</select>'+
+      (mesFechado(_cbMes)?chip('Mês fechado · solicitação liberada',Co.green,'fa-lock-open'):chip('Mês em andamento · solicitação a partir de '+br(liberaEm(_cbMes)),Co.amarelo,'fa-lock'))+'</div>';
+  }
+  function viewCbAdmin(){
+    var podeSol=gestorNeg(), m=null, h=seletorMes(); m=_cbMes;
+    var Ls={}; consultoresNeg().forEach(function(u){ Ls[loginU(u)]=1; }); _raw.forEach(function(v){ if(mesRef(v)===m) Ls[String(v.consultor||'').toUpperCase()]=1; }); _pedidos.forEach(function(p){ if(p.mesRef===m) Ls[String(p.consultor||'').toUpperCase()]=1; });
+    var F=Object.keys(Ls).map(function(L){ return fechamento(L,m); }).filter(function(x){ return x.vendas.length||x.pedidos.length; }).sort(function(a,b){ return b.acumulado-a.acumulado||nomeDe(a.L).localeCompare(nomeDe(b.L)); });
+    function soma(f){ return r2(F.reduce(function(a,x){ return a+(Number(f(x))||0); },0)); }
+    var prontos=F.filter(function(x){ return x.disp.length && x.aSolicitar>0; }), fechado=mesFechado(m);
+    h+=cards([
+      card('Vendas confirmadas',soma(function(x){ return x.conf; }),mesNome(m),'#fff','fa-id-card'),
+      card('Cashback acumulado',money(soma(function(x){ return x.acumulado; })),'vendas confirmadas do mês',Co.orangeL,'fa-coins'),
+      card('A solicitar',money(soma(function(x){ return fechado&&x.aSolicitar>0?x.aSolicitar:0; })),fechado?(prontos.length+' consultor(es)'):'libera em '+br(liberaEm(m)),Co.green,'fa-wallet'),
+      card('Solicitado',money(soma(function(x){ return x.solicitado; })),'aguardando pagamento',Co.amarelo,'fa-hourglass-half'),
+      card('Pago',money(soma(function(x){ return x.pago; })),'já recebido',Co.blue,'fa-circle-check')]);
+    var aguMes=soma(function(x){ return x.agu; });
+    if(aguMes) h+=nota('<b style="color:'+Co.amarelo+'">'+aguMes+' venda(s) deste mês ainda aguardam o Financeiro.</b> Quando forem confirmadas, o cashback entra neste mesmo mês e aparece como complemento a solicitar.'+(ehFinanceiro()?' '+btn('Ir para Confirmar vendas','__gwaPremView(&#39;phconf&#39;)','aviso'):''),Co.amarelo);
+    var acaoTodos=podeSol?btn('<i class="fas fa-paper-plane"></i> Solicitar pagamento de todos os elegíveis'+(fechado&&prontos.length?(' ('+money(soma(function(x){ return x.disp.length&&x.aSolicitar>0?x.aSolicitar:0; }))+')'):''),'__gwaPHSolicitarTodos()','',fechado?'':'Liberado a partir de '+br(liberaEm(m)),!fechado||!prontos.length):'';
+    var linhas=F.map(function(x){
+      var ac='';
+      if(podeSol){ var ok=fechado&&x.disp.length&&x.aSolicitar>0;
+        ac=btn('<i class="fas fa-paper-plane"></i> Solicitar '+(x.aSolicitar>0?money(x.aSolicitar):''),'__gwaPHSolicitar('+q(x.L)+')','',!fechado?('Liberado a partir de '+br(liberaEm(m))):(x.aSolicitar<=0&&x.disp.length?'Desconto de estorno maior que o valor do mês':''),!ok); }
+      return tr([td('<b style="color:#fff">'+esc(nomeDe(x.L))+'</b>','white-space:nowrap'),td(x.conf+(x.agu?' <span style="color:'+Co.amarelo+';font-size:11px">(+'+x.agu+' aguardando)</span>':''),'white-space:nowrap'),
+        td(money(x.acumulado),'white-space:nowrap;color:'+Co.orangeL+';font-weight:800'),td(mesNome(m),'white-space:nowrap'),
+        td('<span style="color:'+x.status[1]+';font-weight:800">'+x.status[0]+'</span>'+(x.desconto?'<div style="font-size:11px;color:'+Co.roxo+'">− '+money(x.desconto)+' de estorno a descontar</div>':''),'min-width:170px'),
+        td(money(x.solicitado),'white-space:nowrap;color:'+Co.amarelo),td(money(x.pago),'white-space:nowrap;color:'+Co.blue),
+        td(soData(x.dataSol),'white-space:nowrap'),td(soData(x.dataPag),'white-space:nowrap'),td(ac,'white-space:nowrap')]); }).join('');
+    h+=sec('Consolidado por consultor','fa-users',F.length?tabela(['Consultor','Confirmadas no mês','Cashback acumulado','Mês de referência','Status da premiação','Valor solicitado','Valor pago','Solicitado em','Pago em',podeSol?'Ação':''],linhas,1180):vazio('Nenhuma venda de Primeira Habilitação em '+mesNome(m)+'.'),acaoTodos);
+    if(!podeSol) h+='<div style="font-size:12px;color:'+Co.mut+';margin-top:8px">A solicitação é feita pelo ADM da Negociação ou pelo Master.</div>';
+    var ps=_pedidos.filter(function(p){ return p.mesRef===m; }).sort(function(a,b){ var o={solicitada:0,paga:1,rejeitada:2}; return (o[a.status]-o[b.status])||((b.solicitadoEm||0)-(a.solicitadoEm||0)); });
+    h+=sec('Solicitações e pagamentos de '+mesNome(m),'fa-list-check',ps.length?tabela(['Solicitado em','Consultor','Vendas','Valor','Situação','Ações'],ps.map(function(p){ return linhaPedido(p,true); }).join(''),900):vazio('Nenhuma solicitação para este mês.'));
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:0 18px"><div>'+sec('Ranking do mês (vendas confirmadas)','fa-ranking-star',rankingHtml(_raw.filter(function(v){ return mesRef(v)===m; })))+'</div><div>'+regrasHtml()+'</div></div>';
+    return h;
+  }
+  function linhaPedido(p,admin){
+    var acoes='';
+    if(admin && ehFinanceiro() && p.status==='solicitada') acoes=btn('<i class="fas fa-money-bill-wave"></i> Marcar como pago','__gwaPHPedPagar('+q(p.id)+')','ok')+' '+btn('<i class="fas fa-xmark"></i> Rejeitar','__gwaPHPedRejeitar('+q(p.id)+')','perigo');
+    var det='<div>Solicitado por '+esc(p.solicitadoPorNome||p.solicitadoPor||'')+'</div>';
+    if(p.status==='rejeitada') det+='<div>Rejeitado por '+esc(p.rejeitadoPorNome||'')+' em '+quando(p.rejeitadoEm)+(p.justificativa?(' — “'+esc(p.justificativa)+'”'):'')+'</div>';
+    if(p.pagoEm) det+='<div>Pago em '+quando(p.pagoEm)+' por '+esc(p.pagoPorNome||p.pagoPor)+(p.obsPagamento?(' — '+esc(p.obsPagamento)):'')+'</div>';
+    if(p.desconto) det+='<div>Desconto de estorno: '+money(p.desconto)+'</div>';
+    return tr([td(quando(p.solicitadoEm),'white-space:nowrap')].concat(admin?[td('<b style="color:#fff">'+esc(p.consultorNome||nomeDe(p.consultor))+'</b>','white-space:nowrap')]:[td(mesNome(p.mesRef),'white-space:nowrap')])
+      .concat([td(p.qtd||(p.vendaIds||[]).length,'text-align:center'),td('<b style="color:#fff">'+money(p.valor)+'</b>','white-space:nowrap'),
+      td(chipPedido(p)+'<div style="font-size:11px;color:'+Co.mut+';margin-top:6px;line-height:1.5">'+det+'</div>'),
+      td(acoes+' '+btn('<i class="fas fa-list"></i>','__gwaPHPedVer('+q(p.id)+')','ghost','Vendas e histórico'),'white-space:nowrap')]));
+  }
+  function viewCbConsultor(){
+    var L=meu(), ms=mesesComVenda().filter(function(m){ return _raw.some(function(v){ return String(v.consultor||'').toUpperCase()===L && mesRef(v)===m; })||_pedidos.some(function(p){ return p.mesRef===m && String(p.consultor||'').toUpperCase()===L; }); });
+    var F=ms.map(function(m){ return [m,fechamento(L,m)]; });
+    function soma(f){ return r2(F.reduce(function(a,x){ return a+(Number(f(x[1]))||0); },0)); }
+    var h=cards([
+      card('Vendas confirmadas',soma(function(x){ return x.eleg.length; }),'que geram cashback','#fff','fa-id-card'),
+      card('Cashback acumulado',money(soma(function(x){ return x.acumulado; })),'desde '+br((_cfg||CFG_PADRAO).inicio),Co.orangeL,'fa-coins'),
+      card('Solicitado',money(soma(function(x){ return x.solicitado; })),'aguardando pagamento',Co.amarelo,'fa-hourglass-half'),
+      card('Pago',money(soma(function(x){ return x.pago; })),'recebido',Co.green,'fa-circle-check')])+
+      nota('<i class="fas fa-circle-info"></i> Aqui você <b>acompanha</b> o seu cashback. A solicitação do pagamento é feita pela <b>administração da Negociação</b> no fechamento de cada mês (a partir do dia 1 do mês seguinte).',Co.blue);
+    h+=sec('Meu cashback por mês','fa-calendar-check',F.length?tabela(['Mês de referência','Vendas confirmadas','Cashback acumulado','Status','Valor solicitado','Valor pago','Solicitado em','Pago em'],F.map(function(a){ var x=a[1];
+      return tr([td('<b style="color:#fff">'+mesNome(a[0])+'</b>','white-space:nowrap'),td(x.conf+(x.agu?' <span style="color:'+Co.amarelo+';font-size:11px">(+'+x.agu+' aguardando)</span>':''),'white-space:nowrap'),td(money(x.acumulado),'color:'+Co.orangeL+';font-weight:800;white-space:nowrap'),
+        td('<span style="color:'+x.status[1]+';font-weight:800">'+x.status[0].replace('Pronto para solicitar','Aguardando a solicitação da administração').replace('Complemento a solicitar','Complemento aguardando a administração')+'</span>'),td(money(x.solicitado),'white-space:nowrap'),td(money(x.pago),'white-space:nowrap'),td(soData(x.dataSol)),td(soData(x.dataPag))]); }).join(''),900):vazio('Você ainda não tem vendas de Primeira Habilitação.'));
+    var minhasV=_raw.filter(function(v){ return String(v.consultor||'').toUpperCase()===L; }).sort(function(a,b){ return String(b.dataVenda).localeCompare(String(a.dataVenda)); });
+    h+=sec('Minhas vendas de Primeira Habilitação','fa-list',minhasV.length?tabela(['Data','Cliente','Total','Repasse','Líquido GWA','Situação','Cashback'],minhasV.map(function(v){ return linhaVenda(v,false,false); }).join(''),860):vazio('Nenhuma venda ainda.'));
+    var ps=_pedidos.filter(function(p){ return String(p.consultor||'').toUpperCase()===L; }).sort(function(a,b){ return (b.solicitadoEm||0)-(a.solicitadoEm||0); });
+    h+=sec('Histórico de premiações','fa-clock-rotate-left',ps.length?tabela(['Solicitado em','Mês','Vendas','Valor','Situação',''],ps.map(function(p){ return linhaPedido(p,false); }).join(''),760):vazio('Nenhuma premiação solicitada ainda.'));
+    return h;
+  }
+  var _pedindo=false;
+  async function criarPedido(L,m){
+    var x=fechamento(L,m);
+    if(!x.disp.length || !(x.aSolicitar>0)) return {ok:false,motivo:'sem valor'};
+    var min=Number((_cfg||CFG_PADRAO).minimoResgate)||0; if(x.aSolicitar<min) return {ok:false,motivo:'abaixo do mínimo'};
+    var now=Date.now(), u=usuario(L);
+    var p={id:'cb_'+m+'_'+L+'_'+now.toString(36),mesRef:m,consultor:L,consultorNome:(u&&(u.nome||u.login))||L,vendaIds:x.disp.map(function(v){ return v.id; }),debitoIds:x.debitos.map(function(v){ return v.id; }),
+      qtd:x.disp.length,bruto:x.bruto,desconto:x.desconto,valor:x.aSolicitar,status:'solicitada',solicitadoEm:now,solicitadoPor:meu(),solicitadoPorNome:meuNome(),hist:[]};
+    hist(p,'solicitou o pagamento de '+money(p.valor)+' ('+mesNome(m)+', '+p.qtd+' venda(s)'+(p.desconto?(', menos '+money(p.desconto)+' de estorno'):'')+')');
+    if(!(await put('ph_cashback',p))) return {ok:false,motivo:'falha'};
+    _pedidos.push(p); return {ok:true,p:p};
+  }
+  function podeSolicitarAgora(m){
+    if(!gestorNeg()){ alert('Só o ADM da Negociação ou o Master podem solicitar o pagamento do cashback.'); return false; }
+    if(!mesFechado(m)){ alert('O cashback de '+mesNome(m)+' só pode ser solicitado a partir de '+br(liberaEm(m))+'.'); return false; }
+    return true;
+  }
+  window.__gwaPHSolicitar=async function(L){
+    var m=_cbMes; if(_pedindo || !podeSolicitarAgora(m)) return;
+    _pedindo=true;
+    try{
+      await carregar(true);                                   /* dados frescos: nao solicita duas vezes */
+      var x=fechamento(L,m);
+      if(!x.disp.length){ alert('Não há cashback a solicitar para '+nomeDe(L)+' em '+mesNome(m)+' (já foi solicitado ou não há venda confirmada).'); return; }
+      if(!(x.aSolicitar>0)){ alert('O desconto de estorno ('+money(x.desconto)+') é maior que o valor do mês. Nada a solicitar agora.'); return; }
+      if(!confirm('Solicitar o pagamento de '+money(x.aSolicitar)+' para '+nomeDe(L)+'?\n\n'+mesNome(m)+' · '+x.disp.length+' venda(s) confirmada(s)'+(x.desconto?(' · menos '+money(x.desconto)+' de estorno'):''))) return;
+      var r=await criarPedido(L,m);
+      if(r.ok) toastOk('Solicitação registrada e enviada ao Financeiro.'); else alert('Não consegui registrar ('+r.motivo+').');
+    } finally { _pedindo=false; desenharCb(); }
+  };
+  window.__gwaPHSolicitarTodos=async function(){
+    var m=_cbMes; if(_pedindo || !podeSolicitarAgora(m)) return;
+    _pedindo=true;
+    try{
+      await carregar(true);
+      var Ls={}; _raw.forEach(function(v){ if(mesRef(v)===m) Ls[String(v.consultor||'').toUpperCase()]=1; });
+      var F=Object.keys(Ls).map(function(L){ return fechamento(L,m); }).filter(function(x){ return x.disp.length && x.aSolicitar>0; });
+      if(!F.length){ alert('Nenhum consultor com cashback a solicitar em '+mesNome(m)+'.'); return; }
+      var tot=r2(F.reduce(function(a,x){ return a+x.aSolicitar; },0));
+      if(!confirm('Solicitar o pagamento do cashback de '+mesNome(m)+' para '+F.length+' consultor(es), total '+money(tot)+'?\n\n'+F.map(function(x){ return '• '+nomeDe(x.L)+': '+money(x.aSolicitar); }).join('\n'))) return;
+      var ok=0; for(var i=0;i<F.length;i++){ var r=await criarPedido(F[i].L,m); if(r.ok) ok++; }
+      toastOk(ok+' solicitação(ões) registrada(s).'); if(ok<F.length) alert((F.length-ok)+' solicitação(ões) não foram registradas. Tente de novo.');
+    } finally { _pedindo=false; desenharCb(); }
+  };
+  async function mudarPedido(id,f){
+    if(!ehFinanceiro()){ alert('Só o Financeiro (ou o Master) registra o pagamento.'); return; }
+    if(_travas[id]) return; _travas[id]=1;
+    try{
+      await carregar(true);
+      var p=_pedidos.filter(function(x){ return x.id===id; })[0]; if(!p) return;
+      var o=f(Object.assign({},p)); if(!o) return;
+      if(await put('ph_cashback',o)){ _pedidos=troca(_pedidos,o); } else alert('Não consegui salvar.');
+    } finally { delete _travas[id]; desenharCb(); }
+  }
+  window.__gwaPHPedRejeitar=function(id){ return mudarPedido(id,function(p){
+    if(p.status!=='solicitada'){ alert('Só solicitações ainda não pagas podem ser rejeitadas.'); return null; }
+    var j=prompt('Justificativa da rejeição (as vendas voltam a ficar disponíveis para nova solicitação):'); if(j==null) return null; j=String(j).trim();
+    if(!j){ alert('A justificativa é obrigatória para rejeitar.'); return null; }
+    var now=hist(p,'rejeitou: '+j); p.status='rejeitada'; p.rejeitadoEm=now; p.rejeitadoPor=meu(); p.rejeitadoPorNome=meuNome(); p.justificativa=j; return p; }); };
+  window.__gwaPHPedPagar=function(id){ return mudarPedido(id,function(p){
+    if(p.status!=='solicitada'){ alert(p.status==='paga'?'Esta solicitação já está paga.':'Esta solicitação foi rejeitada.'); return null; }
+    var mudou=(p.vendaIds||[]).map(function(i){ return window.gwaPHRaw(i); }).filter(function(v){ return !v||statusDe(v)!=='confirmada'; });
+    if(mudou.length){ alert('Há venda nesta solicitação que não está mais confirmada (estornada ou excluída). Rejeite a solicitação; a administração solicita de novo com o valor certo.'); return null; }
+    var obs=prompt('Pagamento de '+money(p.valor)+' para '+(p.consultorNome||p.consultor)+' ('+mesNome(p.mesRef)+').\nObservação (opcional, ex.: PIX, folha de dezembro):',''); if(obs==null) return null;
+    obs=String(obs).trim(); var now=hist(p,'marcou como pago'+(obs?(' ('+obs+')'):''));
+    p.status='paga'; p.pagoEm=now; p.pagoPor=meu(); p.pagoPorNome=meuNome(); p.obsPagamento=obs; return p; }); };
+  window.__gwaPHPedVer=function(id){
+    var p=_pedidos.filter(function(x){ return x.id===id; })[0]; if(!p) return;
+    var vs=(p.vendaIds||[]).map(window.gwaPHRaw).filter(Boolean), ds=(p.debitoIds||[]).map(window.gwaPHRaw).filter(Boolean);
+    janela('Cashback de '+esc(p.consultorNome||p.consultor)+' — '+mesNome(p.mesRef)+' — '+money(p.valor),
+      '<div style="margin-bottom:10px">'+chipPedido(p)+'</div>'+
+      tabela(['Data','Cliente','Situação da venda','Valor'],vs.map(function(v){ return tr([td(br(v.dataVenda)),td(esc(v.cliente)),td(chipVenda(v)),td('+ '+money(valorCashback(v)),'color:'+Co.green)]); }).join('')+
+        ds.map(function(v){ return tr([td(br(v.dataVenda)),td(esc(v.cliente)),td(chipVenda(v)),td('− '+money(valorCashback(v)),'color:'+Co.roxo)]); }).join(''),420)+
+      '<h4 style="color:#fff;margin:16px 0 4px">Histórico</h4>'+histHtml(p.hist));
+  };
+  function regrasHtml(){
+    var c=_cfg||CFG_PADRAO, sS='width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;font-size:13.5px', ed=ehMaster();
+    function lin(t,s){ return '<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid '+Co.line+';font-size:12.5px"><i class="fas fa-lock" style="color:'+Co.mut+';width:14px"></i><span style="flex:1;color:'+Co.sub+'">'+t+'</span><span style="color:'+Co.mut+'">'+s+'</span></div>'; }
+    return sec('Regras do cashback','fa-sliders','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px">'+
+      '<div style="display:flex;gap:12px;flex-wrap:wrap">'+
+        '<div style="flex:1 1 130px"><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">Valor por venda confirmada</label><input id="phCfgValor" type="number" step="0.01" min="0" value="'+esc(c.valorPorVenda)+'" '+(ed?'':'disabled ')+'style="'+sS+'"></div>'+
+        '<div style="flex:1 1 150px"><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">Vale para vendas a partir de</label><input id="phCfgInicio" type="date" value="'+esc(c.inicio)+'" '+(ed?'':'disabled ')+'style="'+sS+'"></div>'+
+        '<div style="flex:1 1 130px"><label style="font-size:11.5px;color:'+Co.mut+';display:block;margin-bottom:4px">Mínimo por solicitação</label><input id="phCfgMin" type="number" step="0.01" min="0" value="'+esc(c.minimoResgate)+'" '+(ed?'':'disabled ')+'style="'+sS+'"></div></div>'+
+      (ed?'<div style="margin:12px 0 4px">'+btn('<i class="fas fa-floppy-disk"></i> Salvar regras','__gwaPHCfgSalvar()')+'</div>':'<div style="font-size:11.5px;color:'+Co.mut+';margin-top:10px">Só o Master altera as regras.</div>')+
+      '<div style="font-size:11.5px;color:'+Co.mut+';margin:12px 0 2px;line-height:1.5">O valor fica gravado na venda no momento da confirmação do Financeiro: mudar a regra não altera o que já foi confirmado. Solicitação só no fechamento do mês, pelo ADM da Negociação ou Master.</div>'+
+      '<div style="margin-top:12px;font-size:11px;color:'+Co.orangeL+';font-weight:800;letter-spacing:1px;text-transform:uppercase">Preparado para o futuro (desligado)</div>'+
+      lin('Valor diferente por serviço','—')+lin('Prêmio extra por quantidade de vendas','—')+lin('Metas individuais','—')+lin('Campanhas de incentivo por período','—')+
+      '</div>');
+  }
+  window.__gwaPHCfgSalvar=async function(){
+    if(!ehMaster()){ alert('Só o Master altera as regras.'); return; }
+    var v=num(document.getElementById('phCfgValor').value), i=document.getElementById('phCfgInicio').value, m=num(document.getElementById('phCfgMin').value); if(isNaN(m)) m=0;
+    if(!(v>=0)||!/^\d{4}-\d{2}-\d{2}$/.test(i)||m<0){ alert('Confira o valor, a data e o mínimo.'); return; }
+    var o=Object.assign({},CFG_PADRAO,_cfg||{},{valorPorVenda:r2(v),inicio:i,minimoResgate:r2(m),atualizadoPor:meu()});
+    hist(o,'regras: '+money(v)+' por venda, a partir de '+br(i)+', mínimo '+money(m)); o.hist=o.hist.slice(-50);
+    if(await put('ph_config',o)){ usaCfg(o); desenharCb(); toastOk('Regras salvas.'); } else alert('Não consegui salvar.');
+  };
+
+  /* celular: indicadores em duas colunas */
+  try{ var S=['#gwaPremBody','#gwaVendasBody'].map(function(id){ return id+' .gwaPhCards>.gwaPhCard'; }).join(','), css=document.createElement('style'); css.id='gwaPhCss';
+    css.textContent='@media(max-width:768px){.gwaPhCards{gap:8px!important}'+S+'{flex:1 1 calc(50% - 4px)!important;min-width:0!important;max-width:calc(50% - 4px)!important;padding:12px 13px!important}'+S.split(',').map(function(x){ return x+'>div:nth-child(3)'; }).join(',')+'{font-size:17px!important}'+S.split(',').map(function(x){ return x+'>div:nth-child(2)'; }).join(',')+'{font-size:10px!important;letter-spacing:.4px!important}}';
+    document.head.appendChild(css); }catch(e){}
+
+  /* so o necessario para as abas saberem se aparecem (sem baixar as vendas) */
+  async function cedo(){ if(!(cur()&&meu())){ setTimeout(cedo,2000); return; }
+    var r=await Promise.all([get('vendas_config','atual'),get('ph_config','atual')]); if(!_vc) _vc=r[0]||{}; if(!_cfg) usaCfg(r[1]); }
+  setTimeout(cedo,1500);
+  window.gwaPH={ carregar:carregar, fechamento:fechamento, indicadores:indicadores, statusDe:statusDe, _raw:function(){ return _raw; }, _fin:function(){ return _fin; }, _p:function(){ return _pedidos; } };
+})();
+</script>
 
 </body>
 </html>
