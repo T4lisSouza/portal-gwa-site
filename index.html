@@ -10410,7 +10410,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var p=Number(fx.pct)||0;
     return {valor:(Number(liquido)||0)*p/100, pct:p, minimo:Number(fx.valor)||0, faixa:fx, realizado:Number(base)||0}; }
   function premiacaoCard(){ try{ var L=loginU(curU()); var now=new Date();
-    var _minhas=(_vendas||[]).filter(function(v){ if(v.ph) return false; if(loginU({login:v.consultor})!==L) return false; var dt=vDate(v); return dt.getMonth()===now.getMonth()&&dt.getFullYear()===now.getFullYear(); });
+    var _minhas=(_vendas||[]).filter(function(v){ if(loginU({login:v.consultor})!==L) return false; var dt=vDate(v); return dt.getMonth()===now.getMonth()&&dt.getFullYear()===now.getFullYear(); });
     var fat=_minhas.reduce(function(s,v){return s+(Number(v.liquido)||0);},0);
     var realizado=_minhas.reduce(function(s,v){return s+(Number(v.valorPago)||0);},0);
     var tab=tabelaPrem(userDept(curU())).slice().sort(function(a,b){return a.min-b.min;}); if(!tab.length) return '';
@@ -10423,7 +10423,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     else if(atual){ htmlProx='<div style="margin-top:8px;color:'+Co.green+';font-weight:600">Você está na faixa máxima de premiação! 🏆</div>'; }
     return '<div style="background:linear-gradient(160deg,'+Co.card+','+Co.bgA+');border:1px solid '+Co.line+';border-left:6px solid '+Co.orange+';border-radius:16px;padding:18px;margin-bottom:18px;box-shadow:0 4px 18px rgba(0,0,0,.32)"><div style="display:flex;align-items:center;gap:14px"><div style="font-size:30px;color:'+Co.orange+'"><i class="fas fa-gift"></i></div><div><div style="color:#fff;font-weight:800;font-size:15px">Projeção de premiação — mês atual</div><div style="color:'+Co.sub+';font-size:13px;margin-top:4px">Realizado no mês: <b style="color:'+Co.orangeL+'">'+money(realizado)+'</b> <span style="color:'+Co.mut+'">(define a faixa)</span> &middot; Líquido: <b>'+money(fat)+'</b> <span style="color:'+Co.mut+'">(base do cálculo)</span></div><div style="font-size:13px;margin-top:4px">'+htmlAtual+'</div>'+htmlProx+'</div></div></div>'; }catch(e){ return ''; } }
   /* ---- MINHA EVOLUÇÃO (vendedor) ---- */
-  function serieVendedor(L,ano,semPh){ var fat=[],contr=[],tick=[]; for(var m=0;m<12;m++){ fat.push(0); contr.push(0); } (_vendas||[]).forEach(function(v){ if(semPh&&v.ph) return; if(loginU({login:v.consultor})!==L) return; var dt=vDate(v); if(dt.getFullYear()!==ano) return; var mi=dt.getMonth(); fat[mi]+=Number(v.liquido)||0; contr[mi]+=1; }); for(var m2=0;m2<12;m2++){ tick.push(contr[m2]?fat[m2]/contr[m2]:0); } return {fat:fat,contr:contr,tick:tick}; }
+  function serieVendedor(L,ano){ var fat=[],contr=[],tick=[]; for(var m=0;m<12;m++){ fat.push(0); contr.push(0); } (_vendas||[]).forEach(function(v){ if(loginU({login:v.consultor})!==L) return; var dt=vDate(v); if(dt.getFullYear()!==ano) return; var mi=dt.getMonth(); fat[mi]+=Number(v.liquido)||0; contr[mi]+=1; }); for(var m2=0;m2<12;m2++){ tick.push(contr[m2]?fat[m2]/contr[m2]:0); } return {fat:fat,contr:contr,tick:tick}; }
   function metaVendedor(L){ var mv=(_cfg&&_cfg.metasVendedor)||{}; return Number(mv[L])||0; }
   var _evAno=null,_evModo='diaria',_evMes=null;
   var MESES_ABREV=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -10440,8 +10440,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var cards='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px">'+stat('Faturamento ('+esc(labelP)+')',money(fatRef),null,Co.green)+stat('Contratos',contrRef)+stat('Ticket médio',money(tickRef))+extra+'</div>';
     var g1=sec(g1t,'fa-chart-column','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px"><div style="height:260px"><canvas id="evFat"></canvas></div></div>');
     var g2=sec(g2t,'fa-chart-line','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:16px"><div style="height:240px"><canvas id="evContr"></canvas></div></div>');
-    var deptEv=userDept(curU()); var sAtual=serieVendedor(L,now.getFullYear(),true); var fatMesAtual=sAtual.fat[now.getMonth()]; var duEv=diasUteisMes(); var mediaDU=duEv.trabalhados?fatMesAtual/duEv.trabalhados:0; var projMes=mediaDU*duEv.total; var pctProj=meta?projMes/meta*100:0; var premAtual=premiacaoDe(fatMesAtual,deptEv).valor; var premProj=premiacaoDe(projMes,deptEv).valor;
-    var destaqueProj='<div style="background:linear-gradient(135deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:14px;padding:16px 20px;margin-bottom:14px;display:flex;gap:22px;flex-wrap:wrap;align-items:center"><div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px">Faturamento que conta para a meta</div><div style="font-size:22px;font-weight:900;color:'+Co.green+'">'+money(fatMesAtual)+'</div></div><div style="font-size:22px;color:'+Co.mut+'">→</div><div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px">Projeção para o fechamento do mês</div><div style="font-size:22px;font-weight:900;color:'+Co.orangeL+'">'+money(projMes)+'</div></div></div>';
+    var deptEv=userDept(curU()); var sAtual=serieVendedor(L,now.getFullYear()); var fatMesAtual=sAtual.fat[now.getMonth()]; var duEv=diasUteisMes(); var mediaDU=duEv.trabalhados?fatMesAtual/duEv.trabalhados:0; var projMes=mediaDU*duEv.total; var pctProj=meta?projMes/meta*100:0; var premAtual=premiacaoDe(fatMesAtual,deptEv).valor; var premProj=premiacaoDe(projMes,deptEv).valor;
+    var destaqueProj='<div style="background:linear-gradient(135deg,#1c1c1c,#0d0d0d);border:1px solid '+Co.orangeD+';border-radius:14px;padding:16px 20px;margin-bottom:14px;display:flex;gap:22px;flex-wrap:wrap;align-items:center"><div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px">Faturamento atual</div><div style="font-size:22px;font-weight:900;color:'+Co.green+'">'+money(fatMesAtual)+'</div></div><div style="font-size:22px;color:'+Co.mut+'">→</div><div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px">Projeção para o fechamento do mês</div><div style="font-size:22px;font-weight:900;color:'+Co.orangeL+'">'+money(projMes)+'</div></div></div>';
     var projSec=sec('Projeção do mês','fa-chart-line','<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px">'+destaqueProj+'<div style="display:flex;gap:14px;flex-wrap:wrap">'+stat('Faturamento projetado (mês)',money(projMes),'ritmo de '+duEv.trabalhados+'/'+duEv.total+' dias úteis',Co.orangeL)+stat('% da meta projetada',meta?pct(pctProj):'—',meta?(pctProj>=100?'no ritmo de bater ✔':'abaixo do necessário'):'sem meta definida',pctProj>=100?Co.green:Co.orangeL)+stat('Premiação atual (mês)',premAtual?money(premAtual):'—',null,premAtual?Co.orangeL:Co.mut)+stat('Premiação projetada',premProj?money(premProj):'—','se mantiver o ritmo',premProj?Co.green:Co.mut)+'</div><div style="font-size:12px;color:'+Co.mut+';margin-top:8px">Projeção baseada na sua média por dia útil trabalhado × dias úteis do mês. A premiação usa a tabela do seu departamento.</div></div>');
     return head+metaBox+projSec+cards+g1+g2; }
   window.__gwaVendasEvAno=function(a){ _evAno=Number(a); render(); };
@@ -10457,7 +10457,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   }catch(e){} }
 
   /* ---- ANÁLISE PARA BATER A META (admin dashboard) ---- */
-  function analiseMetaMes(deptList){ try{ var metaMes=deptList.reduce(function(s,d){return s+(metaDe(d).mes||0);},0); var arrMes=semPH(aplicaFiltroMes(deptList)); var real=arrMes.reduce(function(s,v){return s+(Number(v.liquido)||0);},0); var falta=Math.max(0,metaMes-real); var du=diasUteisMes(); var restantes=du.restantes||0; var precisaDia=restantes?falta/restantes:falta; var pctM=metaMes?real/metaMes*100:0;
+  function analiseMetaMes(deptList){ try{ var metaMes=deptList.reduce(function(s,d){return s+(metaDe(d).mes||0);},0); var arrMes=aplicaFiltroMes(deptList); var real=arrMes.reduce(function(s,v){return s+(Number(v.liquido)||0);},0); var falta=Math.max(0,metaMes-real); var du=diasUteisMes(); var restantes=du.restantes||0; var precisaDia=restantes?falta/restantes:falta; var pctM=metaMes?real/metaMes*100:0;
     var media=du.trabalhados?real/du.trabalhados:0; var projFim=media*du.total; var noRitmo=projFim>=metaMes;
     var by={}; arrMes.forEach(function(v){ var k=loginU({login:v.consultor}); if(!by[k])by[k]={nome:v.consultorNome||v.consultor,liq:0,n:0}; by[k].liq+=Number(v.liquido)||0; by[k].n++; });
     var todos=deptList.reduce(function(a,d){return a.concat(vendedoresDept(d));},[]); var linhas=todos.map(function(u){ var k=loginU(u); var r=by[k]||{nome:u.nome||u.login,liq:0,n:0}; var mv=metaVendedor(k); return {nome:r.nome,liq:r.liq,n:r.n,meta:mv,pct:mv?r.liq/mv*100:null}; });
@@ -10654,7 +10654,6 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   /* ---- DASHBOARD ---- */
   window.gwaVendasCalc=function(p,f,n){ return calc(p,f,n); };
-  function semPH(arr){ return (arr||[]).filter(function(v){ return !v.ph; }); } /* 1a Habilitacao fica fora de metas e premiacoes */
   function agg(arr){ var liq=0,bru=0; arr.forEach(function(v){ liq+=Number(v.liquido)||0; bru+=Number(v.valorPago)||0; }); return {liq:liq,bru:bru,n:arr.length,tm:arr.length?liq/arr.length:0}; }
   function metaDe(dept){ return (_cfg&&_cfg.metas&&_cfg.metas[dept])||{dia:0,mes:0}; }
   function aplicaFiltroMes(deptList){ var now=new Date(); return (_vendas||[]).filter(function(v){ if(deptList.indexOf(v.dept||'comercial')<0) return false; var dt=vDate(v); return dt.getMonth()===now.getMonth()&&dt.getFullYear()===now.getFullYear(); }); }
@@ -10670,13 +10669,13 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return metaDia; }
   function viewDash(dept){ var deptList=dept?[dept]:['comercial','negociacao'];
     var metaDia=deptList.reduce(function(s,d){return s+(metaDe(d).dia||0);},0), metaMes=deptList.reduce(function(s,d){return s+(metaDe(d).mes||0);},0);
-    var lbl=periodoLabel(); var aPer=agg(vendasPeriodo(deptList)); var metaPer=metaPeriodo(deptList); var _aPerM=agg(semPH(vendasPeriodo(deptList))); var pctPer=metaPer?(_aPerM.liq/metaPer*100):0;
-    var aMes=agg(aplicaFiltroMes(deptList)); var _aMesM=agg(semPH(aplicaFiltroMes(deptList))); var pctMes=metaMes?(_aMesM.liq/metaMes*100):0;
+    var lbl=periodoLabel(); var aPer=agg(vendasPeriodo(deptList)); var metaPer=metaPeriodo(deptList); var pctPer=metaPer?(aPer.liq/metaPer*100):0;
+    var aMes=agg(aplicaFiltroMes(deptList)); var pctMes=metaMes?(aMes.liq/metaMes*100):0;
     var du=diasUteisMes(); var mediaDia=du.trabalhados?aMes.liq/du.trabalhados:0; var projMes=mediaDia*du.total;
     var ehHoje=(_filtro.periodo==='hoje');
-    var exp=(_cfg&&_cfg.expediente)||{ini:9,fim:18}; var now=new Date(); var horasTot=Math.max(1,exp.fim-exp.ini); var hAgora=now.getHours()+now.getMinutes()/60; var horasTransc=Math.min(horasTot,Math.max(0,hAgora-exp.ini)); var ritmo=horasTransc>0?_aPerM.liq/horasTransc:0; var projDia=ritmo*horasTot;
-    var heroRow=sec('Visão geral','fa-bullseye','<div style="display:flex;gap:16px;flex-wrap:wrap">'+hero('Faturamento — '+lbl,money(aPer.liq),metaPer,pctPer)+hero('Faturamento do mês',money(aMes.liq),metaMes,pctMes)+'</div>'+((aPer.liq-_aPerM.liq>0.004||aMes.liq-_aMesM.liq>0.004)?'<div style="margin-top:10px;font-size:12px;color:'+Co.mut+';background:rgba(224,120,32,.08);border:1px solid rgba(224,120,32,.3);border-radius:12px;padding:9px 13px"><i class="fas fa-id-card" style="color:'+Co.orangeL+'"></i> O faturamento inclui <b style="color:#fff">'+money(aPer.liq-_aPerM.liq)+'</b> (período) e <b style="color:#fff">'+money(aMes.liq-_aMesM.liq)+'</b> (mês) de Primeira Habilitação — líquido confirmado pelo Financeiro. Esse valor <b>não conta</b> no % da meta.</div>':''));
-    var gaugeCol='<div style="flex:1;min-width:280px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,.35)"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px"><i class="fas fa-gauge-high" style="color:'+Co.orange+'"></i> Velocímetro — meta ('+lbl+')</div><div style="position:relative;height:170px"><canvas id="gwaGauge"></canvas><div style="position:absolute;left:0;right:0;bottom:14px;text-align:center"><div style="font-size:30px;font-weight:800;color:#fff">'+pct(pctPer)+'</div><div style="font-size:11px;color:'+Co.mut+'">da meta</div></div></div><div style="text-align:center;color:'+Co.sub+';margin-top:8px;font-size:13px">Realizado <b style="color:'+Co.green+'">'+money(_aPerM.liq)+'</b>'+(aPer.liq-_aPerM.liq>0.004?' <span style=\x22font-size:11px;color:'+Co.mut+'\x22>(sem 1ª Hab.)</span>':'')+' · falta <b>'+money(Math.max(0,metaPer-_aPerM.liq))+'</b></div></div>';
+    var exp=(_cfg&&_cfg.expediente)||{ini:9,fim:18}; var now=new Date(); var horasTot=Math.max(1,exp.fim-exp.ini); var hAgora=now.getHours()+now.getMinutes()/60; var horasTransc=Math.min(horasTot,Math.max(0,hAgora-exp.ini)); var ritmo=horasTransc>0?aPer.liq/horasTransc:0; var projDia=ritmo*horasTot;
+    var heroRow=sec('Visão geral','fa-bullseye','<div style="display:flex;gap:16px;flex-wrap:wrap">'+hero('Faturamento — '+lbl,money(aPer.liq),metaPer,pctPer)+hero('Faturamento do mês',money(aMes.liq),metaMes,pctMes)+'</div>');
+    var gaugeCol='<div style="flex:1;min-width:280px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,.35)"><div style="font-size:12px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px"><i class="fas fa-gauge-high" style="color:'+Co.orange+'"></i> Velocímetro — meta ('+lbl+')</div><div style="position:relative;height:170px"><canvas id="gwaGauge"></canvas><div style="position:absolute;left:0;right:0;bottom:14px;text-align:center"><div style="font-size:30px;font-weight:800;color:#fff">'+pct(pctPer)+'</div><div style="font-size:11px;color:'+Co.mut+'">da meta</div></div></div><div style="text-align:center;color:'+Co.sub+';margin-top:8px;font-size:13px">Realizado <b style="color:'+Co.green+'">'+money(aPer.liq)+'</b> · falta <b>'+money(Math.max(0,metaPer-aPer.liq))+'</b></div></div>';
     var extra=ehHoje?(mini('Projeção do dia',money(projDia),Co.orangeL)+mini('Ritmo',projDia>=metaDia?'✔':'▲',projDia>=metaDia?Co.green:Co.burnt)):(mini('% da meta',pct(pctPer),pctPer>=100?Co.green:Co.orangeL)+mini('Meta do período',money(metaPer)));
     var resumo='<div style="flex:1;min-width:280px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:8px 6px;box-shadow:0 4px 20px rgba(0,0,0,.35);display:flex;flex-direction:column;justify-content:center"><div style="display:flex;flex-wrap:wrap">'+mini('Contratos',aPer.n)+mini('Ticket médio',money(aPer.tm))+'</div><div style="height:1px;background:'+Co.line+';margin:4px 12px"></div><div style="display:flex;flex-wrap:wrap">'+extra+'</div></div>';
     var perSec=sec(lbl,'fa-bolt','<div style="display:flex;gap:16px;flex-wrap:wrap">'+gaugeCol+resumo+'</div>');
@@ -10686,7 +10685,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return filtroBar()+heroRow+perSec+analiseMetaMes(deptList)+chartSec+mesSec+duSec;
   }
   var _gaugeChart=null, _lineChart=null;
-  function initGauge(dept){ try{ if(!window.Chart) return; var deptList=dept?[dept]:['comercial','negociacao']; var aPer=agg(vendasPeriodo(deptList)); var metaPer=metaPeriodo(deptList); var p=metaPer?Math.min(100,agg(semPH(vendasPeriodo(deptList))).liq/metaPer*100):0; var el=document.getElementById('gwaGauge'); if(!el) return; if(_gaugeChart){try{_gaugeChart.destroy();}catch(e){}} var col=p>=100?Co.green:(p>=70?Co.orangeL:Co.burnt); _gaugeChart=new Chart(el,{type:'doughnut',data:{datasets:[{data:[p,100-p],backgroundColor:[col,Co.card2],borderWidth:0,circumference:180,rotation:270}]},options:{cutout:'75%',plugins:{legend:{display:false},tooltip:{enabled:false}}}}); }catch(e){} }
+  function initGauge(dept){ try{ if(!window.Chart) return; var deptList=dept?[dept]:['comercial','negociacao']; var aPer=agg(vendasPeriodo(deptList)); var metaPer=metaPeriodo(deptList); var p=metaPer?Math.min(100,aPer.liq/metaPer*100):0; var el=document.getElementById('gwaGauge'); if(!el) return; if(_gaugeChart){try{_gaugeChart.destroy();}catch(e){}} var col=p>=100?Co.green:(p>=70?Co.orangeL:Co.burnt); _gaugeChart=new Chart(el,{type:'doughnut',data:{datasets:[{data:[p,100-p],backgroundColor:[col,Co.card2],borderWidth:0,circumference:180,rotation:270}]},options:{cutout:'75%',plugins:{legend:{display:false},tooltip:{enabled:false}}}}); }catch(e){} }
   function initLineChart(dept){ try{ if(!window.Chart) return; var deptList=dept?[dept]:['comercial','negociacao']; var metaDia=deptList.reduce(function(s,d){return s+(metaDe(d).dia||0);},0); var now=new Date(); var y=now.getFullYear(),m=now.getMonth(); var last=new Date(y,m+1,0).getDate(); var byDay={}; (_vendas||[]).forEach(function(v){ if(deptList.indexOf(v.dept||'comercial')<0) return; var dt=vDate(v); if(dt.getMonth()===m&&dt.getFullYear()===y){ var d=dt.getDate(); byDay[d]=(byDay[d]||0)+(Number(v.liquido)||0); } }); var days=Object.keys(byDay).map(Number).filter(function(d){return byDay[d]>0;}).sort(function(a,b){return a-b;}); var labels=[],fat=[],meta=[]; days.forEach(function(i){ labels.push('Dia '+i); fat.push(byDay[i]); var dd=new Date(y,m,i); meta.push(isUtil(dd)?metaDia:0); }); var el=document.getElementById('gwaLineChart'); if(!el) return; if(_lineChart){try{_lineChart.destroy();}catch(e){}} _lineChart=new Chart(el,{type:'line',data:{labels:labels,datasets:[{label:'Faturamento',data:fat,borderColor:Co.orange,backgroundColor:'rgba(224,120,32,.15)',fill:true,tension:.3,pointRadius:2,pointBackgroundColor:Co.orange},{label:'Meta diária',data:meta,borderColor:Co.green,borderDash:[6,4],fill:false,tension:0,pointRadius:0}]},options:{maintainAspectRatio:false,plugins:{legend:{labels:{color:Co.sub}}},scales:{x:{title:{display:true,text:'Dia do mês',color:Co.mut},ticks:{color:Co.mut},grid:{color:'rgba(255,255,255,.05)'}},y:{ticks:{color:Co.mut,callback:function(v){return 'R$ '+(Math.round(v/1000))+'k';}},grid:{color:'rgba(255,255,255,.05)'}}}}}); }catch(e){} }
 
   /* ---- QUARTIS (40/30/20/10 do faturamento do departamento) ---- */
@@ -10694,7 +10693,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function qColor(q){ return q===1?Co.green:(q===2?Co.orangeL:(q===3?Co.orangeD:Co.red)); }
   function qBadge(q){ return '<span style="display:inline-block;background:'+qColor(q)+';color:#111;font-weight:800;font-size:11px;border-radius:8px;padding:3px 9px">Q'+q+'</span>'; }
   function quartilInfo(deptList){ var arr=aplicaFiltroMes(deptList);
-    var by={}; arr.forEach(function(v){ var k=loginU({login:v.consultor}); if(!by[k])by[k]={login:k,nome:v.consultorNome||v.consultor,dept:(v.dept||'comercial'),n:0,bru:0,liq:0,bruM:0,liqM:0}; by[k].n++; by[k].bru+=Number(v.valorPago)||0; by[k].liq+=Number(v.liquido)||0; if(!v.ph){ by[k].bruM+=Number(v.valorPago)||0; by[k].liqM+=Number(v.liquido)||0; } });
+    var by={}; arr.forEach(function(v){ var k=loginU({login:v.consultor}); if(!by[k])by[k]={login:k,nome:v.consultorNome||v.consultor,dept:(v.dept||'comercial'),n:0,bru:0,liq:0}; by[k].n++; by[k].bru+=Number(v.valorPago)||0; by[k].liq+=Number(v.liquido)||0; });
     var rows=Object.keys(by).map(function(k){return by[k];}).sort(function(a,b){return b.liq-a.liq;});
     var total=rows.reduce(function(s,r){return s+r.liq;},0); var cum=0;
     rows.forEach(function(r){ var pb=total?cum/total*100:0; r.quartil=pb<40?1:(pb<70?2:(pb<90?3:4)); r.part=total?r.liq/total*100:0; cum+=r.liq; });
@@ -10705,7 +10704,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   function viewRanking(dept){ var deptList=dept?[dept]:['comercial','negociacao']; var info=quartilInfo(deptList); var rows=info.rows; var max=rows.length?rows[0].liq:0; var duRk=diasUteisMes();
     var legenda='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:12px">'+QBANDS.map(function(b){return '<span style="display:inline-flex;align-items:center;gap:6px;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:10px;padding:6px 10px">'+qBadge(b.q)+' <span style="color:'+Co.sub+'">'+b.share+'% do faturamento</span></span>';}).join('')+'</div>';
-    var totalPrem=0; rows.forEach(function(r){ var _p=premiacaoDe(r.liqM,r.dept,r.bruM); /* premiacao sem 1a Habilitacao */ r.premiacao=_p.valor; r.premPct=_p.pct; totalPrem+=r.premiacao; });
+    var totalPrem=0; rows.forEach(function(r){ var _p=premiacaoDe(r.liq,r.dept,r.bru); r.premiacao=_p.valor; r.premPct=_p.pct; totalPrem+=r.premiacao; });
     var lastQ=0; var body='';
     if(!rows.length){ body='<tr><td colspan="9" style="padding:26px;text-align:center;color:'+Co.mut+'">Sem vendas no período.</td></tr>'; }
     rows.forEach(function(r,i){ if(r.quartil!==lastQ){ lastQ=r.quartil; var b=QBANDS[r.quartil-1]; body+='<tr><td colspan="9" style="padding:9px 10px;background:'+Co.bgA+';border-top:2px solid '+qColor(r.quartil)+';color:'+qColor(r.quartil)+';font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.8px">Quartil Q'+r.quartil+' — '+b.share+'% do faturamento</td></tr>'; }
@@ -16252,7 +16251,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       var ini=(String(nome).trim().split(/\s+/).slice(0,2).map(function(x){return x[0];}).join('')||'?').toUpperCase();
       var vs=vendasDe(L,iniA,fimA);
       var liq=soma(vs,'liquido'), meta=metaDe(L);
-      var pct=meta?Math.min(100,Math.round(soma(vs.filter(function(v){ return !v.ph; }),'liquido')/meta*100)):0;
+      var pct=meta?Math.min(100,Math.round(liq/meta*100)):0;
       var c=comparativo(L);
       var dept=rotuloArea(L);
       return '<div onclick="__gwaPcAbrir(&#39;'+esc(L)+'&#39;)" style="cursor:pointer;flex:1 1 300px;min-width:280px;background:linear-gradient(160deg,#262626,#181818);'+
@@ -16285,7 +16284,6 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var c=comparativo(_login);
     var vs=vendasDe(_login,c.iniA,c.fimA);
     var liq=soma(vs,'liquido'), bruto=soma(vs,'valorPago');
-    var liqMeta=soma(vs.filter(function(v){ return !v.ph; }),'liquido'); /* 1a Habilitacao nao conta para meta */
     var ticket=vs.length?liq/vs.length:0;
     var meta=metaDe(_login);
 
@@ -16295,11 +16293,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var duTotal=diasUteis(new Date(h.getFullYear(),h.getMonth(),1), new Date(h.getFullYear(),h.getMonth(),ultDia));
     var duFeitos=diasUteis(new Date(h.getFullYear(),h.getMonth(),1), h);
     var duRestam=Math.max(0,duTotal-duFeitos);
-    var mediaDia=duFeitos?liqMeta/duFeitos:0;
+    var mediaDia=duFeitos?liq/duFeitos:0;
     var projecao=mediaDia*duTotal;
-    var falta=Math.max(0,meta-liqMeta);
+    var falta=Math.max(0,meta-liq);
     var porDiaNec=duRestam?falta/duRestam:falta;
-    var pctMeta=meta?Math.min(100,(liqMeta/meta*100)):0;
+    var pctMeta=meta?Math.min(100,(liq/meta*100)):0;
     var pctProj=meta?(projecao/meta*100):0;
 
     var voltar=ehGestor()
@@ -16350,7 +16348,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         '<h4 style="margin:0 0 14px;color:#fff;font-size:15px"><i class="fas fa-bullseye" style="color:'+Co.orange+'"></i> Meta do mes e projecao</h4>'+
         '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'+
           kpi('Meta',money(meta),null,'#fff')+
-          kpi('Realizado (sem 1ª Hab.)',money(liqMeta),pctMeta.toFixed(1)+'% da meta',Co.green)+
+          kpi('Realizado',money(liq),pctMeta.toFixed(1)+'% da meta',Co.green)+
           kpi('Projecao no ritmo',money(projecao),pctProj.toFixed(0)+'% da meta',pctProj>=100?Co.green:Co.orangeL)+
           kpi('Falta',money(falta),duRestam+' dia(s) util(eis)',falta?Co.red:Co.green)+
         '</div>'+
@@ -22779,7 +22777,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
      Premiacoes > Confirmar vendas: Confirmar recebimento / Rejeitar (consultor corrige) / Manter pendente
      -> Confirmada: o LIQUIDO (total - repasse) entra no faturamento do consultor e do departamento e o
      cashback (R$ 15) fica acumulado no MES DA VENDA. -> Estorno (Financeiro) tira de novo.
-   Metas e premiacoes (dia, semana, mes, faixa, ranking) NAO contam a 1a Habilitacao.
+   A 1a Habilitacao conta no faturamento e nas metas; so fica FORA da premiacao diaria e semanal (ja tem o cashback).
    Cashback: consultor so visualiza. ADM da Negociacao ou Master solicita, por mes de referencia, so a
    partir do dia 1 do mes seguinte. Financeiro marca como pago (ou rejeita).
    Colecoes:
@@ -23001,7 +22999,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   };
   /* selo nas listas de vendas (so aparece em vendas confirmadas, que sao as que estao no faturamento) */
   window.gwaPHSelo=function(v){
-    return '<span title="1ª Habilitação confirmada pelo Financeiro: total '+money(v.phTotal)+' − repasse '+money(v.phRepasse)+' = líquido GWA '+money(v.liquido)+(v.taxaPct?' (já descontada a taxa da forma de pagamento)':'')+'. Não conta para metas nem premiações." style="display:inline-block;font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;background:rgba(224,120,32,.14);color:'+Co.orangeL+';border:1px solid rgba(224,120,32,.45);cursor:help;margin-right:6px">1ª Hab.</span>';
+    return '<span title="1ª Habilitação confirmada pelo Financeiro: total '+money(v.phTotal)+' − repasse '+money(v.phRepasse)+' = líquido GWA '+money(v.liquido)+(v.taxaPct?' (já descontada a taxa da forma de pagamento)':'')+'. Conta no faturamento e nas metas; só não entra na premiação diária/semanal." style="display:inline-block;font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;background:rgba(224,120,32,.14);color:'+Co.orangeL+';border:1px solid rgba(224,120,32,.45);cursor:help;margin-right:6px">1ª Hab.</span>';
   };
   /* campo de repasse no lancamento normal */
   window.__gwaPHProdMudou=function(){
@@ -23212,7 +23210,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     try{ h=_sub==='vendas'?viewVendas():(_sub==='consultores'?viewConsultores():viewPainel()); }catch(e){ h='<div style="color:'+Co.red+';padding:20px">Erro: '+esc(e&&e.message||e)+'</div>'; }
     _alvo.innerHTML='<div data-phv="painel" style="max-width:1240px;margin:0 auto">'+
       cabecalho('fa-id-card','Negociação · painel automático','Primeira Habilitação',
-        'As vendas lançadas em <b style="color:#fff">Vendas › Lançar</b> com Produto inicial <b style="color:'+Co.orangeL+'">Primeira Habilitação</b> aparecem aqui sozinhas. O <b style="color:'+Co.green+'">líquido</b> (total − taxa do pagamento − repasse) entra no faturamento depois da confirmação do Financeiro e gera <b style="color:'+Co.orangeL+'">'+money(valorRegra({dataVenda:hoje()}))+'</b> de cashback. Não conta para metas.',
+        'As vendas lançadas em <b style="color:#fff">Vendas › Lançar</b> com Produto inicial <b style="color:'+Co.orangeL+'">Primeira Habilitação</b> aparecem aqui sozinhas. O <b style="color:'+Co.green+'">líquido</b> (total − taxa do pagamento − repasse) entra no faturamento depois da confirmação do Financeiro e gera <b style="color:'+Co.orangeL+'">'+money(valorRegra({dataVenda:hoje()}))+'</b> de cashback. Conta no faturamento e nas metas; só fica fora da premiação diária e semanal.',
         btn('<i class="fas fa-plus"></i> Lançar venda','__gwaPHIrLancar()')+(ehFinanceiro()?btn('<i class="fas fa-file-circle-check"></i> Confirmar vendas','__gwaPHIrPrem(&#39;phconf&#39;)','aviso'):'')+btn('<i class="fas fa-hand-holding-dollar"></i> Cashback','__gwaPHIrPrem(&#39;cashback&#39;)','ghost'))+
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 16px">'+subs.map(function(s){ var on=_sub===s[0];
         return '<button type="button" onclick="__gwaPHSub('+q(s[0])+')" style="padding:8px 14px;border-radius:999px;border:1px solid '+(on?'transparent':Co.line)+';background:'+(on?Co.gradO:'rgba(255,255,255,.04)')+';color:#fff;font-size:12.5px;font-weight:700;cursor:pointer"><i class="fas '+s[2]+'"></i> '+s[1]+'</button>'; }).join('')+'</div>'+h+'</div>';
@@ -23244,7 +23242,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         card('Minhas vendas no mês',doMes.length,mesNome(m),'#fff','fa-id-card'),
         card('Aguardando Financeiro',I.agu.length,'ainda fora do faturamento',Co.amarelo,'fa-hourglass-half'),
         card('Confirmadas no mês',I.conf.length,'já no meu faturamento',Co.green,'fa-circle-check'),
-        card('Meu faturamento líquido',money(I.liquido),'1ª Hab. confirmada no mês · fora da meta',Co.green,'fa-sack-dollar'),
+        card('Meu faturamento líquido',money(I.liquido),'1ª Hab. confirmada no mês',Co.green,'fa-sack-dollar'),
         card('Cashback de '+MESES[+m.slice(5)-1],money(doMesCb),'acumulando · solicitação a partir de '+br(liberaEm(m)),Co.orangeL,'fa-coins')])+
       (rej.length?nota('<b style="color:#ff9d8c"><i class="fas fa-circle-exclamation"></i> '+rej.length+' venda(s) rejeitada(s) pelo Financeiro.</b> Veja o motivo abaixo e corrija a venda.',Co.red):'')+avisoRej+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin-top:16px">'+
@@ -23253,7 +23251,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
           '<ol style="margin:10px 0 0;padding-left:18px;color:'+Co.sub+';font-size:13px;line-height:1.8">'+
             '<li>Lance em <b>Vendas › Lançar</b> com Produto inicial <b>Primeira Habilitação</b> e informe o <b>repasse da autoescola</b>.</li>'+
             '<li>A venda aparece aqui e vai para o <b>Financeiro</b>.</li>'+
-            '<li>Confirmada: o líquido entra no seu faturamento (fora da meta) e gera '+money(valorRegra({dataVenda:hoje()}))+' de cashback no mês da venda.</li>'+
+            '<li>Confirmada: o líquido entra no seu faturamento e nas suas metas e gera '+money(valorRegra({dataVenda:hoje()}))+' de cashback no mês da venda.</li>'+
             '<li>No fechamento do mês, a <b>administração</b> solicita o pagamento do cashback. Você acompanha em Premiações › Cashback 1ª Hab.</li></ol></div>'+
         '<div style="background:linear-gradient(135deg,rgba(63,174,90,.16),rgba(63,174,90,.04));border:1px solid rgba(63,174,90,.4);border-radius:18px;padding:20px">'+
           '<div style="font-size:12px;color:#9fe0ae;font-weight:800;letter-spacing:1px;text-transform:uppercase">Meu cashback acumulado</div>'+
