@@ -11962,6 +11962,14 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   window.__gwaDocAgrupar=function(v){ _agrupar=!!v; render(); };
 
+  /* selo de origem: AUTO (azul) = veio da aba Defesas da planilha rotativa; MANUAL (verde) = lancado na intranet */
+  function seloOrigem(r){
+    if(!r) return '';
+    if(r.origem==='planilha') return '<span title="Lançado automaticamente pela planilha rotativa (aba Defesas)" style="display:inline-flex;align-items:center;gap:4px;background:rgba(74,159,213,.16);color:#4a9fd5;border:1px solid rgba(74,159,213,.55);border-radius:20px;padding:2px 9px;font-size:10px;font-weight:800;letter-spacing:.4px;white-space:nowrap"><i class="fas fa-robot"></i> AUTO</span>';
+    if(r.origem==='manual') return '<span title="Lançado manualmente na intranet" style="display:inline-flex;align-items:center;gap:4px;background:rgba(63,174,90,.16);color:#3fae5a;border:1px solid rgba(63,174,90,.55);border-radius:20px;padding:2px 9px;font-size:10px;font-weight:800;letter-spacing:.4px;white-space:nowrap"><i class="fas fa-hand"></i> MANUAL</span>';
+    return '';
+  }
+  window.gwaDocSeloOrigem=seloOrigem;
   function viewLista(){ var vis=visiveis(); var arr=aplicaFiltros(vis);
     var grupos=agrupaLista(_tipo,arr);
     var consList=[]; vis.forEach(function(v){ var n=consultorDe(v); if(n && consList.indexOf(n)<0) consList.push(n); }); consList.sort();
@@ -12002,6 +12010,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         if(_tipo!=='elogio'&&tt.elogio) selos.push('<span style="background:rgba(240,148,58,.18);color:'+Co.orangeL+';border-radius:20px;padding:2px 8px;font-size:10px">'+tt.elogio+' elo</span>');
         if(selos.length) tds=tds.replace('</td>', '<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">'+selos.join('')+'</div></td>');
       }
+      (function(){ var _sel=_agrupar?G.itens.map(seloOrigem).filter(function(x,i,a){ return x&&a.indexOf(x)===i; }).join(' '):seloOrigem(v);
+        if(_sel) tds=tds.replace('</td>','<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">'+_sel+'</div></td>'); })();
       var sit=situacao(_tipo,v);
       var nPend=0;
       if(_agrupar && qtd>1){
@@ -14270,7 +14280,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     /* linha do tempo */
     var eventos=(c.itens||[]).map(function(it){ var r=it.reg, t=it.tipo;
       var titulo=(t==='defesa')?('Defesa — '+(tiposDoRegistro(r).join(' + ')||'(sem tipo)')):((t==='doc')?('Documentacao — '+(r.servicoContratado||'(sem servico)')):('Elogio — '+(r.plataforma||'')));
-      var det=[];
+      var det=[]; var _so=seloOrigem(r); if(_so) det.push(_so);
+      if(t==='defesa' && r.processos && r.processos.length){ det.push('<div style="width:100%;margin-top:6px;display:flex;flex-direction:column;gap:5px">'+r.processos.map(function(p){
+          var it=[p.protocolo?('<b style="color:#fff">'+esc(p.protocolo)+'</b>'):'', (p.instancia?esc(p.instancia):''), p.situacao?('<span style="color:'+(/indefer/i.test(p.situacao)?Co.red:(/expir/i.test(p.situacao)?Co.orangeL:Co.green))+'">'+esc(p.situacao)+'</span>'):'',
+            p.notificacao?('notificação '+esc(p.notificacao)):'', p.periodo?('período '+esc(p.periodo)):'', p.resultado?('resultado '+esc(p.resultado)):''].filter(Boolean);
+          return '<div style="background:'+Co.card2+';border:1px solid '+Co.line+';border-radius:8px;padding:6px 9px;font-size:11.5px;color:'+Co.sub+'">'+it.map(function(x,i){ return x; }).join(' · ')+'</div>'; }).join('')+'</div>'); }
       if(t==='defesa'){ if(r.orgao||r.municipio) det.push('<i class="fas fa-building-columns"></i> '+esc(r.orgao||r.municipio)+(r.uf?(' / '+esc(r.uf)):''));
         if(r.tipoEnvio) det.push('<i class="fas fa-paper-plane"></i> '+esc(r.tipoEnvio));
         if(r.protocolosTxt||r.protocolo) det.push('<i class="fas fa-hashtag"></i> '+esc(r.protocolosTxt||r.protocolo));
