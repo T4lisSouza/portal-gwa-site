@@ -11721,7 +11721,15 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return Math.max(Number(r.atualizadoEm)||0, Number(r.dataElogioEm)||0, Number(r.linkEm)||0,
                     Number(r.validadoEm)||0, Number(r.ts)||0); }
   function parseData(s){ if(!s) return null; s=String(s).trim(); var m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return new Date(+m[1],+m[2]-1,+m[3],12,0,0);
-    m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/); if(m){ var a=+m[3]; if(a<100)a+=2000; return new Date(a,+m[2]-1,+m[1],12,0,0); } return null; }
+    m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?!\d)/); if(m){ var a=+m[3]; if(a<100)a+=2000; if(a<2000||a>2100||+m[2]<1||+m[2]>12||+m[1]<1||+m[1]>31) return null; return new Date(a,+m[2]-1,+m[1],12,0,0); } return null; }
+  /* lancamentos de elogio repetidos (mesmo consultor, cliente, data, plataforma e link): so 1 conta */
+  function elogiosRepetidos(filtro){ var g={}, out={total:0,porConsultor:{},lista:[]};
+    filtraEscopo(regsBrutos('elogio').filter(function(r){ return r && r.removido!==true && r.duplicado!==true; })).forEach(function(r){ if(filtro && !filtro(r)) return; var k=chaveDup('elogio',r); if(!k.replace(/\|/g,'').trim()) return; (g[k]=g[k]||[]).push(r); });
+    Object.keys(g).forEach(function(k){ var a=g[k]; if(a.length<2) return; var c=consultorDe(a[0]); out.total+=a.length-1; out.porConsultor[c]=(out.porConsultor[c]||0)+a.length-1; out.lista.push({consultor:c,nome:a[0].nome,data:a[0].data,vezes:a.length}); });
+    return out; }
+  function avisoRepetidos(rp){ if(!rp||!rp.total) return '';
+    return '<div style="background:rgba(227,179,65,.10);border:1px solid rgba(227,179,65,.45);border-radius:12px;padding:11px 15px;margin-bottom:14px;font-size:12.5px;color:'+Co.sub+';line-height:1.6"><i class="fas fa-clone" style="color:#e3b341"></i> <b style="color:#e3b341">'+rp.total+' lançamento(s) de elogio repetido(s) não entram na conta</b> (mesmo cliente, mesmo dia, mesma plataforma e mesmo link — conta 1 vez): '+
+      rp.lista.map(function(x){ return esc(x.consultor)+' · '+esc(x.nome)+' ('+esc(x.data)+') lançado '+x.vezes+'x'; }).join('; ')+'. Se forem elogios diferentes, coloque o link de cada um.</div>'; }
   function dentroPeriodo(d){ if(!d) return _dPer==='tudo'; var hoje=new Date(); var ini,fim=new Date(hoje.getFullYear(),hoje.getMonth(),hoje.getDate(),23,59,59);
     if(_dPer==='tudo') return true;
     if(_dPer==='mes'){ ini=new Date(hoje.getFullYear(),hoje.getMonth(),1); }
@@ -11778,6 +11786,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     t.push(['novos','Novos clientes'+(function(){ var q=qtdMinhaFila(); return q?('<span style="background:#e5533c;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:5px;font-weight:800">'+q+'</span>'):''; })(),'fa-user-plus']);
     t.push(['buscar','Buscar cliente','fa-magnifying-glass']);
     t.push(['producao','Produção diária','fa-calendar-check']);
+    t.push(['erros','Erros'+(function(){ var q=qtdErrosAltos(); return q?('<span style="background:#e5533c;color:#fff;border-radius:20px;padding:1px 7px;font-size:11px;margin-left:5px;font-weight:800">'+q+'</span>'):''; })(),'fa-triangle-exclamation']);
     t.push(['cashback','Premiação DOC','fa-wallet']);
     t.push(['orgaos','Orgaos','fa-building-columns']);
     if(ehAdminDoc()||ehSupervisor()){ t.push(['relatorios','Relatorios','fa-chart-column']); }
@@ -11787,7 +11796,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(!temAcesso()){ head.innerHTML='<div style="font-size:18px;font-weight:800">Documentacao GWA</div><button onclick="__gwaDocClose()" style="width:38px;height:38px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:'+Co.sub+';cursor:pointer"><i class="fas fa-times"></i></button>';
       body.innerHTML='<div style="max-width:520px;margin:50px auto;text-align:center;background:'+Co.card+';border:1px solid '+Co.line+';border-radius:18px;padding:34px;color:'+Co.sub+'"><i class="fas fa-lock" style="font-size:36px;color:'+Co.orange+'"></i><h3 style="color:#fff;margin:16px 0 8px">Acesso nao liberado</h3><p style="line-height:1.5">Seu usuario ainda nao tem permissao na Documentacao GWA.<br>Peca ao administrador para liberar em <b style="color:'+Co.orange+'">Documentacao &rarr; Acessos</b>.</p></div>'; return; }
     if(!_view)_view='dash';
-    var mostraSel=(_view!=='dash'&&_view!=='producao'&&_view!=='acessos'&&_view!=='correios'&&_view!=='cashback'&&_view!=='relatorios'&&_view!=='orgaos'&&_view!=='ficha'&&_view!=='buscar'&&_view!=='novos');
+    var mostraSel=(_view!=='dash'&&_view!=='producao'&&_view!=='erros'&&_view!=='acessos'&&_view!=='correios'&&_view!=='cashback'&&_view!=='relatorios'&&_view!=='orgaos'&&_view!=='ficha'&&_view!=='buscar'&&_view!=='novos');
     var sel=mostraSel?('<select onchange="__gwaDocTipo(this.value)" style="padding:8px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;font-weight:700;cursor:pointer">'+ORDEM.map(function(k){ return '<option value="'+k+'"'+(_tipo===k?' selected':'')+'>'+esc(TIPOS[k].plural.toUpperCase())+'</option>'; }).join('')+'</select>'):'';
     var nv=nivel(); var badge='<span style="background:'+Co.card2+';border:1px solid '+(nv==='admin'?Co.orange:(nv==='supervisor'?Co.blue:Co.line))+';color:'+(nv==='admin'?Co.orangeL:(nv==='supervisor'?Co.blue:Co.sub))+';border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;text-transform:uppercase">'+esc(nv)+'</span>';
     head.innerHTML='<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><img src="'+GWA_LOGO+'" alt="GWA" style="height:42px;width:auto;max-width:120px;object-fit:contain" onerror="this.onerror=null;this.src=\'https://drive.google.com/thumbnail?id=1erF3Vfah-MgTbl2QNLph7oyfIqENLn9m&sz=w240\'"><div><div style="font-size:18px;font-weight:800">Documentacao GWA</div><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:1px">Defesas, documentacao e elogios</div></div>'+badge+sel+'</div>'+
@@ -11800,6 +11809,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       else if(_view==='correios'&&ehAdminDoc()) body.innerHTML=viewCorreios();
       else if(_view==='relatorios'&&(ehAdminDoc()||ehSupervisor())) body.innerHTML=viewRelatorios();
       else if(_view==='producao') body.innerHTML=viewProducao();
+      else if(_view==='erros') body.innerHTML=viewErros();
       else if(_view==='orgaos') body.innerHTML=viewOrgaos();
       else if(_view==='ficha') body.innerHTML=viewFicha();
       else if(_view==='buscar') body.innerHTML=viewBuscarCliente();
@@ -11810,6 +11820,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     }catch(e){ body.innerHTML='<div style="color:'+Co.red+';padding:20px">Erro: '+esc(e&&e.message||e)+'</div>'; }
     if((_view==='lancar'&&_tipo==='defesa')||(_view==='ficha'&&_cliForm==='defesa')){ setTimeout(function(){ var ed=_editId?(regs('defesa').filter(function(x){return x.id===_editId;})[0]||null):null; if(ed&&ed.orgaoId){ __gwaDefOrgao(ed.orgaoId); } else { __gwaDefOrgao(''); } },40); }
     if(_view==='correios'&&!_jobsCarregados){ _jobsCarregados=true; Promise.all([loadJobs(),loadAr()]).then(function(){ if(_view==='correios') render(); }); }
+    if(_view==='erros'&&!_errOk){ loadTodos().then(function(){ _errOk=true; if(_view==='erros') render(); }); }
     if(_view==='producao'&&!_pdOk){ _pdOk=true; loadTodos().then(function(){ if(_view==='producao') render(); }); }
     if(_view==='dash'&&!_dashOk){ _dashOk=true; loadTodos().then(function(){ if(_view==='dash') render(); }); }
     if((_view==='orgaos'||(_view==='lancar'&&_tipo==='defesa')||(_view==='ficha'&&_cliForm==='defesa'))&&!_orgOk&&!_orgCarregando){ _orgCarregando=true; loadOrgaos().then(function(){ _orgCarregando=false; render(); }); }
@@ -12754,7 +12765,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<b style="color:'+Co.green+'">Verificados</b>: viraram elogio e contam na premiacao. '+
       'Solicitados = Em andamento + Verificados.</div>';
     var acoes=legenda+'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"><button onclick="__gwaCbRelatorio()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orange+';border-radius:12px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-file-pdf"></i> Baixar relatório</button><button onclick="__gwaCbCsv()" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.green+';border-radius:12px;padding:11px 18px;font-weight:700;cursor:pointer"><i class="fas fa-file-csv"></i> Exportar CSV</button><button onclick="__gwaCbSolicitar()" style="background:'+Co.gradO+';color:#fff;border:none;border-radius:12px;padding:11px 20px;font-weight:700;cursor:pointer"><i class="fas fa-paper-plane"></i> Solicitar pagamento ao financeiro</button></div>';
-    return cards+acoes+tab+tabelaFaixas(null); }
+    return cards+avisoRepetidos(elogiosRepetidos(function(r){ return mesSolic(r)===per||mesRef(r)===per; }))+acoes+tab+tabelaFaixas(null); }
 
   function cbValidar(){ if(!(ehAdminDoc()||ehSupervisor())) return '<div style="color:'+Co.red+';padding:20px">Acesso restrito.</div>';
     var per=perAtual();
@@ -13338,6 +13349,127 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   var PD_MED=[['docs','Docs OK'],['def','Defesas'],['elo','Elogios']];
   window.__gwaPd=function(k,v){ if(k==='per')_pdPer=v; else if(k==='ini')_pdIni=v; else if(k==='fim')_pdFim=v; else if(k==='cons')_pdCons=v; render(); };
 
+  /* ================= ERROS: o que pode estar errado nos lancamentos (defesa, doc, elogio) ================= */
+  var _erTipo='', _erPer='mes', _erCons='', _erGrav='', _errOk=false;
+  var ER_TIPO={defesa:'Defesa',doc:'Documentação',elogio:'Elogio'};
+  var ER_GRAV={alta:['Alta','#e5533c'],media:['Média','#e3b341'],baixa:['Baixa','#4a9fd5']};
+  function erCpfOk(c){ c=String(c||'').replace(/\D/g,''); if(c.length!==11||/^(\d)\1{10}$/.test(c)) return false;
+    for(var t=9;t<11;t++){ var s=0; for(var i=0;i<t;i++) s+=(+c[i])*((t+1)-i); var d=((10*s)%11)%10; if(+c[t]!==d) return false; } return true; }
+  function erProt(s){ return String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+  function erPeriodo(){ var h=new Date();
+    if(_erPer==='mesant') return [new Date(h.getFullYear(),h.getMonth()-1,1).getTime(), new Date(h.getFullYear(),h.getMonth(),0,23,59,59).getTime()];
+    if(_erPer==='d30') return [new Date(h.getFullYear(),h.getMonth(),h.getDate()-29).getTime(), Date.now()+86400000];
+    if(_erPer==='tudo') return null;
+    return [new Date(h.getFullYear(),h.getMonth(),1).getTime(), Date.now()+86400000*400]; }
+  function erData(s){ var d=parseData(s); if(!d) return null; var m=String(s||'').match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(m && (d.getDate()!==+m[1] || d.getMonth()+1!==+m[2])) return null; return d; }
+  function analisarErros(){
+    var out=[], P=erPeriodo(), hoje=new Date(), hojeT=new Date(hoje.getFullYear(),hoje.getMonth(),hoje.getDate(),23,59,59).getTime();
+    function add(t,r,g,titulo,exp,extra){ out.push({t:t,r:r,g:g,titulo:titulo,exp:exp,extra:extra||{}}); }
+    function noPer(t,r){ if(!P) return true; var d=erData(dataDe(t,r)); if(!d) return true; var x=d.getTime(); return x>=P[0]&&x<=P[1]; }
+    function dias(d){ return Math.floor((Date.now()-d.getTime())/86400000); }
+    ORDEM.forEach(function(t){
+      if(_erTipo && _erTipo!==t) return;
+      var brutos=filtraEscopo((regsBrutos(t)||[]).filter(function(r){ return r && r.removido!==true && r.duplicado!==true; }));
+      if(_erCons) brutos=brutos.filter(function(r){ return mesmoConsultor(consultorDe(r),_erCons); });
+      /* repetidos: o primeiro vale, os outros nao contam */
+      var grupos={}; brutos.slice().sort(function(a,b){ return (a.ts||0)-(b.ts||0); }).forEach(function(r){ var k=chaveDup(t,r); if(!k.replace(/\|/g,'').trim()) return; (grupos[k]=grupos[k]||[]).push(r); });
+      Object.keys(grupos).forEach(function(k){ var a=grupos[k]; if(a.length<2) return; a.slice(1).forEach(function(r){ if(!noPer(t,r)) return;
+        add(t,r,'alta','Lançamento repetido','Este registro é igual a outro (mesmo consultor, cliente, data'+(t==='elogio'?', plataforma e link':(t==='defesa'?' e tipo de defesa':' e serviço'))+'). Foi lançado '+a.length+' vezes e só 1 conta na produção e na premiação. Se for outro caso de verdade, diferencie (link, protocolo ou serviço); se não, apague a cópia.',{rep:true,orig:a[0].id}); }); });
+      /* indices para protocolo/link repetidos em registros diferentes */
+      var idxProt={}, idxLink={};
+      if(t==='defesa') brutos.forEach(function(r){ listaDefesas(r).forEach(function(d){ (protocolosDe(d,r)||[]).forEach(function(p){ var k=erProt(p); if(k.length>=5) (idxProt[k]=idxProt[k]||[]).push(r); }); }); });
+      if(t==='elogio') brutos.forEach(function(r){ var k=String(r.link||'').trim().toLowerCase().replace(/\/+$/,''); if(k.length>8) (idxLink[k]=idxLink[k]||[]).push(r); });
+      brutos.forEach(function(r){
+        if(!noPer(t,r)) return;
+        var dt=dataDe(t,r), d=erData(dt);
+        if(!String(r.nome||'').trim()) add(t,r,'alta','Sem nome do cliente','O registro não tem o nome do cliente: não aparece na busca nem no perfil.');
+        if(!String(r.consultor||r.consultorNome||'').trim()) add(t,r,'alta','Sem consultor','Ninguém é dono deste registro: não conta na produção nem na premiação de nenhum consultor.');
+        if(!d) add(t,r,'alta','Data inválida ou vazia',(dt?('A data "'+dt+'" não é uma data válida'):'O registro está sem data')+': ele não entra em nenhum período (dashboard, produção, premiação).');
+        else if(d.getTime()>hojeT) add(t,r,'media','Data no futuro','A data '+dt+' é depois de hoje. Provavelmente foi digitada errada; o registro só vai aparecer naquele período.');
+        if(t==='defesa'||t==='doc'){
+          var c=String(r.cpf||'').replace(/\D/g,'');
+          if(!c) add(t,r,'media','Sem CPF','Sem CPF o sistema não junta este registro com o resto do cliente (perfil, histórico, fila de novos clientes).');
+          else if(!erCpfOk(c)) add(t,r,'media','CPF inválido','O CPF "'+esc(r.cpf)+'" não é um CPF válido (dígitos errados ou faltando). Confira com o documento do cliente.');
+        }
+        if(t==='defesa'){
+          var ld=listaDefesas(r), temProt=false;
+          ld.forEach(function(x){ if((protocolosDe(x,r)||[]).length) temProt=true; });
+          if(!temProt) add(t,r,'media','Defesa sem protocolo','Nenhum protocolo/processo informado. Fica difícil acompanhar e a defesa conta como 1 só.');
+          if(!String(r.tipoDefesa||'').trim() && !ld.some(function(x){ return x&&x.tipo; })) add(t,r,'media','Sem tipo de defesa','O tipo (suspensão, cassação, multa...) não foi informado: a defesa fica fora dos relatórios por tipo.');
+          if(/CORREIO/i.test(r.tipoEnvio||'') && !String(r.objeto||'').trim() && d && dias(d)>5) add(t,r,'media','Correios sem rastreio','Enviada pelos Correios há '+dias(d)+' dias e ainda sem código de rastreio.');
+          if(!String(r.uf||'').trim()||!String(r.orgao||'').trim()) add(t,r,'baixa','Sem UF/órgão de destino','Falta a UF ou o órgão para onde a defesa foi: fica fora dos relatórios por órgão/UF.');
+          if(r.semUsuario) add(t,r,'media','Responsável sem usuário','Veio da planilha com o responsável "'+esc(r.responsavelPlanilha||r.consultorNome||'')+'", que não tem usuário na intranet.');
+          var vistos={};
+          ld.forEach(function(x){ (protocolosDe(x,r)||[]).forEach(function(p){ var k=erProt(p); if(k.length<5||vistos[k]) return; vistos[k]=1;
+            var outros=(idxProt[k]||[]).filter(function(o){ return o.id!==r.id && chaveDup(t,o)!==chaveDup(t,r); });
+            if(outros.length) add(t,r,'alta','Protocolo em mais de um registro','O protocolo '+esc(p)+' também está em '+outros.map(function(o){ return esc(o.nome||'')+' ('+esc(o.data||'')+', '+esc(o.consultorNome||o.consultor||'')+')'; }).join('; ')+'. A mesma defesa pode estar contando duas vezes.'); }); });
+        }
+        if(t==='doc'){
+          if(!String(r.servicoContratado||'').trim()) add(t,r,'media','Sem serviço contratado','O serviço contratado não foi informado: fica fora dos relatórios por serviço.');
+          if(!String(r.docsOkPasta||'').trim()) add(t,r,'baixa','Sem status Docs OK / Pasta','Sem o status, a documentação é contada como "Docs OK" na produção.');
+          if(String(r.dataContrato||'').trim() && !erData(r.dataContrato)) add(t,r,'media','Data do contrato inválida','A data do contrato "'+esc(r.dataContrato)+'" não é uma data válida.');
+        }
+        if(t==='elogio'){
+          var de=String(r.dataElogio||'').trim(), dd=de?erData(de):null;
+          if(de && !dd) add(t,r,'alta','Data do elogio inválida','A data do elogio "'+esc(de)+'" não é válida (ex.: ano com 3 números). O elogio fica fora da premiação até corrigir em Premiação DOC › Data do elogio.');
+          if(dd && d && dd.getTime()<d.getTime()-86400000) add(t,r,'media','Elogio antes da solicitação','A data do elogio ('+esc(de)+') é anterior à data da solicitação ('+esc(r.data||'')+'). Confira se não foi invertida.');
+          if((dd||r.validado===true) && !String(r.link||'').trim()) add(t,r,'media','Elogio sem link','Foi enviado/verificado sem o link do elogio: não dá para o supervisor conferir.');
+          if(!dd && r.validado===undefined && d && dias(d)>15 && !elogioLegado(r)) add(t,r,'baixa','Aguardando a data do elogio há '+dias(d)+' dias','O cliente ainda não publicou (ou falta informar a data do elogio). Enquanto isso não conta na premiação.');
+          if(r.validado===false) add(t,r,'baixa','Recusado pelo supervisor','O supervisor recusou este elogio'+(r.validadoPor?(' ('+esc(r.validadoPor)+')'):'')+'. Ele não conta na premiação.');
+          var lk=String(r.link||'').trim().toLowerCase().replace(/\/+$/,'');
+          if(lk.length>8){ var outrosL=(idxLink[lk]||[]).filter(function(o){ return o.id!==r.id && norm(o.nome)!==norm(r.nome); });
+            if(outrosL.length) add(t,r,'alta','Mesmo link em outro cliente','Este link também está no elogio de '+outrosL.map(function(o){ return esc(o.nome||'')+' ('+esc(o.data||'')+')'; }).join('; ')+'. Um dos dois está com o link errado.'); }
+        }
+      });
+    });
+    if(_erGrav) out=out.filter(function(e){ return e.g===_erGrav; });
+    var ordem={alta:0,media:1,baixa:2};
+    return out.sort(function(a,b){ return (ordem[a.g]-ordem[b.g]) || ((erData(dataDe(b.t,b.r))||0)-(erData(dataDe(a.t,a.r))||0)); });
+  }
+  function qtdErrosAltos(){ if(!_errOk) return 0; try{ var sv=[_erTipo,_erPer,_erCons,_erGrav]; _erTipo='';_erPer='mes';_erCons='';_erGrav='alta'; var n=analisarErros().length; _erTipo=sv[0];_erPer=sv[1];_erCons=sv[2];_erGrav=sv[3]; return n; }catch(e){ return 0; } }
+  window.__gwaErr=function(k,v){ if(k==='tipo')_erTipo=v; else if(k==='per')_erPer=v; else if(k==='cons')_erCons=v; else if(k==='grav')_erGrav=v; render(); };
+  window.__gwaErrEditar=function(t,id){ if(!regs(t).some(function(x){ return x.id===id; })){ alert('Este é um lançamento repetido (escondido da lista). Abra o cliente ou apague a cópia.'); return; } _tipo=t; window.__gwaDocEditar(id); };
+  window.__gwaErrAbrir=function(t,id,orig){ var ok=regs(t).some(function(x){ return x.id===id; }); window.__gwaCliPerfil(t,ok?id:(orig||id)); };
+  window.__gwaErrApagarRep=async function(t,id){ if(!(ehAdminDoc()||ehSupervisor())){ alert('Só supervisor ou administrador apaga lançamentos repetidos.'); return; }
+    var r=(regsBrutos(t)||[]).filter(function(x){ return x.id===id; })[0]; if(!r) return;
+    if(!confirm('Apagar esta cópia repetida de '+(r.nome||'')+' ('+(r.data||'')+')?\n\nO lançamento original continua valendo.')) return;
+    try{ var res=await fetch(base()+'/api/'+TIPOS[t].col+'/'+encodeURIComponent(id),{method:'DELETE',headers:H()});
+      if(res.ok){ _regs[t]=(_regs[t]||[]).filter(function(x){ return x.id!==id; }); invalidaCache(t); render(); } else alert('Não consegui apagar.'); }catch(e){ alert('Erro: '+(e&&e.message||e)); } };
+  function viewErros(){
+    if(!_errOk) return '<div style="padding:40px;text-align:center;color:'+Co.mut+'"><i class="fas fa-spinner fa-spin"></i> Analisando defesas, documentações e elogios…</div>';
+    var lista=analisarErros();
+    var inp='padding:9px 12px;border-radius:10px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff';
+    var consList=[]; ORDEM.forEach(function(t){ filtraEscopo(regs(t)).forEach(function(r){ var c=consultorDe(r); if(c&&consList.indexOf(c)<0) consList.push(c); }); }); consList.sort();
+    var filtros='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:14px 16px;margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'+
+      '<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">Tipo</label><select onchange="__gwaErr(&#39;tipo&#39;,this.value)" style="'+inp+'"><option value="">Todos</option>'+ORDEM.map(function(t){ return '<option value="'+t+'"'+(_erTipo===t?' selected':'')+'>'+ER_TIPO[t]+'</option>'; }).join('')+'</select></div>'+
+      '<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">Período</label><select onchange="__gwaErr(&#39;per&#39;,this.value)" style="'+inp+'">'+[['mes','Mês atual'],['mesant','Mês anterior'],['d30','Últimos 30 dias'],['tudo','Tudo']].map(function(o){ return '<option value="'+o[0]+'"'+(_erPer===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('')+'</select></div>'+
+      ((ehAdminDoc()||ehSupervisor())?('<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">Consultor</label><select onchange="__gwaErr(&#39;cons&#39;,this.value)" style="'+inp+'"><option value="">Todos</option>'+consList.map(function(n){ return '<option value="'+esc(n)+'"'+(norm(_erCons)===norm(n)?' selected':'')+'>'+esc(n)+'</option>'; }).join('')+'</select></div>'):'')+
+      '<div><label style="font-size:11px;color:'+Co.mut+';display:block;margin-bottom:3px">Gravidade</label><select onchange="__gwaErr(&#39;grav&#39;,this.value)" style="'+inp+'"><option value="">Todas</option>'+Object.keys(ER_GRAV).map(function(k){ return '<option value="'+k+'"'+(_erGrav===k?' selected':'')+'>'+ER_GRAV[k][0]+'</option>'; }).join('')+'</select></div></div>';
+    var porG={alta:0,media:0,baixa:0}, porT={defesa:0,doc:0,elogio:0}, porM={};
+    lista.forEach(function(e){ porG[e.g]++; porT[e.t]++; var m=e.titulo.replace(/ há \d+ dias/,''); porM[m]=(porM[m]||0)+1; });
+    function card(t,v,c,ic){ return '<div style="flex:1 1 150px;min-width:140px;background:'+Co.card+';border:1px solid '+Co.line+';border-top:3px solid '+c+';border-radius:16px;padding:14px 16px"><div style="font-size:11px;color:'+Co.mut+';text-transform:uppercase;letter-spacing:.6px;font-weight:700"><i class="fas '+ic+'" style="color:'+c+'"></i> '+t+'</div><div style="font-size:26px;font-weight:900;color:#fff;margin-top:4px">'+v+'</div></div>'; }
+    var cards='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">'+card('Pontos para conferir',lista.length,Co.orangeL,'fa-list-check')+card('Gravidade alta',porG.alta,'#e5533c','fa-circle-exclamation')+card('Média',porG.media,'#e3b341','fa-triangle-exclamation')+card('Baixa',porG.baixa,'#4a9fd5','fa-circle-info')+
+      card('Defesas',porT.defesa,Co.orange,'fa-scale-balanced')+card('Documentação',porT.doc,Co.orange,'fa-folder-open')+card('Elogios',porT.elogio,Co.orange,'fa-star')+'</div>';
+    var motivos=Object.keys(porM).sort(function(a,b){ return porM[b]-porM[a]; });
+    var resumo=motivos.length?('<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">'+motivos.map(function(m){ return '<span style="background:'+Co.card2+';border:1px solid '+Co.line+';border-radius:20px;padding:5px 11px;font-size:12px;color:'+Co.sub+'">'+esc(m)+' <b style="color:#fff">'+porM[m]+'</b></span>'; }).join('')+'</div>'):'';
+    var podeApagar=(ehAdminDoc()||ehSupervisor());
+    var linhas=lista.slice(0,600).map(function(e){ var r=e.r, gv=ER_GRAV[e.g];
+      var ac='<button onclick="__gwaErrAbrir(&#39;'+e.t+'&#39;,&#39;'+esc(r.id)+'&#39;,&#39;'+esc(e.extra.orig||'')+'&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.orangeL+';border-radius:8px;padding:6px 10px;cursor:pointer;font-weight:700;white-space:nowrap">Abrir cliente</button>'+
+        (e.extra.rep?(podeApagar?(' <button onclick="__gwaErrApagarRep(&#39;'+e.t+'&#39;,&#39;'+esc(r.id)+'&#39;)" style="background:rgba(229,83,60,.12);border:1px solid rgba(229,83,60,.5);color:#ff8a75;border-radius:8px;padding:6px 10px;cursor:pointer;font-weight:700;white-space:nowrap">Apagar cópia</button>'):''):
+          (podeEditar(r)?(' <button onclick="__gwaErrEditar(&#39;'+e.t+'&#39;,&#39;'+esc(r.id)+'&#39;)" style="background:'+Co.card2+';border:1px solid '+Co.line+';color:'+Co.sub+';border-radius:8px;padding:6px 10px;cursor:pointer;white-space:nowrap"><i class="fas fa-pen"></i> Corrigir</button>'):''));
+      return '<tr style="border-bottom:1px solid '+Co.line+';vertical-align:top">'+
+        '<td style="padding:10px"><span style="display:inline-block;background:'+gv[1]+'22;color:'+gv[1]+';border:1px solid '+gv[1]+'66;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:800">'+gv[0]+'</span></td>'+
+        '<td style="padding:10px;white-space:nowrap">'+ER_TIPO[e.t]+(window.gwaDocSeloOrigem?('<div style="margin-top:4px">'+window.gwaDocSeloOrigem(r)+'</div>'):'')+'</td>'+
+        '<td style="padding:10px"><b style="color:#fff">'+esc(r.nome||'—')+'</b>'+(r.cpf?('<div style="font-size:11px;color:'+Co.mut+'">'+esc(r.cpf)+'</div>'):'')+'</td>'+
+        '<td style="padding:10px;white-space:nowrap">'+esc(consultorDe(r)||'—')+'</td>'+
+        '<td style="padding:10px;white-space:nowrap">'+esc(dataDe(e.t,r)||'—')+'</td>'+
+        '<td style="padding:10px;min-width:320px;max-width:560px;white-space:normal"><b style="color:'+gv[1]+'">'+esc(e.titulo)+'</b><div style="font-size:12px;color:'+Co.sub+';margin-top:3px;line-height:1.5">'+e.exp+'</div></td>'+
+        '<td style="padding:10px;white-space:nowrap">'+ac+'</td></tr>'; }).join('');
+    var tab=lista.length?('<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px;min-width:1000px"><thead><tr style="background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'">'+
+      ['Gravidade','Tipo','Cliente','Consultor','Data','O que está errado e por quê',''].map(function(h){ return '<th style="padding:10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:'+Co.mut+'">'+h+'</th>'; }).join('')+'</tr></thead><tbody>'+linhas+'</tbody></table></div></div>'+(lista.length>600?'<div style="font-size:12px;color:'+Co.mut+';margin-top:8px">Mostrando 600 de '+lista.length+'. Use os filtros para ver o resto.</div>':''))
+      :'<div style="background:'+Co.card+';border:1px dashed '+Co.line+';border-radius:16px;padding:34px;text-align:center;color:'+Co.mut+'"><i class="fas fa-circle-check" style="font-size:28px;color:'+Co.green+';display:block;margin-bottom:8px"></i>Nenhum problema encontrado com esses filtros.</div>';
+    return '<div style="font-size:12.5px;color:'+Co.mut+';margin-bottom:12px;line-height:1.55">O sistema confere os lançamentos e mostra o que pode estar fazendo os números não baterem (repetidos, datas erradas, CPF inválido, protocolo ou link em dois registros, campos faltando) e o motivo de cada um.</div>'+filtros+cards+resumo+tab;
+  }
   function viewProducao(){
     var g=pdDados();
     var consList=[]; ORDEM.forEach(function(t){ filtraEscopo(regs(t)).forEach(function(r){ var c=consultorDe(r); if(c&&consList.indexOf(c)<0) consList.push(c); }); }); consList.sort();
@@ -13389,7 +13521,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         (g.semSt?('<b style="color:'+Co.orangeL+'">'+g.semSt+'</b> documentação(ões) sem o campo DocsOK/Pasta preenchido foram contadas como Docs OK. '):'')+
         'Média por dia útil = total ÷ '+g.uteis+' dia(s) útil(eis) do período.</div></div>';
 
-    return '<div style="font-size:12.5px;color:'+Co.mut+';margin-bottom:12px">Produção de <b style="color:#fff">'+esc(g.P.txt)+'</b>. Docs OK e Pasta OK pela data do registro da documentação; defesas contam cada protocolo; elogios pela data da solicitação.</div>'+
+    var _rpP=elogiosRepetidos(function(r){ var d=parseData(dataDe('elogio',r)); if(!d) return false; if(_pdCons && !mesmoConsultor(consultorDe(r),_pdCons)) return false; var t=d.getTime(); return t>=g.P.ini.getTime() && t<=g.P.fim.getTime()+86399999; });
+    return avisoRepetidos(_rpP)+'<div style="font-size:12.5px;color:'+Co.mut+';margin-bottom:12px">Produção de <b style="color:#fff">'+esc(g.P.txt)+'</b>. Docs OK e Pasta OK pela data do registro da documentação; defesas contam cada protocolo; elogios pela data da solicitação.</div>'+
       filtros+cards+tabDia+tabCons;
   }
 
@@ -13604,6 +13737,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     obj.data = ed ? (ed.data || hojeBR()) : hojeBR();                     /* travada no dia do pedido */
     obj.plataforma=ELOGIO_PLATAFORMA; obj.mes=ed?(ed.mes||mesAtualNome()):mesAtualNome();
     var deRaw=g('dcf_dataelogio'), deD=deRaw?parseData(deRaw):null;
+    if(deRaw && !deD){ alert('Data do elogio inválida: "'+deRaw+'".\n\nUse dia/mês/ano com 4 números no ano (ex.: 10/11/2026).'); return; }
+    if(!ed){ var _k=chaveDup('elogio',{consultorNome:(curU()||{}).nome||loginU(curU()),nome:nome,data:hojeBR(),plataforma:ELOGIO_PLATAFORMA,link:g('dcf_link')});
+      var _ja=regsBrutos('elogio').filter(function(x){ return x&&x.removido!==true&&x.duplicado!==true&&chaveDup('elogio',x)===_k; });
+      if(_ja.length && !confirm('Você já lançou hoje um elogio para '+nome+' na mesma plataforma'+(g('dcf_link')?' com o mesmo link':' e sem link')+'.\n\nLançamento repetido NÃO conta na produção nem na premiação. Se for outro elogio, coloque o link dele.\n\nSalvar mesmo assim?')) return; }
     if(deD && !obj.link){ alert('Para enviar o elogio a verificacao e preciso informar o LINK do elogio.'); return; }
     if(deD){ obj.dataElogio=String(deD.getDate()).padStart(2,'0')+'/'+String(deD.getMonth()+1).padStart(2,'0')+'/'+deD.getFullYear();
       obj.mes=MESES_PT[deD.getMonth()]; if(obj.validado===undefined) obj.status='ELOGIO ENVIADO - AGUARDANDO VERIFICAÇÃO';
