@@ -11602,8 +11602,12 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return out; }
   /* chave de conteudo para detectar o mesmo registro vindo de 2 planilhas */
   function chaveDup(t,r){
-    if(t==='defesa') return [norm(r.consultorNome||r.consultor),norm(r.nome),norm(r.cpf),norm(r.data),norm(r.tipoDefesa)].join('|');
-    if(t==='doc')    return [norm(r.consultorNome||r.consultor),norm(r.nome),norm(r.cpf),norm(r.dataContrato),norm(r.servicoContratado)].join('|');
+    /* 16/11: duplicidade sempre pelo CPF (nome so quando nao tem CPF). Defesa: mesmo CPF+data+tipo+protocolos;
+       protocolos diferentes no mesmo dia sao defesas diferentes e contam. */
+    var _cpfK=String(r.cpf||'').replace(/\D/g,''); var _quem=_cpfK.length>=8?('CPF'+_cpfK):norm(r.nome);
+    if(t==='defesa'){ var _pp={}; listaDefesas(r).forEach(function(d){ protocolosDe(d,r).forEach(function(p){ var k=String(p).toUpperCase().replace(/[^A-Z0-9]/g,''); if(k) _pp[k]=1; }); });
+      return [_quem,norm(r.data),norm(r.tipoDefesa),Object.keys(_pp).sort().join(',')].join('|'); }
+    if(t==='doc')    return [_quem,norm(r.dataContrato),norm(r.servicoContratado)].join('|');
     return [norm(r.consultorNome||r.consultor),norm(r.nome),norm(r.data),norm(r.plataforma),norm(r.link)].join('|'); }
 
   /* ---------------- acessos / niveis ---------------- */
@@ -13374,14 +13378,17 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       /* repetidos: o primeiro vale, os outros nao contam */
       var grupos={}; brutos.slice().sort(function(a,b){ return (a.ts||0)-(b.ts||0); }).forEach(function(r){ var k=chaveDup(t,r); if(!k.replace(/\|/g,'').trim()) return; (grupos[k]=grupos[k]||[]).push(r); });
       Object.keys(grupos).forEach(function(k){ var a=grupos[k]; if(a.length<2) return; a.slice(1).forEach(function(r){ if(!noPer(t,r)) return;
-        add(t,r,'alta','Lançamento repetido','Este registro é igual a outro (mesmo consultor, cliente, data'+(t==='elogio'?', plataforma e link':(t==='defesa'?' e tipo de defesa':' e serviço'))+'). Foi lançado '+a.length+' vezes e só 1 conta na produção e na premiação. Se for outro caso de verdade, diferencie (link, protocolo ou serviço); se não, apague a cópia.',{rep:true,orig:a[0].id}); }); });
+        add(t,r,'alta','Lançamento repetido','Este registro é igual a outro ('+(t==='elogio'?'mesmo consultor, cliente, data, plataforma e link':(t==='defesa'?'mesmo CPF, data, tipo de defesa e protocolos':'mesmo CPF, data do contrato e serviço'))+'). Foi lançado '+a.length+' vezes e só 1 conta na produção e na premiação. Se for outro caso de verdade, diferencie (link, protocolo ou serviço); se não, apague a cópia.',{rep:true,orig:a[0].id}); }); });
       /* indices para protocolo/link repetidos em registros diferentes */
       var idxProt={}, idxLink={};
       if(t==='defesa') brutos.forEach(function(r){ listaDefesas(r).forEach(function(d){ (protocolosDe(d,r)||[]).forEach(function(p){ var k=erProt(p); if(k.length>=5) (idxProt[k]=idxProt[k]||[]).push(r); }); }); });
       if(t==='elogio') brutos.forEach(function(r){ var k=String(r.link||'').trim().toLowerCase().replace(/\/+$/,''); if(k.length>8) (idxLink[k]=idxLink[k]||[]).push(r); });
+      var cpfNomes={}; if(t!=='elogio') ORDEM.forEach(function(tt){ if(tt==='elogio') return; (regsBrutos(tt)||[]).forEach(function(o){ if(!o||o.removido===true||o.duplicado===true) return; var c=String(o.cpf||'').replace(/\D/g,''); if(c.length<8||!norm(o.nome)) return; (cpfNomes[c]=cpfNomes[c]||{})[norm(o.nome)]=o.nome; }); });
       brutos.forEach(function(r){
         if(!noPer(t,r)) return;
         var dt=dataDe(t,r), d=erData(dt);
+        var _c=String(r.cpf||'').replace(/\D/g,''); if(_c.length>=8 && cpfNomes[_c] && Object.keys(cpfNomes[_c]).length>1) add(t,r,'media','Mesmo CPF com nomes diferentes','O CPF '+esc(r.cpf)+' aparece com os nomes: '+Object.keys(cpfNomes[_c]).map(function(k){ return esc(cpfNomes[_c][k]); }).join(' / ')+'. O sistema junta pelo CPF; confira se o nome ou o CPF foi digitado errado.');
+        if(t==='elogio' && window.gwaDocNomeAmbiguo && window.gwaDocNomeAmbiguo(r)) add(t,r,'baixa','Cliente com nome repetido (homônimo)','Existem clientes diferentes (CPFs diferentes) com o nome '+esc(r.nome)+' e este elogio não tem CPF, então o perfil não sabe de qual cliente ele é. Informe o CPF no elogio.');
         if(!String(r.nome||'').trim()) add(t,r,'alta','Sem nome do cliente','O registro não tem o nome do cliente: não aparece na busca nem no perfil.');
         if(!String(r.consultor||r.consultorNome||'').trim()) add(t,r,'alta','Sem consultor','Ninguém é dono deste registro: não conta na produção nem na premiação de nenhum consultor.');
         if(!d) add(t,r,'alta','Data inválida ou vazia',(dt?('A data "'+dt+'" não é uma data válida'):'O registro está sem data')+': ele não entra em nenhum período (dashboard, produção, premiação).');
@@ -13394,7 +13401,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         if(t==='defesa'){
           var ld=listaDefesas(r), temProt=false;
           ld.forEach(function(x){ if((protocolosDe(x,r)||[]).length) temProt=true; });
-          if(!temProt) add(t,r,'media','Defesa sem protocolo','Nenhum protocolo/processo informado. Fica difícil acompanhar e a defesa conta como 1 só.');
+          var ehProv=/PROVIS/.test(norm(r.tipoDefesa))||ld.some(function(x){ return /PROVIS/.test(norm(x&&x.tipo)); });
+          if(!temProt && !ehProv) add(t,r,'media','Defesa sem protocolo','Nenhum protocolo/processo informado. Fica difícil acompanhar e a defesa conta como 1 só.');
           if(!String(r.tipoDefesa||'').trim() && !ld.some(function(x){ return x&&x.tipo; })) add(t,r,'media','Sem tipo de defesa','O tipo (suspensão, cassação, multa...) não foi informado: a defesa fica fora dos relatórios por tipo.');
           if(/CORREIO/i.test(r.tipoEnvio||'') && !String(r.objeto||'').trim() && d && dias(d)>5) add(t,r,'media','Correios sem rastreio','Enviada pelos Correios há '+dias(d)+' dias e ainda sem código de rastreio.');
           if(!String(r.uf||'').trim()||!String(r.orgao||'').trim()) add(t,r,'baixa','Sem UF/órgão de destino','Falta a UF ou o órgão para onde a defesa foi: fica fora dos relatórios por órgão/UF.');
@@ -13720,6 +13728,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<p style="font-size:12px;color:'+Co.mut+';margin:0 0 14px;line-height:1.6">A <b>data da solicitação</b> é gravada agora. Quando o cliente publicar, informe a <b style="color:'+Co.orangeL+'">data do elogio</b> — é ela que manda o registro para a verificação do supervisor e faz valer na premiação. Se ainda não tem, deixe em branco: fica pendente em <b>Premiação DOC &rarr; Data do elogio</b>.</p>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Nome do cliente *</label><input id="dcf_nome" value="'+esc(ed?ed.nome:'')+'" style="'+inpStyle()+'"></div>'+
+      '<div><label style="font-size:12px;color:'+Co.sub+'">CPF do cliente</label><input id="dcf_cpf" value="'+esc(ed?(ed.cpf||''):'')+'" placeholder="liga o elogio ao cliente certo" style="'+inpStyle()+'"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Link do elogio (opcional)</label><input id="dcf_link" value="'+esc(ed?ed.link:'')+'" placeholder="cole aqui, se tiver" style="'+inpStyle()+'"></div>'+
       '<div><label style="font-size:12px;color:'+Co.sub+'">Data da solicitação</label><input id="dcf_data" value="'+esc(dataV)+'" readonly title="Fixada no dia do lancamento" style="'+inpStyle()+';opacity:.75;cursor:not-allowed"></div>'+
       '<div><label style="font-size:12px;color:'+Co.orangeL+';font-weight:700">Data do elogio (2ª data)</label><input type="date" id="dcf_dataelogio" value="'+esc(deV)+'" style="'+inpStyle()+'"><div style="font-size:11px;color:'+Co.mut+';margin-top:3px">deixe em branco se o cliente ainda não publicou</div></div>'+
@@ -13734,6 +13743,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(ed && !podeEditar(ed)){ alert('Sem permissão.'); return; }
     var obj=ed?ed:{ id:'elogio_'+loginU(curU())+'_'+Date.now().toString(36), ts:Date.now(), origem:'manual' };
     obj.nome=nome; obj.link=g('dcf_link');
+    var _cpfE=g('dcf_cpf').replace(/\D/g,''); if(_cpfE) obj.cpf=_cpfE; else if(obj.cpf===undefined||!String(obj.cpf).trim()){ var _kc=chaveCli({nome:nome,consultorNome:obj.consultorNome||(curU()||{}).nome||loginU(curU())}); if(_kc&&_kc.indexOf('cpf:')===0) obj.cpf=_kc.slice(4); }
     obj.data = ed ? (ed.data || hojeBR()) : hojeBR();                     /* travada no dia do pedido */
     obj.plataforma=ELOGIO_PLATAFORMA; obj.mes=ed?(ed.mes||mesAtualNome()):mesAtualNome();
     var deRaw=g('dcf_dataelogio'), deD=deRaw?parseData(deRaw):null;
@@ -13852,7 +13862,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
      CPF e outro nao (um virava "cpf:...", o outro "nome:..."). Aqui o
      nome e amarrado ao CPF uma unica vez e todos passam a cair na
      mesma ficha. */
-  var _mapaNomeCpf=null, _mapaNomeCpfN=-1;
+  var _mapaNomeCpf=null, _mapaNomeCpfN=-1, _mapaNomeCons={};
 
   function totalRegistros(){ var n=0; ORDEM.forEach(function(t){ n+=(_regs[t]||[]).length; });
     n+=Object.keys(_cliDados||{}).length; return n; }
@@ -13860,13 +13870,15 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function mapaNomeCpf(){
     var n=totalRegistros();
     if(_mapaNomeCpf && _mapaNomeCpfN===n) return _mapaNomeCpf;
-    var m={}, conta={};
-    function anota(nome,cpf){
+    var m={}, conta={}, contaC={};
+    function anota(nome,cpf,cons){
       var nm=norm(nome), c=soDigitos(cpf);
       if(!nm || c.length<8) return;
       conta[nm]=conta[nm]||{};
-      conta[nm][c]=(conta[nm][c]||0)+1; }
-    ORDEM.forEach(function(t){ (_regs[t]||[]).forEach(function(r){ anota(r.nome, r.cpf); }); });
+      conta[nm][c]=(conta[nm][c]||0)+1;
+      if(cons){ var kc=nm+'|'+norm(cons); contaC[kc]=contaC[kc]||{}; contaC[kc][c]=1; } }
+    ORDEM.forEach(function(t){ (_regs[t]||[]).forEach(function(r){ anota(r.nome, r.cpf, consultorDe(r)); }); });
+    _mapaNomeCons={}; Object.keys(contaC).forEach(function(k){ var cs=Object.keys(contaC[k]); if(cs.length===1) _mapaNomeCons[k]='cpf:'+cs[0]; });
     Object.keys(_cliDados||{}).forEach(function(k){ var d=_cliDados[k]; anota(d.nome, d.cpf); });
     /* so amarra quando o nome aponta para UM unico CPF — nomes iguais
        com CPFs diferentes continuam separados, como tem que ser */
@@ -13884,7 +13896,11 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     return m[nm] || ch; }
 
   /* chave do registro ja resolvida */
-  function chaveCli(r){ return chaveCanonica(chaveCliente(r), r && r.nome); }
+  function chaveCli(r){ var k=chaveCanonica(chaveCliente(r), r && r.nome);
+    if(k && k.indexOf('nome:')===0){ mapaNomeCpf(); var k2=_mapaNomeCons[norm(r.nome)+'|'+norm(consultorDe(r))]; if(k2) return k2; }
+    return k; }
+  window.gwaDocChaveCli=function(r){ return chaveCli(r); };
+  window.gwaDocNomeAmbiguo=function(r){ var m=mapaNomeCpf(); var nm=norm(r&&r.nome); if(!nm||soDigitos(r&&r.cpf).length>=8||m[nm]) return false; return chaveCli(r).indexOf('nome:')===0 && Object.keys(_mapaNomeCons).some(function(k){ return k.indexOf(nm+'|')===0; }); };
 
   function indiceClientes(){ var m={};
     ORDEM.forEach(function(t){ regs(t).forEach(function(r){ var k=chaveCli(r); if(!k) return;
