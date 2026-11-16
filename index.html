@@ -13366,6 +13366,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(_erPer==='tudo') return null;
     return [new Date(h.getFullYear(),h.getMonth(),1).getTime(), Date.now()+86400000*400]; }
   function erData(s){ var d=parseData(s); if(!d) return null; var m=String(s||'').match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(m && (d.getDate()!==+m[1] || d.getMonth()+1!==+m[2])) return null; return d; }
+  function erVejo(o){ return ehAdminDoc()||ehSupervisor()||podeEditar(o); }
+  function erQuem(o){ return erVejo(o)?(esc(o.nome||'')+' ('+esc(o.data||'')+', '+esc(o.consultorNome||o.consultor||'')+')'):'um cliente de outro consultor'; }
   function analisarErros(){
     var out=[], P=erPeriodo(), hoje=new Date(), hojeT=new Date(hoje.getFullYear(),hoje.getMonth(),hoje.getDate(),23,59,59).getTime();
     function add(t,r,g,titulo,exp,extra){ out.push({t:t,r:r,g:g,titulo:titulo,exp:exp,extra:extra||{}}); }
@@ -13381,9 +13383,10 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
         add(t,r,'alta','Lançamento repetido','Este registro é igual a outro ('+(t==='elogio'?'mesmo consultor, cliente, data, plataforma e link':(t==='defesa'?'mesmo CPF, data, tipo de defesa e protocolos':'mesmo CPF, data do contrato e serviço'))+'). Foi lançado '+a.length+' vezes e só 1 conta na produção e na premiação. Se for outro caso de verdade, diferencie (link, protocolo ou serviço); se não, apague a cópia.',{rep:true,orig:a[0].id}); }); });
       /* indices para protocolo/link repetidos em registros diferentes */
       var idxProt={}, idxLink={};
-      if(t==='defesa') brutos.forEach(function(r){ listaDefesas(r).forEach(function(d){ (protocolosDe(d,r)||[]).forEach(function(p){ var k=erProt(p); if(k.length>=5) (idxProt[k]=idxProt[k]||[]).push(r); }); }); });
-      if(t==='elogio') brutos.forEach(function(r){ var k=String(r.link||'').trim().toLowerCase().replace(/\/+$/,''); if(k.length>8) (idxLink[k]=idxLink[k]||[]).push(r); });
-      var cpfNomes={}; if(t!=='elogio') ORDEM.forEach(function(tt){ if(tt==='elogio') return; (regsBrutos(tt)||[]).forEach(function(o){ if(!o||o.removido===true||o.duplicado===true) return; var c=String(o.cpf||'').replace(/\D/g,''); if(c.length<8||!norm(o.nome)) return; (cpfNomes[c]=cpfNomes[c]||{})[norm(o.nome)]=o.nome; }); });
+      var _todos=(regsBrutos(t)||[]).filter(function(r){ return r && r.removido!==true && r.duplicado!==true; });
+      if(t==='defesa') _todos.forEach(function(r){ listaDefesas(r).forEach(function(d){ (protocolosDe(d,r)||[]).forEach(function(p){ var k=erProt(p); if(k.length>=5) (idxProt[k]=idxProt[k]||[]).push(r); }); }); });
+      if(t==='elogio') _todos.forEach(function(r){ var k=String(r.link||'').trim().toLowerCase().replace(/\/+$/,''); if(k.length>8) (idxLink[k]=idxLink[k]||[]).push(r); });
+      var cpfNomes={}; if(t!=='elogio') ORDEM.forEach(function(tt){ if(tt==='elogio') return; (regsBrutos(tt)||[]).forEach(function(o){ if(!o||o.removido===true||o.duplicado===true) return; var c=String(o.cpf||'').replace(/\D/g,''); if(c.length<8||!norm(o.nome)) return; var _n=norm(o.nome); var _m=cpfNomes[c]=cpfNomes[c]||{}; if(!_m[_n]||erVejo(o)) _m[_n]=erVejo(o)?o.nome:'(cliente de outro consultor)'; }); });
       brutos.forEach(function(r){
         if(!noPer(t,r)) return;
         var dt=dataDe(t,r), d=erData(dt);
@@ -13408,9 +13411,9 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
           if(r.semUsuario) add(t,r,'media','Responsável sem usuário','Veio da planilha com o responsável "'+esc(r.responsavelPlanilha||r.consultorNome||'')+'", que não tem usuário na intranet.');
           var vistos={};
           var _eu=String(r.cpf||'').replace(/\D/g,'')||norm(r.nome);
-          ld.forEach(function(x){ (protocolosDe(x,r)||[]).forEach(function(p){ var k=erProt(p); if(k.length<7||vistos[k]) return; vistos[k]=1;
-            var outros=(idxProt[k]||[]).filter(function(o){ return o.id!==r.id && (String(o.cpf||'').replace(/\D/g,'')||norm(o.nome))!==_eu; });
-            if(outros.length) add(t,r,'alta','Protocolo em outro cliente','O protocolo '+esc(p)+' também está na defesa de outro cliente: '+outros.map(function(o){ return esc(o.nome||'')+' ('+esc(o.data||'')+', '+esc(o.consultorNome||o.consultor||'')+')'; }).join('; ')+'. Um dos dois está com o protocolo (ou o CPF) errado.'); }); });
+          ld.forEach(function(x){ (protocolosDe(x,r)||[]).forEach(function(p){ var k=erProt(p); if(k.length<10||vistos[k]) return; vistos[k]=1;
+            var outros=(idxProt[k]||[]).filter(function(o){ return o.id!==r.id && (String(o.cpf||'').replace(/\D/g,'')||norm(o.nome))!==_eu && norm(o.tipoDefesa)===norm(r.tipoDefesa); });
+            if(outros.length) add(t,r,'alta','Protocolo em outro cliente','O protocolo '+esc(p)+' também está na defesa de outro cliente: '+outros.map(erQuem).join('; ')+'. Um dos dois está com o protocolo (ou o CPF) errado.'); }); });
         }
         if(t==='doc'){
           if(!String(r.servicoContratado||'').trim()) add(t,r,'media','Sem serviço contratado','O serviço contratado não foi informado: fica fora dos relatórios por serviço.');
@@ -13425,7 +13428,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
           if(r.validado===false) add(t,r,'baixa','Recusado pelo supervisor','O supervisor recusou este elogio'+(r.validadoPor?(' ('+esc(r.validadoPor)+')'):'')+'. Ele não conta na premiação.');
           var lk=String(r.link||'').trim().toLowerCase().replace(/\/+$/,'');
           if(lk.length>8){ var outrosL=(idxLink[lk]||[]).filter(function(o){ return o.id!==r.id && norm(o.nome)!==norm(r.nome); });
-            if(outrosL.length) add(t,r,'alta','Mesmo link em outro cliente','Este link também está no elogio de '+outrosL.map(function(o){ return esc(o.nome||'')+' ('+esc(o.data||'')+')'; }).join('; ')+'. Um dos dois está com o link errado.'); }
+            if(outrosL.length) add(t,r,'alta','Mesmo link em outro cliente','Este link também está no elogio de '+outrosL.map(erQuem).join('; ')+'. Um dos dois está com o link errado.'); }
         }
       });
     });
@@ -13475,7 +13478,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var tab=lista.length?('<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden"><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px;min-width:1000px"><thead><tr style="background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'">'+
       ['Gravidade','Tipo','Cliente','Consultor','Data','O que está errado e por quê',''].map(function(h){ return '<th style="padding:10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:'+Co.mut+'">'+h+'</th>'; }).join('')+'</tr></thead><tbody>'+linhas+'</tbody></table></div></div>'+(lista.length>600?'<div style="font-size:12px;color:'+Co.mut+';margin-top:8px">Mostrando 600 de '+lista.length+'. Use os filtros para ver o resto.</div>':''))
       :'<div style="background:'+Co.card+';border:1px dashed '+Co.line+';border-radius:16px;padding:34px;text-align:center;color:'+Co.mut+'"><i class="fas fa-circle-check" style="font-size:28px;color:'+Co.green+';display:block;margin-bottom:8px"></i>Nenhum problema encontrado com esses filtros.</div>';
-    return '<div style="font-size:12.5px;color:'+Co.mut+';margin-bottom:12px;line-height:1.55">O sistema confere os lançamentos e mostra o que pode estar fazendo os números não baterem (repetidos, datas erradas, CPF inválido, protocolo ou link em dois registros, campos faltando) e o motivo de cada um.</div>'+filtros+cards+resumo+tab;
+    return ((ehAdminDoc()||ehSupervisor())?'':'<div style="background:rgba(74,159,213,.1);border:1px solid rgba(74,159,213,.4);color:#9fd0f0;border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:12.5px"><i class="fas fa-user"></i> Aqui aparecem só os <b>seus</b> lançamentos com algum problema. Corrija pelo botão <b>Corrigir</b>; se tiver dúvida, fale com o seu supervisor.</div>')+'<div style="font-size:12.5px;color:'+Co.mut+';margin-bottom:12px;line-height:1.55">O sistema confere os lançamentos e mostra o que pode estar fazendo os números não baterem (repetidos, datas erradas, CPF inválido, protocolo ou link em dois registros, campos faltando) e o motivo de cada um.</div>'+filtros+cards+resumo+tab;
   }
   function viewProducao(){
     var g=pdDados();
