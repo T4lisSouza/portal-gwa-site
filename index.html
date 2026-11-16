@@ -13143,12 +13143,12 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     var dept={Comercial:0,Negociacao:0,Outros:0};
     novos.forEach(function(n){ dept[deptDoNovo(n)]=(dept[deptDoNovo(n)]||0)+1; });
     var porOp={};
-    function linha(k){ if(!porOp[k]) porOp[k]={quem:k,novos:0,defesas:0,docs:0,eloEnv:0,eloVer:0,comercial:0,negociacao:0}; return porOp[k]; }
+    function linha(k){ if(!porOp[k]) porOp[k]={quem:k,novos:0,defesas:0,docs:0,eloSol:0,eloEnv:0,eloVer:0,comercial:0,negociacao:0}; return porOp[k]; }
     novos.forEach(function(n){ var l=opDoNovo(n); var k=l?nomeDoLogin(l):(n.responsavel||'(sem operador)');
       var o=linha(canonConsultor(k)); o.novos++; var d=deptDoNovo(n); if(d==='Comercial') o.comercial++; else if(d==='Negociacao') o.negociacao++; });
     defs.forEach(function(r){ linha(consultorDe(r)).defesas+=qtdDefesas(r); });
     docs.forEach(function(r){ linha(consultorDe(r)).docs++; });
-    elos.forEach(function(r){ var o=linha(consultorDe(r)); if(elogioEnviado(r)) o.eloEnv++; if(elogioConcluido(r)) o.eloVer++; });
+    elos.forEach(function(r){ var o=linha(consultorDe(r)); o.eloSol++; if(elogioEnviado(r)) o.eloEnv++; if(elogioConcluido(r)) o.eloVer++; });
     var lista=Object.keys(porOp).map(function(k){ return porOp[k]; }).sort(function(a,b){ return (b.novos+b.defesas+b.docs)-(a.novos+a.defesas+a.docs); });
     return {periodo:relPeriodo(), novos:novos, dept:dept, defesas:defs, defesasQtd:somaDefesas(defs), docs:docs, elogios:elos,
       eloEnv:elos.filter(elogioEnviado).length, eloVer:elos.filter(elogioConcluido).length,
@@ -13176,23 +13176,23 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
   /* mesmo quadro do relatorio, agora tambem na tela (atualiza a cada abertura) */
   function blocoOperadores(){ var g=relGeralDados();
-    var tot=g.lista.reduce(function(a,o){ return {novos:a.novos+o.novos,comercial:a.comercial+o.comercial,negociacao:a.negociacao+o.negociacao,defesas:a.defesas+o.defesas,docs:a.docs+o.docs,eloEnv:a.eloEnv+o.eloEnv,eloVer:a.eloVer+o.eloVer}; },
-      {novos:0,comercial:0,negociacao:0,defesas:0,docs:0,eloEnv:0,eloVer:0});
+    var tot=g.lista.reduce(function(a,o){ return {novos:a.novos+o.novos,comercial:a.comercial+o.comercial,negociacao:a.negociacao+o.negociacao,defesas:a.defesas+o.defesas,docs:a.docs+o.docs,eloSol:a.eloSol+o.eloSol,eloEnv:a.eloEnv+o.eloEnv,eloVer:a.eloVer+o.eloVer}; },
+      {novos:0,comercial:0,negociacao:0,defesas:0,docs:0,eloSol:0,eloEnv:0,eloVer:0});
     var c=function(v,cor,peso){ return '<td style="padding:9px 10px;text-align:center;color:'+(cor||Co.sub)+';font-weight:'+(peso||600)+'">'+v+'</td>'; };
     var th=function(t,al){ return '<th style="padding:10px;text-align:'+(al||'center')+';white-space:nowrap">'+t+'</th>'; };
     var rows=g.lista.map(function(o){ return '<tr style="border-bottom:1px solid '+Co.line+'">'+
       '<td style="padding:9px 10px;color:#fff;font-weight:600;white-space:nowrap">'+esc(o.quem)+'</td>'+
-      c(o.novos,Co.orangeL,800)+c(o.comercial,Co.green)+c(o.negociacao,Co.blue)+c(o.defesas,Co.green)+c(o.docs,Co.blue)+c(o.eloEnv,Co.orangeL)+c(o.eloVer)+'</tr>'; }).join('')
-      ||'<tr><td colspan="8" style="padding:22px;text-align:center;color:'+Co.mut+'">Sem movimento no periodo.</td></tr>';
+      c(o.novos,Co.orangeL,800)+c(o.comercial,Co.green)+c(o.negociacao,Co.blue)+c(o.defesas,Co.green)+c(o.docs,Co.blue)+c(o.eloSol)+c(o.eloEnv,Co.orangeL)+c(o.eloVer)+'</tr>'; }).join('')
+      ||'<tr><td colspan="9" style="padding:22px;text-align:center;color:'+Co.mut+'">Sem movimento no periodo.</td></tr>';
     return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;overflow:hidden;margin-bottom:16px">'+
       '<div style="padding:14px 16px 10px"><div style="color:#fff;font-weight:800;font-size:15px"><i class="fas fa-users" style="color:'+Co.orange+'"></i> Detalhamento por operador</div>'+
-      '<div style="font-size:11px;color:'+Co.mut+';margin-top:2px">Mesmo quadro do relatorio &middot; periodo '+esc(g.periodo.label)+'</div></div>'+
+      '<div style="font-size:11px;color:'+Co.mut+';margin-top:2px">Mesmo quadro do relatorio &middot; periodo '+esc(g.periodo.label)+' &middot; Elogios: <b>solicitados</b> = todos os pedidos do periodo (igual à Produção diária); <b>enviados</b> = o cliente já publicou (tem data do elogio); <b>verificados</b> = conferidos pelo supervisor.</div></div>'+
       '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;color:'+Co.sub+';font-size:13px">'+
       '<thead><tr style="color:'+Co.mut+';background:'+Co.bgA+';border-bottom:2px solid '+Co.orangeD+'">'+
-      th('Operador','left')+th('Contratos novos')+th('Comercial')+th('Negociacao')+th('Defesas')+th('Documentacao')+th('Elogios')+th('Verificados')+'</tr></thead>'+
+      th('Operador','left')+th('Contratos novos')+th('Comercial')+th('Negociacao')+th('Defesas')+th('Documentacao')+th('Elogios solicitados')+th('Elogios enviados')+th('Verificados')+'</tr></thead>'+
       '<tbody>'+rows+'</tbody>'+
       '<tfoot><tr style="background:'+Co.bgA+';border-top:2px solid '+Co.orangeD+'"><td style="padding:10px;color:#fff;font-weight:800">TOTAL</td>'+
-      c(tot.novos,Co.orangeL,900)+c(tot.comercial,'#fff',800)+c(tot.negociacao,'#fff',800)+c(tot.defesas,'#fff',800)+c(tot.docs,'#fff',800)+c(tot.eloEnv,'#fff',800)+c(tot.eloVer,'#fff',800)+
+      c(tot.novos,Co.orangeL,900)+c(tot.comercial,'#fff',800)+c(tot.negociacao,'#fff',800)+c(tot.defesas,'#fff',800)+c(tot.docs,'#fff',800)+c(tot.eloSol,'#fff',800)+c(tot.eloEnv,'#fff',800)+c(tot.eloVer,'#fff',800)+
       '</tr></tfoot></table></div></div>'; }
 
   function relGeralHtml(){ var g=relGeralDados();
@@ -13201,8 +13201,8 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<td style="text-align:center">'+o.defesas+'</td><td style="text-align:center">'+o.docs+'</td>'+
       '<td style="text-align:center">'+o.eloEnv+'</td><td style="text-align:center">'+o.eloVer+'</td></tr>'; }).join('')
       ||'<tr><td colspan="8" style="text-align:center;color:#888">Sem movimento no periodo.</td></tr>';
-    var tot=g.lista.reduce(function(a,o){ return {novos:a.novos+o.novos,comercial:a.comercial+o.comercial,negociacao:a.negociacao+o.negociacao,defesas:a.defesas+o.defesas,docs:a.docs+o.docs,eloEnv:a.eloEnv+o.eloEnv,eloVer:a.eloVer+o.eloVer}; },
-      {novos:0,comercial:0,negociacao:0,defesas:0,docs:0,eloEnv:0,eloVer:0});
+    var tot=g.lista.reduce(function(a,o){ return {novos:a.novos+o.novos,comercial:a.comercial+o.comercial,negociacao:a.negociacao+o.negociacao,defesas:a.defesas+o.defesas,docs:a.docs+o.docs,eloSol:a.eloSol+o.eloSol,eloEnv:a.eloEnv+o.eloEnv,eloVer:a.eloVer+o.eloVer}; },
+      {novos:0,comercial:0,negociacao:0,defesas:0,docs:0,eloSol:0,eloEnv:0,eloVer:0});
     return '<!doctype html><html><head><meta charset="utf-8"><title>Relatorio Documentacao GWA</title>'+
       '<style>body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:30px}'+
       'h1{color:#c4661a;font-size:19px;margin:0 0 4px}.sub{color:#666;font-size:12px}'+
@@ -13239,7 +13239,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div class="row"><span>&nbsp;&nbsp;&bull; ainda pendentes</span><span>'+g.eloPend+'</span></div>'+
       '</div>'+
       '<div class="box"><b>Detalhamento por operador</b>'+
-      '<table><thead><tr><th>Operador</th><th style="text-align:center">Contratos novos</th><th style="text-align:center">Comercial</th><th style="text-align:center">Negociacao</th><th style="text-align:center">Defesas</th><th style="text-align:center">Documentacao</th><th style="text-align:center">Elogios</th><th style="text-align:center">Verificados</th></tr></thead>'+
+      '<table><thead><tr><th>Operador</th><th style="text-align:center">Contratos novos</th><th style="text-align:center">Comercial</th><th style="text-align:center">Negociacao</th><th style="text-align:center">Defesas</th><th style="text-align:center">Documentacao</th><th style="text-align:center">Elogios enviados</th><th style="text-align:center">Verificados</th></tr></thead>'+
       '<tbody>'+rows+'</tbody>'+
       '<tfoot><tr><td>TOTAL</td><td style="text-align:center">'+tot.novos+'</td><td style="text-align:center">'+tot.comercial+'</td><td style="text-align:center">'+tot.negociacao+'</td><td style="text-align:center">'+tot.defesas+'</td><td style="text-align:center">'+tot.docs+'</td><td style="text-align:center">'+tot.eloEnv+'</td><td style="text-align:center">'+tot.eloVer+'</td></tr></tfoot></table></div>'+
       secaoPremiacaoHtml()+
@@ -13369,7 +13369,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function analisarErros(){
     var out=[], P=erPeriodo(), hoje=new Date(), hojeT=new Date(hoje.getFullYear(),hoje.getMonth(),hoje.getDate(),23,59,59).getTime();
     function add(t,r,g,titulo,exp,extra){ out.push({t:t,r:r,g:g,titulo:titulo,exp:exp,extra:extra||{}}); }
-    function noPer(t,r){ if(!P) return true; var d=erData(dataDe(t,r)); if(!d) return true; var x=d.getTime(); return x>=P[0]&&x<=P[1]; }
+    function noPer(t,r){ if(!P) return true; var d=erData(dataDe(t,r)); var x=d?d.getTime():Number(r.ts||r.atualizadoEm||0); if(!x) return true; return x>=P[0]&&x<=P[1]; }
     function dias(d){ return Math.floor((Date.now()-d.getTime())/86400000); }
     ORDEM.forEach(function(t){
       if(_erTipo && _erTipo!==t) return;
@@ -13404,23 +13404,22 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
           var ehProv=/PROVIS/.test(norm(r.tipoDefesa))||ld.some(function(x){ return /PROVIS/.test(norm(x&&x.tipo)); });
           if(!temProt && !ehProv) add(t,r,'media','Defesa sem protocolo','Nenhum protocolo/processo informado. Fica difícil acompanhar e a defesa conta como 1 só.');
           if(!String(r.tipoDefesa||'').trim() && !ld.some(function(x){ return x&&x.tipo; })) add(t,r,'media','Sem tipo de defesa','O tipo (suspensão, cassação, multa...) não foi informado: a defesa fica fora dos relatórios por tipo.');
-          if(/CORREIO/i.test(r.tipoEnvio||'') && !String(r.objeto||'').trim() && d && dias(d)>5) add(t,r,'media','Correios sem rastreio','Enviada pelos Correios há '+dias(d)+' dias e ainda sem código de rastreio.');
           if(!String(r.uf||'').trim()||!String(r.orgao||'').trim()) add(t,r,'baixa','Sem UF/órgão de destino','Falta a UF ou o órgão para onde a defesa foi: fica fora dos relatórios por órgão/UF.');
           if(r.semUsuario) add(t,r,'media','Responsável sem usuário','Veio da planilha com o responsável "'+esc(r.responsavelPlanilha||r.consultorNome||'')+'", que não tem usuário na intranet.');
           var vistos={};
-          ld.forEach(function(x){ (protocolosDe(x,r)||[]).forEach(function(p){ var k=erProt(p); if(k.length<5||vistos[k]) return; vistos[k]=1;
-            var outros=(idxProt[k]||[]).filter(function(o){ return o.id!==r.id && chaveDup(t,o)!==chaveDup(t,r); });
-            if(outros.length) add(t,r,'alta','Protocolo em mais de um registro','O protocolo '+esc(p)+' também está em '+outros.map(function(o){ return esc(o.nome||'')+' ('+esc(o.data||'')+', '+esc(o.consultorNome||o.consultor||'')+')'; }).join('; ')+'. A mesma defesa pode estar contando duas vezes.'); }); });
+          var _eu=String(r.cpf||'').replace(/\D/g,'')||norm(r.nome);
+          ld.forEach(function(x){ (protocolosDe(x,r)||[]).forEach(function(p){ var k=erProt(p); if(k.length<7||vistos[k]) return; vistos[k]=1;
+            var outros=(idxProt[k]||[]).filter(function(o){ return o.id!==r.id && (String(o.cpf||'').replace(/\D/g,'')||norm(o.nome))!==_eu; });
+            if(outros.length) add(t,r,'alta','Protocolo em outro cliente','O protocolo '+esc(p)+' também está na defesa de outro cliente: '+outros.map(function(o){ return esc(o.nome||'')+' ('+esc(o.data||'')+', '+esc(o.consultorNome||o.consultor||'')+')'; }).join('; ')+'. Um dos dois está com o protocolo (ou o CPF) errado.'); }); });
         }
         if(t==='doc'){
           if(!String(r.servicoContratado||'').trim()) add(t,r,'media','Sem serviço contratado','O serviço contratado não foi informado: fica fora dos relatórios por serviço.');
-          if(!String(r.docsOkPasta||'').trim()) add(t,r,'baixa','Sem status Docs OK / Pasta','Sem o status, a documentação é contada como "Docs OK" na produção.');
           if(String(r.dataContrato||'').trim() && !erData(r.dataContrato)) add(t,r,'media','Data do contrato inválida','A data do contrato "'+esc(r.dataContrato)+'" não é uma data válida.');
         }
         if(t==='elogio'){
           var de=String(r.dataElogio||'').trim(), dd=de?erData(de):null;
           if(de && !dd) add(t,r,'alta','Data do elogio inválida','A data do elogio "'+esc(de)+'" não é válida (ex.: ano com 3 números). O elogio fica fora da premiação até corrigir em Premiação DOC › Data do elogio.');
-          if(dd && d && dd.getTime()<d.getTime()-86400000) add(t,r,'media','Elogio antes da solicitação','A data do elogio ('+esc(de)+') é anterior à data da solicitação ('+esc(r.data||'')+'). Confira se não foi invertida.');
+          if(dd && d && dd.getTime()<d.getTime()-7*86400000) add(t,r,'media','Elogio antes da solicitação','A data do elogio ('+esc(de)+') é anterior à data da solicitação ('+esc(r.data||'')+'). Confira se não foi invertida.');
           if((dd||r.validado===true) && !String(r.link||'').trim()) add(t,r,'media','Elogio sem link','Foi enviado/verificado sem o link do elogio: não dá para o supervisor conferir.');
           if(!dd && r.validado===undefined && d && dias(d)>15 && !elogioLegado(r)) add(t,r,'baixa','Aguardando a data do elogio há '+dias(d)+' dias','O cliente ainda não publicou (ou falta informar a data do elogio). Enquanto isso não conta na premiação.');
           if(r.validado===false) add(t,r,'baixa','Recusado pelo supervisor','O supervisor recusou este elogio'+(r.validadoPor?(' ('+esc(r.validadoPor)+')'):'')+'. Ele não conta na premiação.');
