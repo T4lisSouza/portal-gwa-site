@@ -4,6 +4,58 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <title>Portal do Colaborador — GWA Consultoria</title>
+<script>
+/* ===== INTRANET GWA :: CACHE DE LEITURAS DA API (17/11/2026) =====
+   Menos requisicoes ao banco:
+   - GETs iguais ao mesmo tempo viram 1 so requisicao;
+   - a resposta de um GET fica guardada por alguns segundos (20s; 60s nas colecoes grandes; 5 min com a aba escondida);
+   - qualquer gravacao (PUT/POST/DELETE) apaga tudo que estava guardado, entao quem grava ve o dado novo na hora.
+   Desligar: localStorage.setItem('gwa_cache_off','1') */
+(function(){
+  if(window.__gwaApiCache) return; window.__gwaApiCache=true;
+  var orig=window.fetch; if(typeof orig!=='function') return;
+  var GRANDES={doc_defesa:1,doc_doc:1,doc_elogio:1,doc_clientes:1,vendas:1,premiacoes:1,usuarios:1,audit:1,custos:1,monitorias:1};
+  var NUNCA=/\/api\/(sessions|auth|login|logout|health)\b/i;
+  var guard={}, voando={}, stats={rede:0,cache:0,junto:0,gravacoes:0};
+  window.gwaApiCacheStats=function(){ return JSON.parse(JSON.stringify(stats)); };
+  window.gwaApiCacheLimpar=function(col){ if(!col){ guard={}; return; } Object.keys(guard).forEach(function(k){ if(colDe(k)===col) delete guard[k]; }); };
+  function desligado(){ try{ return localStorage.getItem('gwa_cache_off')==='1'; }catch(e){ return false; } }
+  function colDe(url){ var m=String(url).match(/\/api\/([^\/?#|]+)/); return m?decodeURIComponent(m[1]):''; }
+  function ttl(col){ if(document.hidden) return 300000; return GRANDES[col]?60000:20000; }
+  function chaveDe(url,o){ var h=(o&&o.headers)||{}; var tk=''; try{ tk=(h.get?h.get('X-MC-Token'):(h['X-MC-Token']||h['x-mc-token']))||''; }catch(e){}
+    return String(url)+'|'+String(tk).slice(-6); }
+  function resposta(c){ return new Response(c.body,{status:c.status,statusText:c.statusText,headers:c.headers}); }
+  window.fetch=function(input,o){
+    try{
+      if(typeof input!=='string' && !(input instanceof URL)) return orig.apply(this,arguments);
+      var url=String(input);
+      if(url.indexOf('/api/')<0 || NUNCA.test(url) || desligado()) return orig.apply(this,arguments);
+      var met=String((o&&o.method)||'GET').toUpperCase(), col=colDe(url);
+      if(met!=='GET' && met!=='HEAD'){
+        stats.gravacoes++;
+        var apaga=function(){ guard={}; };   /* qualquer gravacao limpa tudo: o servidor pode mexer em mais de uma colecao */
+        apaga();
+        return orig.apply(this,arguments).then(function(r){ apaga(); return r; },function(e){ apaga(); throw e; });
+      }
+      if(o && (o.cache==='no-store' || o.cache==='reload')) return orig.apply(this,arguments);
+      var k=chaveDe(url,o), c=guard[k];
+      if(c && (Date.now()-c.em)<ttl(col)){ stats.cache++; return Promise.resolve(resposta(c)); }
+      if(voando[k]){ stats.junto++; var me=this, a2=arguments; return voando[k].then(function(c2){ return c2?resposta(c2):orig.apply(me,a2); }); }
+      stats.rede++;
+      var self=this, args=arguments;
+      var p=orig.apply(self,args).then(function(r){
+        if(!r || !r.ok || typeof r.clone!=='function') { delete voando[k]; return {falhou:r}; }
+        return r.clone().text().then(function(txt){
+          var hs={}; try{ r.headers.forEach(function(v,n){ hs[n]=v; }); }catch(e){}
+          var c2={body:txt,status:r.status,statusText:r.statusText,headers:hs,em:Date.now()};
+          guard[k]=c2; delete voando[k]; return c2; });
+      },function(e){ delete voando[k]; throw e; });
+      voando[k]=p.then(function(c2){ return (c2&&c2.falhou)?null:c2; },function(){ return null; });
+      return p.then(function(c2){ return (c2&&c2.falhou)?c2.falhou:resposta(c2); });
+    }catch(e){ return orig.apply(this,arguments); }
+  };
+})();
+</script>
 <link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,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"/>
 <!-- ===== INTRANET GWA :: APP NO CELULAR (manifest, icones) ===== -->
 <link rel="manifest" href="manifest.webmanifest"/>
