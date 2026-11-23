@@ -13196,7 +13196,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     novos.forEach(function(n){ dept[deptDoNovo(n)]=(dept[deptDoNovo(n)]||0)+1; });
     var porOp={};
     function linha(k){ if(!porOp[k]) porOp[k]={quem:k,novos:0,defesas:0,docs:0,eloSol:0,eloEnv:0,eloVer:0,comercial:0,negociacao:0}; return porOp[k]; }
-    novos.forEach(function(n){ var l=opDoNovo(n); var k=l?nomeDoLogin(l):(n.responsavel||'(sem operador)');
+    novos.forEach(function(n){ var l=opDoNovo(n); var k=l?nomeDoLogin(l):(n.responsavel?(n.responsavel+' (não é do DOC)'):'(sem responsável do DOC)');
       var o=linha(canonConsultor(k)); o.novos++; var d=deptDoNovo(n); if(d==='Comercial') o.comercial++; else if(d==='Negociacao') o.negociacao++; });
     defs.forEach(function(r){ linha(consultorDe(r)).defesas+=qtdDefesas(r); });
     docs.forEach(function(r){ linha(consultorDe(r)).docs++; });
@@ -14148,7 +14148,16 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
   function loginDoNome(nome){ if(!nome) return ''; var us=usuarios();
     for(var i=0;i<us.length;i++){ if(mesmoConsultor(nome, us[i].nome||us[i].login)) return loginU(us[i]); } return ''; }
   /* operador do DOC responsavel pelo card ('' = ninguem reconhecido) */
-  function opDoNovo(n){ var l=loginDoNome((n&&n.responsavel)||''); return (l&&acessos()[l])?l:''; }
+  function opDoPlanilha(n){ var l=loginDoNome((n&&n.responsavel)||''); return (l&&acessos()[l])?l:''; }
+  /* 23/11: card sem responsavel do DOC na planilha (vazio ou pessoa que nao e do DOC) fica com quem lancou o
+     primeiro registro do cliente a partir do dia do card */
+  var _idxMemo=null, _idxMemoT=0;
+  function idxMemo(){ if(!_idxMemo || Date.now()-_idxMemoT>3000){ _idxMemo=indiceClientes(); _idxMemoT=Date.now(); } return _idxMemo; }
+  function donoPorLancamento(n){ try{ var ch=chaveDoNovo(n); if(!ch) return ''; var c=idxMemo()[ch]; if(!c||!c.itens||!c.itens.length) return '';
+    var t0=Number(n.ts||0)-86400000, its=c.itens.slice().sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+    var it=its.filter(function(x){ return (x.ts||0)>=t0; })[0]||its[its.length-1];
+    var l=loginDoNome(consultorDe(it.reg)); return (l&&acessos()[l])?l:''; }catch(e){ return ''; } }
+  function opDoNovo(n){ return opDoPlanilha(n)||donoPorLancamento(n); }
   function chaveDoNovo(n){ var c=soDigitos(n&&n.cpf); if(c.length>=8) return 'cpf:'+c;
     var x=norm(nomeNovo(n)); return x?chaveCanonica('nome:'+x, nomeNovo(n)):''; }
   /* o card sai da fila quando o operador lanca qualquer registro desse cliente */
@@ -14308,7 +14317,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       '<div style="flex:1;min-width:230px"><div style="color:#fff;font-weight:700;font-size:15px">'+esc(nomeNovo(n)||'(sem nome)')+'</div>'+
       '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px">CPF '+esc(cpfBonito(n.cpf))+(n.cnh?(' &middot; CNH '+esc(n.cnh)):'')+' &middot; '+wa+'</div>'+
       '<div style="font-size:12px;color:'+Co.mut+';margin-top:3px"><i class="fas fa-calendar-day"></i> '+esc(brNovo(n))+' &middot; <i class="fas fa-id-badge"></i> '+esc(n.cardKey||'')+(n.vendedor?(' &middot; vendedor '+esc(n.vendedor)):'')+'</div>'+
-      '<div style="margin-top:7px">'+(dono?('<span style="background:rgba(74,159,213,.16);color:'+Co.blue+';border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700"><i class="fas fa-user"></i> '+esc(nomeDoLogin(dono))+'</span>')
+      '<div style="margin-top:7px">'+(dono?('<span style="background:rgba(74,159,213,.16);color:'+Co.blue+';border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700"><i class="fas fa-user"></i> '+esc(nomeDoLogin(dono))+(opDoPlanilha(n)?'':(' &middot; pelo lançamento'+(n.responsavel?(' (planilha: '+esc(n.responsavel)+')'):' (sem responsável na planilha)')))+'</span>')
         :('<span style="background:rgba(229,83,60,.16);color:'+Co.red+';border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700"><i class="fas fa-user-slash"></i> aguardando atribuicao'+(n.responsavel?(' ('+esc(n.responsavel)+')'):'')+'</span>'))+
       (n.tipoServico?('<span style="background:'+Co.card2+';color:'+Co.sub+';border-radius:20px;padding:3px 10px;font-size:11px;margin-left:5px">'+esc(n.tipoServico)+'</span>'):'')+'</div>'+
       sel+acoes+'</div></div></div>'; }
@@ -14320,7 +14329,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
     if(admin) abas.push(['semdono','Aguardando atribuicao','fa-user-slash']);
     abas.push(['ok','Ja movimentados','fa-circle-check']);
     var navAbas='<div class="gwaTabs" style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">'+abas.map(function(a){ var on=_novosAba===a[0];
-      var ex=(a[0]==='semdono')?(' ('+novosSemDono().length+')'):((a[0]==='fila')?(' ('+pendentesDe(novosDoEscopo(),idx).length+')'):'');
+      var ex=(a[0]==='semdono')?(' ('+pendentesDe(novosSemDono(),idx).length+')'):((a[0]==='fila')?(' ('+pendentesDe(novosDoEscopo(),idx).length+')'):'');
       return '<button onclick="__gwaNovosView(&#39;'+a[0]+'&#39;)" style="padding:8px 14px;border-radius:10px;border:1px solid '+(on?'transparent':Co.line)+';background:'+(on?Co.gradO:Co.card2)+';color:#fff;font-size:13px;font-weight:600;cursor:pointer"><i class="fas '+a[2]+'"></i> '+a[1]+ex+'</button>'; }).join('')+
       '<button onclick="__gwaNovosRecarregar()" style="padding:8px 14px;border-radius:10px;border:1px solid '+Co.line+';background:transparent;color:'+Co.sub+';font-size:13px;cursor:pointer"><i class="fas fa-rotate"></i> Atualizar</button></div>';
 
@@ -14351,7 +14360,12 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
     if(_novosAba==='semdono'&&admin){
       var s=ordena(filtra(pendentesDe(novosSemDono(),idx)));
-      return topo+navAbas+busca+(s.length?s.map(function(n){ return cardNovo(n,idx,true); }).join(''):vazio('Nenhum cliente aguardando atribuicao.','fa-user-check')); }
+      var semResp=ordena(filtra(novosBase().filter(function(n){ return !opDoPlanilha(n) && movimentado(n,idx); })));
+      var porQ={}; semResp.forEach(function(n){ var d=opDoNovo(n); var k=d?nomeDoLogin(d):'(ninguém do DOC)'; porQ[k]=(porQ[k]||0)+1; });
+      return topo+navAbas+busca+(s.length?s.map(function(n){ return cardNovo(n,idx,true); }).join(''):vazio('Nenhum cliente aguardando atribuicao.','fa-user-check'))+
+        (semResp.length?('<div style="margin:20px 0 10px;color:#fff;font-weight:800;font-size:15px"><i class="fas fa-user-tag" style="color:'+Co.orange+'"></i> Vieram sem responsável do DOC na planilha e já foram movimentados ('+semResp.length+')</div>'+
+          '<div style="font-size:12px;color:'+Co.mut+';margin-bottom:10px">Esses clientes ficam com quem lançou o primeiro registro deles (é assim que contam no relatório). '+Object.keys(porQ).sort().map(function(k){ return esc(k)+': <b style="color:#fff">'+porQ[k]+'</b>'; }).join(' &middot; ')+'</div>'+
+          semResp.map(function(n){ return cardNovo(n,idx,true); }).join('')):''); }
 
     if(_novosAba==='ok'){
       var o=ordena(filtra(meus.filter(function(n){ return movimentado(n,idx); }))).slice(0,150);
