@@ -14350,7 +14350,14 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
     function vazio(msg,ic){ return '<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:34px;text-align:center;color:'+Co.mut+'"><i class="fas '+(ic||'fa-inbox')+'" style="font-size:28px;display:block;margin-bottom:12px;opacity:.5"></i>'+msg+'</div>'; }
     var busca='<div style="position:relative;margin-bottom:12px"><i class="fas fa-magnifying-glass" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:'+Co.orange+';font-size:14px"></i><input id="novBuscaInp" value="'+esc(_novosBusca)+'" oninput="__gwaNovosBusca(this.value)" placeholder="filtrar por nome, CPF ou card..." style="width:100%;box-sizing:border-box;padding:11px 14px 11px 40px;border-radius:12px;border:1px solid '+Co.line+';background:'+Co.card+';color:#fff;font-size:14px"></div>';
-    function filtra(a){ var q=norm(_novosBusca), qd=soDigitos(_novosBusca); if(!q&&!qd) return a;
+    if(admin||sup){ var _qSem=novosBase().filter(function(n){ return !opDoNovo(n); }).length;
+      busca='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;margin-bottom:12px"><div style="flex:1 1 320px">'+busca.replace('margin-bottom:12px','margin-bottom:0')+'</div>'+
+        '<select onchange="__gwaNovosOp(this.value)" title="Filtrar por consultor" style="flex:0 0 auto;padding:10px 13px;border-radius:12px;border:1px solid '+(_fNovoOp?Co.orangeD:Co.line)+';background:'+Co.card2+';color:#fff;font-weight:700;font-size:13px">'+
+        '<option value="">Todos os consultores</option><option value="__sem__"'+(_fNovoOp==='__sem__'?' selected':'')+'>Sem consultor atribuído ('+_qSem+')</option>'+
+        Object.keys(acessos()).sort().map(function(l){ return '<option value="'+esc(l)+'"'+(_fNovoOp===l?' selected':'')+'>'+esc(nomeDoLogin(l))+'</option>'; }).join('')+'</select></div>'; }
+    function filtra(a){ var q=norm(_novosBusca), qd=soDigitos(_novosBusca);
+      if(_fNovoOp) a=a.filter(function(n){ var o=opDoNovo(n); return _fNovoOp==='__sem__'?!o:(o===_fNovoOp); });
+      if(!q&&!qd) return a;
       return a.filter(function(n){ return (q&&norm(nomeNovo(n)+' '+(n.cardKey||'')).indexOf(q)>=0)||(qd&&qd.length>=3&&soDigitos(n.cpf).indexOf(qd)>=0); }); }
     function ordena(a){ return a.slice().sort(function(x,y){ var d=String(ymdNovo(y)).localeCompare(String(ymdNovo(x))); return d||((y.ts||0)-(x.ts||0)); }); }
 
@@ -14373,7 +14380,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
 
     /* ---- visao geral (admin / supervisor): total de novos clientes por dia ---- */
     var todos=admin?novosBase():novosDoEscopo();
-    if(_fNovoOp) todos=todos.filter(function(n){ return opDoNovo(n)===_fNovoOp; });
+    if(_fNovoOp) todos=todos.filter(function(n){ var o=opDoNovo(n); return _fNovoOp==='__sem__'?!o:(o===_fNovoOp); });
     var porDia={}, ops={};
     todos.forEach(function(n){ var y=ymdNovo(n); if(!y) return;
       porDia[y]=porDia[y]||{total:0,pend:0};
@@ -14382,7 +14389,7 @@ seedTreinamentosLegado = cleanupLegacySeedTreinamentos;
       ops[o]=ops[o]||{total:0,pend:0}; ops[o].total++; if(!movimentado(n,idx)) ops[o].pend++; });
     var dias=Object.keys(porDia).sort().reverse();
     var opsList=Object.keys(acessos()).sort();
-    var selOp='<div style="margin-bottom:12px"><select onchange="__gwaNovosOp(this.value)" style="padding:9px 13px;border-radius:11px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;font-weight:700"><option value="">Todos os operadores</option>'+
+    var selOp='<div style="margin-bottom:12px"><select onchange="__gwaNovosOp(this.value)" style="padding:9px 13px;border-radius:11px;border:1px solid '+Co.line+';background:'+Co.card2+';color:#fff;font-weight:700"><option value="">Todos os operadores</option><option value="__sem__"'+(_fNovoOp==='__sem__'?' selected':'')+'>Sem consultor atribuído</option>'+
       opsList.map(function(l){ return '<option value="'+esc(l)+'"'+(_fNovoOp===l?' selected':'')+'>'+esc(nomeDoLogin(l))+'</option>'; }).join('')+'</select></div>';
     var maxd=dias.reduce(function(m,d){ return Math.max(m,porDia[d].total); },1);
     var tbDia='<div style="background:'+Co.card+';border:1px solid '+Co.line+';border-radius:16px;padding:18px;margin-bottom:14px"><div style="font-weight:800;color:#fff;margin-bottom:12px"><i class="fas fa-calendar-days" style="color:'+Co.orange+'"></i> Novos clientes por dia</div>'+
